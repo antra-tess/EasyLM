@@ -7,16 +7,16 @@ for i in $(seq 0 $((NUM_WORKERS-1))); do
   gcloud compute tpus tpu-vm ssh "$TPU_NODE" \
     --zone="$ZONE" \
     --worker="$i" -- '
-    echo "Looking for Python processes under worker account on worker '$i'..."
+    echo "Looking for EasyLM processes on worker '$i'..."
     
-    # Find all Python processes under service accounts and their children
-    WORKER_PROCS=$(ps aux | grep "^sa_" | grep python | awk "{print \$2}")
+    # Find all Python processes containing EasyLM
+    WORKER_PROCS=$(ps aux | grep "[E]asyLM" | grep "python" | awk "{print \$2}")
     
     if [ -z "$WORKER_PROCS" ]; then
-      echo "No Python processes found under worker account on worker '$i'"
+      echo "No EasyLM processes found on worker '$i'"
     else
       echo "Found processes on worker '$i':"
-      ps aux | grep "^sa_" | grep python
+      ps aux | grep "[E]asyLM" | grep "python"
       
       # Kill each process and its children
       for pid in $WORKER_PROCS; do
