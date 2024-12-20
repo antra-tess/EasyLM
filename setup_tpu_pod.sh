@@ -19,10 +19,4 @@ cd EasyLM
 echo "export PYTHONPATH=${PWD}:${PYTHONPATH}" >> ~/.bashrc
 echo "export WANDB_PROJECT=levanter-sft" >> ~/.bashrc
 
-# Mount GCS bucket if not already mounted
-if [ ! -d "/mnt/gcs-bucket" ]; then
-    sudo mkdir -p /mnt/gcs-bucket
-    sudo mount -o nonempty {bucket-name} /mnt/gcs-bucket
-fi
-
 echo "TPU pod setup complete!"
