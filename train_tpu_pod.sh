@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -eu
+git push antra
 
 echo "Starting TPU pod training deployment..."
 
