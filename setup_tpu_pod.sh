@@ -47,7 +47,6 @@ fi
 echo "Setting up environment variables..."
 mkdir -p ~/.env
 cat > ~/.env/easylm.sh <<EOF
-export PYTHONPATH="${PWD}:${PYTHONPATH:-}"
 export WANDB_PROJECT="levanter-sft"
 EOF
 
