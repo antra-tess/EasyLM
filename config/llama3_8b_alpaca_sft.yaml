@@ -36,3 +36,41 @@ optimizer:
   learning_rate: 2e-5
   weight_decay: 0.1
   min_lr_ratio: 0.1
+data:
+  type: huggingface
+  text_processor:
+    fields: "[instruction+input],output"  # Square brackets mean no loss on prompt
+    fields_from_example: ""
+    subfield_separator: "\n\n"  # Separate instruction/input with newlines
+    add_eos_token: true
+  huggingface_dataset:
+    path: "tatsu-lab/alpaca"
+    name: ""  # Default split
+    split: "train"
+    streaming: false
+    seq_length: 1024
+    batch_size: 32
+
+initialize_from_hf: "gs://finetune70b/llama-3-8b/llama-3-8b"
+model:
+  type: llama
+  reference_checkpoint: "meta-llama/Llama-3-8B"
+  gradient_checkpointing: true
+  attn_backend: jax_flash
+
+trainer:
+  tracker:
+    project: "levanter-sft"
+    tags: [ "llama3-8b", "sft", "alpaca"]
+
+  mp: p=f32,c=bfloat16
+  model_axis_size: 8  # For TPU v4-64
+  per_device_parallelism: 8
+  tensor_parallel_axes: ["mlp", "heads"]
+
+  train_batch_size: 512
+
+optimizer:
+  learning_rate: 2e-5
+  weight_decay: 0.1
+  min_lr_ratio: 0.1
