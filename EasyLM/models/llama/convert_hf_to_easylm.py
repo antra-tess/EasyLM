@@ -16,7 +16,7 @@ import torch
 import flax
 from transformers import AutoModelForCausalLM
 
-from EasyLM.models.llama.llama_model import LLaMAConfigurator
+from ...models.llama.llama_model import LLaMAConfigurator
 from EasyLM.checkpoint import StreamingCheckpointer
 from EasyLM.jax_utils import get_float_dtype_by_name
 
