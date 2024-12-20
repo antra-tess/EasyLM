@@ -40,12 +40,7 @@ def inverse_permute(w, n_heads, input_dim, output_dim):
 def main(argv):
     start = time.time()
     llama_config = LLaMAConfigurator.finalize_config(FLAGS.llama)
-    hf_model = AutoModelForCausalLM.from_pretrained(
-        FLAGS.hf_model,
-        low_cpu_mem_usage=True,
-        torch_dtype="auto",
-        device_map="auto"
-    )
+    hf_model = AutoModelForCausalLM.from_pretrained(FLAGS.hf_model)
     ckpt = hf_model.state_dict()
 
     print(f"Start convert weight to easylm format...")
