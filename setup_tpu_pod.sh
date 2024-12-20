@@ -45,11 +45,15 @@ fi
 
 # Set up environment variables
 echo "Setting up environment variables..."
-if ! grep -q "PYTHONPATH.*EasyLM" ~/.bashrc; then
-    echo "export PYTHONPATH=${PWD}:${PYTHONPATH:-}" >> ~/.bashrc
-fi
-if ! grep -q "WANDB_PROJECT" ~/.bashrc; then
-    echo "export WANDB_PROJECT=levanter-sft" >> ~/.bashrc
+mkdir -p ~/.env
+cat > ~/.env/easylm.sh <<EOF
+export PYTHONPATH="${PWD}:${PYTHONPATH:-}"
+export WANDB_PROJECT="levanter-sft"
+EOF
+
+# Add source to bashrc if not already present
+if ! grep -q "source ~/.env/easylm.sh" ~/.bashrc; then
+    echo "source ~/.env/easylm.sh" >> ~/.bashrc
 fi
 
 echo "TPU pod setup complete!"
