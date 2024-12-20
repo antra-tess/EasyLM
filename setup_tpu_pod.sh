@@ -24,6 +24,14 @@ if [ -z "${HUGGINGFACE_TOKEN:-}" ]; then
     export HUGGINGFACE_TOKEN="${token}"
 fi
 
+# Check for WANDB API key
+if [ -z "${WANDB_API_KEY:-}" ]; then
+    echo "WANDB_API_KEY not found in environment"
+    read -p "Please enter your Weights & Biases API key: " wandb_key
+    echo "export WANDB_API_KEY='${wandb_key}'" >> ~/.bashrc
+    export WANDB_API_KEY="${wandb_key}"
+fi
+
 # Remove existing EasyLM directory if exists
 if [ -d "EasyLM" ]; then
     echo "Removing existing EasyLM directory..."
