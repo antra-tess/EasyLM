@@ -1,9 +1,13 @@
 #!/bin/bash
 
 set -eu
-git push antra
 
 echo "Starting TPU pod training deployment..."
+
+# Push and pull latest changes
+echo "Syncing repository changes..."
+git push antra
+git pull antra main
 
 # Copy worker script to all workers
 echo "Copying worker script to all workers..."
