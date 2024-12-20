@@ -24,16 +24,15 @@ if [ -z "${HUGGINGFACE_TOKEN:-}" ]; then
     export HUGGINGFACE_TOKEN="${token}"
 fi
 
-# Clone repository if not exists
-if [ ! -d "EasyLM" ]; then
-    echo "Cloning EasyLM repository..."
-    git clone https://github.com/antra-tess/EasyLM.git
-    cd EasyLM
-else
-    echo "EasyLM directory already exists"
-    cd EasyLM
-    git pull
+# Remove existing EasyLM directory if exists
+if [ -d "EasyLM" ]; then
+    echo "Removing existing EasyLM directory..."
+    rm -rf EasyLM
 fi
+
+echo "Cloning EasyLM repository..."
+git clone https://github.com/antra-tess/EasyLM.git
+cd EasyLM
 
 # Run TPU setup script if packages not installed
 if ! check_package "jax.interpreters.xla"; then
