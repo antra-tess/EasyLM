@@ -32,7 +32,7 @@ fi
 # Clone repository if not exists
 if [ ! -d "EasyLM" ]; then
     echo "Cloning EasyLM repository..."
-    git clone git@github.com:antra-tess/EasyLM.git
+    git clone https://github.com/antra-tess/EasyLM.git
     cd EasyLM
 else
     echo "EasyLM directory already exists"
@@ -55,14 +55,6 @@ if ! grep -q "PYTHONPATH.*EasyLM" ~/.bashrc; then
 fi
 if ! grep -q "WANDB_PROJECT" ~/.bashrc; then
     echo "export WANDB_PROJECT=levanter-sft" >> ~/.bashrc
-fi
-
-# Configure git for SSH
-if [ ! -f ~/.ssh/id_ed25519 ]; then
-    echo "Setting up SSH key for git..."
-    ssh-keygen -t ed25519 -C "antra@tesserae.cc" -N "" -f ~/.ssh/id_ed25519
-    echo "Please add this SSH key to your GitHub account:"
-    cat ~/.ssh/id_ed25519.pub
 fi
 
 echo "TPU pod setup complete!"
