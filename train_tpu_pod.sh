@@ -17,6 +17,9 @@ gcloud compute tpus tpu-vm ssh finetune-70b --zone=us-central2-b --worker=all --
     --train_dataset.type='huggingface' \
     --train_dataset.text_processor.fields='[instruction+input],output' \
     --train_dataset.huggingface_dataset.name="" \
-    --train_dataset.huggingface_dataset.path='tatsu-lab/alpaca'"
+    --train_dataset.huggingface_dataset.path='tatsu-lab/alpaca' \
+    --trainer.tracker.online=true \
+    --trainer.tracker.project='levanter-sft' \
+    --trainer.tracker.entity='antra-tess'"
 
 echo "Training command deployed to all workers!"
