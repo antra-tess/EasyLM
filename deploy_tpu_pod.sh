@@ -26,7 +26,7 @@ if [ "$setup" = "true" ]; then
     gcloud compute tpus tpu-vm ssh finetune-70b --zone=us-central2-b --worker=all --command="export HUGGINGFACE_TOKEN='${HUGGINGFACE_TOKEN}' && cd /tmp && rm -rf EasyLM && git clone https://github.com/antra-tess/EasyLM.git && cd EasyLM && chmod +x setup_tpu_pod.sh && ./setup_tpu_pod.sh"
 else
     echo "Running without environment setup..."
-    gcloud compute tpus tpu-vm ssh finetune-70b --zone=us-central2-b --worker=all --command="export HUGGINGFACE_TOKEN='${HUGGINGFACE_TOKEN}' && cd /tmp && (if [ -d 'EasyLM' ]; then cd EasyLM && git pull; else git clone https://github.com/antra-tess/EasyLM.git && cd EasyLM; fi) && export PYTHONPATH=/tmp/EasyLM:\${PYTHONPATH}"
+    gcloud compute tpus tpu-vm ssh finetune-70b --zone=us-central2-b --worker=all --command="export HUGGINGFACE_TOKEN='${HUGGINGFACE_TOKEN}' && cd ~ && (if [ -d 'EasyLM' ]; then cd EasyLM && git pull; else git clone https://github.com/antra-tess/EasyLM.git && cd EasyLM; fi) && export PYTHONPATH=~/EasyLM:\${PYTHONPATH}"
 fi
 
 echo "TPU pod deployment complete!"
