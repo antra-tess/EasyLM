@@ -15,11 +15,6 @@ check_package() {
 
 echo "Starting TPU pod setup for EasyLM..."
 
-# Check for required tools
-if ! command_exists git; then
-    echo "Git not found. Installing git..."
-    sudo apt-get update && sudo apt-get install -y git
-fi
 
 # Check for HF token
 if [ -z "${HUGGINGFACE_TOKEN:-}" ]; then
