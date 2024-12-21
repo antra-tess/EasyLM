@@ -3,6 +3,7 @@ from functools import partial
 import json
 import base64
 from multiprocessing import Pool
+import logging
 
 import mlxu
 import numpy as np
