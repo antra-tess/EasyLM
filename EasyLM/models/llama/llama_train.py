@@ -187,12 +187,19 @@ def main(argv):
 
     def save_checkpoint(train_state, milestone=False):
         step = int(jax.device_get(train_state.step))
+        logging.info(f"Starting checkpoint save at step {step}...")
+        
         metadata = dict(
             step=step,
             variant=variant,
             flags=flags_config_dict,
             llama_config=llama_config.to_dict(),
         )
+        
+        checkpoint_dir = os.path.join(logger.output_dir, f"checkpoint_{step}")
+        if milestone:
+            checkpoint_dir = os.path.join(logger.output_dir, f"milestone_{step}")
+        logging.info(f"Saving checkpoint to: {checkpoint_dir}")
         checkpointer.save_all(
             train_state=train_state,
             gather_fns=gather_fns,
@@ -200,6 +207,7 @@ def main(argv):
             dataset=dataset.get_state_dict(),
             milestone=milestone,
         )
+        logging.info("Checkpoint save complete")
 
     logging.info("Setting up JAX mesh...")
     mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
