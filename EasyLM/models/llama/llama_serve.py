@@ -34,6 +34,7 @@ FLAGS, FLAGS_DEF = mlxu.define_flags_with_default(
     seq_length=2048,
     top_k=50,
     top_p=1.0,
+    temperature=0.8,
     do_sample=True,
     num_beams=1,
     add_bos_token=True,
