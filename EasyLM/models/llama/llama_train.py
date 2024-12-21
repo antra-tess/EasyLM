@@ -78,12 +78,13 @@ def main(argv):
     seq_length = dataset.seq_length
     llama_config = LLaMAConfigurator.finalize_config(FLAGS.llama)
 
+    logging.info("Starting model initialization...")
     model = FlaxLLaMAForCausalLMModule(
         llama_config,
         dtype=get_float_dtype_by_name(FLAGS.dtype),
         param_dtype=get_float_dtype_by_name(FLAGS.param_dtype),
     )
-    logging.info(f"Model loaded successfully: LLaMA {llama_config.base_model}")
+    logging.info(f"Model initialization complete: LLaMA {llama_config.base_model}")
 
     optimizer, optimizer_info = OptimizerFactory.get_optimizer(FLAGS.optimizer)
 
@@ -101,8 +102,10 @@ def main(argv):
         return TrainState.create(params=params, tx=optimizer, apply_fn=None)
 
     def train_step(train_state, rng, batch):
+        logging.info("Starting training step...")
         rng_generator = JaxRNG(rng)
         batch = with_sharding_constraint(batch, PS(('dp', 'fsdp')))
+        logging.info("Batch sharding constraint applied")
         def loss_and_accuracy(params):
             logits = model.apply(
                 params, batch['input_tokens'], deterministic=False,
@@ -111,8 +114,11 @@ def main(argv):
             return cross_entropy_loss_and_accuracy(
                 logits, batch['target_tokens'], batch['loss_masks']
             )
+        logging.info("Compiling gradient function...")
         grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
+        logging.info("Starting grad_fn execution...")
         (loss, accuracy), grads = grad_fn(train_state.params)
+        logging.info("Gradient computation complete")
         train_state = train_state.apply_gradients(grads=grads)
         metrics = dict(
             loss=loss,
@@ -195,7 +201,9 @@ def main(argv):
             milestone=milestone,
         )
 
+    logging.info("Setting up JAX mesh...")
     mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
+    logging.info("JAX mesh initialized")
     with mesh:
         train_state, restored_params = None, None
         if FLAGS.load_checkpoint != '':
