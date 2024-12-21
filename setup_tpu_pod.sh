@@ -17,11 +17,11 @@ echo "Starting TPU pod setup for EasyLM..."
 
 
 # Check for HF token
-if [ -z "${HUGGINGFACE_TOKEN:-}" ]; then
-    echo "HUGGINGFACE_TOKEN not found in environment"
+if [ -z "${HF_TOKEN:-}" ]; then
+    echo "HF_TOKEN not found in environment"
     read -p "Please enter your HuggingFace token: " token
-    echo "export HUGGINGFACE_TOKEN='${token}'" >> ~/.bashrc
-    export HUGGINGFACE_TOKEN="${token}"
+    echo "export HF_TOKEN='${token}'" >> ~/.bashrc
+    export HF_TOKEN="${token}"
 fi
 
 
@@ -49,6 +49,7 @@ mkdir -p ~/.env
 cat > ~/.env/easylm.sh <<EOF
 export WANDB_PROJECT="levanter-sft"
 export WANDB_API_KEY="${WANDB_API_KEY}"
+export HF_TOKEN="${HF_TOKEN}"
 EOF
 
 # Add source to bashrc if not already present

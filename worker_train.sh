@@ -8,6 +8,7 @@ echo "Starting training on worker..."
 sudo mkdir -p /tmp/tpu_logs && sudo chown -R $USER:$USER /tmp/tpu_logs && sudo chmod 755 /tmp/tpu_logs
 
 echo "WANDB_API_KEY is${WANDB_API_KEY:+ set}${WANDB_API_KEY:-" not set"}"
+echo "HF_TOKEN is${HF_TOKEN:+ set}${HF_TOKEN:-" not set"}"
 
 # Run training
 cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
