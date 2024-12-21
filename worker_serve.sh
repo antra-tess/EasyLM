@@ -24,6 +24,5 @@ python -m EasyLM.models.llama.llama_serve \
     --do_sample=True \
     --top_k=50 \
     --top_p=0.95 \
-    --temperature=0.8 \
     --lm_server.port=5009 \
     --lm_server.batch_size=1
