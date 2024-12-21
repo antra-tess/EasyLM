@@ -5,6 +5,7 @@ from tqdm import tqdm, trange
 import numpy as np
 import mlxu
 import logging
+import os
 
 import jax
 import jax.numpy as jnp
