@@ -11,7 +11,8 @@ echo "WANDB_API_KEY is${WANDB_API_KEY:+ set}${WANDB_API_KEY:-" not set"}"
 
 # Run training
 cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
-    --mesh_dim='1,-1,1' \
+    --mesh_dim='-1,8,1' \
+    --tokenizer="meta-llama/Meta-Llama-3-8B"
     --llama.base_model='llama3_8b' \
     --load_checkpoint='params::gs://finetune70b/llama-3-8b/llama-3-8b' \
     --train_dataset.type='huggingface' \
