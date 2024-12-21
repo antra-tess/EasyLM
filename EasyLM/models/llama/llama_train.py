@@ -82,6 +82,7 @@ def main(argv):
         dtype=get_float_dtype_by_name(FLAGS.dtype),
         param_dtype=get_float_dtype_by_name(FLAGS.param_dtype),
     )
+    logging.info(f"Model loaded successfully: LLaMA {llama_config.base_model}")
 
     optimizer, optimizer_info = OptimizerFactory.get_optimizer(FLAGS.optimizer)
 

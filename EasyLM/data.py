@@ -147,9 +147,11 @@ class HuggingfaceDataset(object):
         split = self.config.split if self.config.split != '' else None
         self._tokenizer = tokenizer
         self._text_processor = text_processor
+        logging.info(f"Loading dataset from {self.config.path}")
         self._dataset = load_dataset(
             self.config.path, name, split=split, streaming=self.config.streaming
         )
+        logging.info(f"Dataset loaded successfully: {len(self._dataset)} examples")
 
     def __iter__(self):
         chunk_size = self.config.batch_size * self.config.seq_length
