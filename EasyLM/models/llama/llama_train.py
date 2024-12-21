@@ -58,6 +58,12 @@ def main(argv):
     JaxDistributedConfig.initialize(FLAGS.jax_distributed)
     variant = mlxu.get_user_flags(FLAGS, FLAGS_DEF)
     flags_config_dict = mlxu.user_flags_to_config_dict(FLAGS, FLAGS_DEF)
+    
+    # Log process/worker information
+    hostname = os.uname().nodename
+    process_index = jax.process_index()
+    process_count = jax.process_count()
+    logging.info(f"Starting up on host {hostname} - process index: {process_index}/{process_count}")
     logger = mlxu.WandBLogger(
         config=FLAGS.logger,
         variant=variant,
@@ -188,7 +194,9 @@ def main(argv):
 
     def save_checkpoint(train_state, milestone=False):
         step = int(jax.device_get(train_state.step))
-        logging.info(f"Starting checkpoint save at step {step}...")
+        hostname = os.uname().nodename
+        process_index = jax.process_index()
+        logging.info(f"Checkpoint save called on host {hostname} (process {process_index}) at step {step}...")
         
         metadata = dict(
             step=step,
