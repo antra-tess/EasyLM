@@ -209,6 +209,7 @@ def main(argv):
             milestone=milestone,
         )
         logging.info("Checkpoint save complete")
+        logging.info("Checkpoint save complete")
 
     logging.info("Setting up JAX mesh...")
     mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
