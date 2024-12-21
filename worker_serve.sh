@@ -14,7 +14,7 @@ cd ~/EasyLM
 
 # Run serving
 python -m EasyLM.models.llama.llama_serve \
-    --mesh_dim='1,-1,1' \
+    --mesh_dim='1,1,1' \
     --dtype='bf16' \
     --llama.base_model='llama3_8b' \
     --tokenizer="meta-llama/Meta-Llama-3-8B" \
@@ -25,4 +25,6 @@ python -m EasyLM.models.llama.llama_serve \
     --top_k=50 \
     --top_p=0.95 \
     --lm_server.port=5009 \
-    --lm_server.batch_size=1
+    --lm_server.batch_size=1 \
+    --jax_distributed.initialize_jax_distributed=false \
+    --jax_distributed.coordinator_address=''
