@@ -9,7 +9,7 @@ def download_and_examine_config(model_id="meta-llama/Llama-3.1-8B"):
         config_path = hf_hub_download(
             repo_id=model_id,
             filename="config.json",
-            token=os.environ.get("HUGGINGFACE_TOKEN")
+            token=os.environ.get("HF_TOKEN")
         )
         
         # Load and print raw config
