@@ -198,6 +198,18 @@ class LLaMAConfigurator(object):
                 rms_norm_eps=1e-5,
                 rope_theta=5e5,
             ),
+            'llama31_8b': dict(
+                base_model='llama31_8b',
+                vocab_size=128256,
+                hidden_size=4096,
+                intermediate_size=14336,
+                num_hidden_layers=32,
+                num_attention_heads=32,
+                num_key_value_heads=8,
+                max_position_embeddings=131072,
+                rope_theta=5e5,
+                rms_norm_eps=1e-5,
+            ),
             'llama3_70b': dict(
                 base_model='llama3_8b',
                 vocab_size=128256,
@@ -426,6 +438,7 @@ class FlaxLLaMAAttention(nn.Module):
         xq, xk = apply_rotary_emb(
             xq, xk, position_ids,
             max_pos=self.config.max_position_embeddings,
+            theta=self.config.rope_theta,
         )
 
         dropout_rng = None
