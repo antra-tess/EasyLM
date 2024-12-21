@@ -49,3 +49,4 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --logger.online=true \
     --logger.project='levanter-sft' \
     --logger.entity='antra-cyborgism'
+    --logger.output_dir='gs://finetune70b/easylm_checkpoints'
