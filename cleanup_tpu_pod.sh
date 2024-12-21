@@ -6,19 +6,12 @@ NUM_WORKERS=8
 
 echo "Starting TPU pod cleanup..."
 
-for i in $(seq 0 $((NUM_WORKERS-1))); do
-  echo "=== Cleaning worker $i ==="
-  gcloud compute tpus tpu-vm ssh "$TPU_NODE" \
-    --zone="$ZONE" \
-    --worker="$i" -- '
-    echo "Removing core dumps..."
-    sudo rm -f /tmp/tpu_logs/core*
-    
-    echo "Cleaning up mlxu temporary files..."
-    rm -rf /tmp/mlxu
-    
-    echo "Cleanup complete for worker '$i'"
-    '
-done
+# Copy cleanup script to all workers
+echo "Copying cleanup script to workers..."
+gcloud compute tpus tpu-vm scp cleanup_worker.sh ${TPU_NODE}:~/cleanup_worker.sh --zone=${ZONE} --worker=all
+
+# Run cleanup on all workers in parallel
+echo "Running cleanup on all workers..."
+gcloud compute tpus tpu-vm ssh ${TPU_NODE} --zone=${ZONE} --worker=all --command="chmod +x ~/cleanup_worker.sh && ~/cleanup_worker.sh"
 
 echo "TPU pod cleanup complete!"
