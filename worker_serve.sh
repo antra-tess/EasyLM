@@ -10,8 +10,10 @@ sudo mkdir -p /tmp/tpu_logs && sudo chown -R $USER:$USER /tmp/tpu_logs && sudo c
 echo "WANDB_API_KEY is${WANDB_API_KEY:+ set}${WANDB_API_KEY:-" not set"}"
 echo "HF_TOKEN is${HF_TOKEN:+ set}${HF_TOKEN:-" not set"}"
 
+cd ~/EasyLM
+
 # Run serving
-cd ~/EasyLM && python -m EasyLM.models.llama.llama_serve \
+cd python -m EasyLM.models.llama.llama_serve \
     --mesh_dim='1,-1,1' \
     --dtype='bf16' \
     --llama.base_model='llama3_8b' \
