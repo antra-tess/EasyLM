@@ -22,7 +22,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --train_dataset.huggingface_dataset.path='tatsu-lab/alpaca' \
     --logger.online=true \
     --logger.project='levanter-sft' \
-    --logger.entity='antra-tess'
+    --logger.entity='antra-cyborgism'
 
 ## Run training
 #cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
