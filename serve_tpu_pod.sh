@@ -18,6 +18,6 @@ if [ -z "${HF_TOKEN}" ]; then
 fi
 
 echo "Deploying to TPU workers..."
-gcloud compute tpus tpu-vm ssh finetune-70b --zone=us-central2-b --worker=all --command="export HF_TOKEN='${HF_TOKEN}' && cd ~ && (if [ -d 'EasyLM' ]; then cd EasyLM && git pull; else git clone https://github.com/antra-tess/EasyLM.git && cd EasyLM; fi) && cd ~/EasyLM && chmod +x worker_serve.sh && ./worker_serve.sh"
+gcloud compute tpus tpu-vm ssh finetune-70b --zone=us-central2-b --worker=all --command="export HF_TOKEN='${HF_TOKEN}' && cd ~ && (if [ -d 'EasyLM' ]; then cd EasyLM && git reset --hard HEAD && git pull; else git clone https://github.com/antra-tess/EasyLM.git && cd EasyLM; fi) && cd ~/EasyLM && chmod +x worker_serve.sh && ./worker_serve.sh"
 
 echo "TPU pod serving deployment complete!"
