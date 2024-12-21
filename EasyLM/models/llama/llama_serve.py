@@ -46,9 +46,15 @@ FLAGS, FLAGS_DEF = mlxu.define_flags_with_default(
 
 
 def main(argv):
+    logging.info("Starting LLaMA serving initialization...")
+    start_time = time.time()
+    
+    logging.info("Initializing JAX distributed configuration...")
     JaxDistributedConfig.initialize(FLAGS.jax_distributed)
     set_random_seed(FLAGS.seed)
 
+    logging.info("Loading tokenizers...")
+    tokenizer_start = time.time()
     prefix_tokenizer = AutoTokenizer.from_pretrained(
         FLAGS.tokenizer, truncation_side='left', padding_side='left'
     )
@@ -59,11 +65,14 @@ def main(argv):
     tokenizer.pad_token = tokenizer.eos_token
     llama_config = LLaMAConfigurator.finalize_config(FLAGS.llama)
 
+    logging.info("Loading model checkpoint and initializing model...")
+    model_start = time.time()
     with jax.default_device(jax.devices("cpu")[0]):
+        logging.info(f"Loading checkpoint from {FLAGS.load_checkpoint}")
         _, params = StreamingCheckpointer.load_trainstate_checkpoint(
             FLAGS.load_checkpoint, disallow_trainstate=True
         )
-
+        logging.info("Checkpoint loaded, initializing model...")
         hf_model = FlaxLLaMAForCausalLM(
             llama_config,
             input_shape=(1, FLAGS.seq_length),
@@ -163,10 +172,14 @@ def main(argv):
         ).sequences[:, batch['input_tokens'].shape[1]:]
         return output, rng_generator()
 
+    logging.info("Setting up JAX mesh and compiling serving functions...")
+    mesh_start = time.time()
     mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
     with mesh:
+        logging.info("Sharding parameters across mesh...")
         params = tree_apply(shard_fns, params)
         sharded_rng = next_rng()
+        logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
     class ModelServer(LMServer):
 
@@ -384,7 +397,10 @@ def main(argv):
             return all_outputs
 
 
+    logging.info("Initializing model server...")
     server = ModelServer(FLAGS.lm_server)
+    logging.info(f"Total initialization time: {time.time() - start_time:.1f}s")
+    logging.info("Starting server...")
     server.run()
 
 
