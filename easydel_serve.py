@@ -1,9 +1,10 @@
 import os
 import jax
-import easydel as ed
 import jax.numpy as jnp
 from transformers import AutoTokenizer
 print("After imports")
+import easydel as ed
+print("after easydel import")
 
 # Configuration
 model_path = "/dev/shm"  # Path to our converted model
