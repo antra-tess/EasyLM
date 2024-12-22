@@ -1,8 +1,16 @@
 import os
+# Set JAX environment variables before importing JAX
+os.environ['JAX_PLATFORMS'] = 'tpu'
+os.environ['LIBTPU_INIT_ARGS'] = '--xla_tpu_enable_tpu_model=1'
+os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=1'
+
 import jax
 import easydel as ed
 import jax.numpy as jnp
 from transformers import AutoTokenizer
+
+# Force JAX to see only one device
+jax.config.update('jax_platform_name', 'tpu')
 
 # Configuration
 model_path = "/dev/shm"  # Path to our converted model
