@@ -53,6 +53,9 @@ inference = ed.vInference(
 print("Precompiling model...")
 inference.precompile(batch_size=1)
 
-print("Starting API server...")
-api_inference = ed.vInferenceApiServer({inference.inference_name: inference})
-api_inference.fire()
+print("Running test inference...")
+test_prompt = "Write a short poem about a cat."
+print(f"\nPrompt: {test_prompt}")
+print("\nGenerating response...")
+response = inference.generate_text(test_prompt)
+print(f"\nResponse:\n{response}")
