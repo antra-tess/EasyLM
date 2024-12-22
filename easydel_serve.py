@@ -3,12 +3,15 @@ import jax
 import easydel as ed
 import jax.numpy as jnp
 from transformers import AutoTokenizer
+print("After imports")
 
 # Configuration
 model_path = "/dev/shm"  # Path to our converted model
 hf_model_name = "meta-llama/Meta-Llama-3-8B"  # For tokenizer
 max_length = 8192
+print("Before first jax call")
 num_devices = jax.device_count()
+print("After first jax call")
 
 print(f"Loading tokenizer from {hf_model_name}...")
 tokenizer = AutoTokenizer.from_pretrained(
