@@ -5,9 +5,11 @@ os.environ['LIBTPU_INIT_ARGS'] = '--xla_tpu_enable_tpu_model=1'
 os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=1'
 
 import jax
-import easydel as ed
 import jax.numpy as jnp
 from transformers import AutoTokenizer
+print("After imports")
+import easydel as ed
+print("after easydel import")
 
 # Force JAX to see only one device
 jax.config.update('jax_platform_name', 'tpu')
@@ -16,7 +18,9 @@ jax.config.update('jax_platform_name', 'tpu')
 model_path = "/dev/shm"  # Path to our converted model
 hf_model_name = "meta-llama/Meta-Llama-3-8B"  # For tokenizer
 max_length = 8192
+print("Before first jax call")
 num_devices = jax.device_count()
+print("After first jax call")
 
 print(f"Loading tokenizer from {hf_model_name}...")
 tokenizer = AutoTokenizer.from_pretrained(
