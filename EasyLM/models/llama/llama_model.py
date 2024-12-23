@@ -211,7 +211,7 @@ class LLaMAConfigurator(object):
                 rms_norm_eps=1e-5,
             ),
             'llama3_70b': dict(
-                base_model='llama3_8b',
+                base_model='llama3_70b',
                 vocab_size=128256,
                 hidden_size=8192,
                 intermediate_size=28672,
@@ -222,6 +222,18 @@ class LLaMAConfigurator(object):
                 rms_norm_eps=1e-5,
                 rope_theta=5e5,
             ),
+            'llama31_70b': dict(
+                base_model='llama31_70b',  # The internal “base_model” name, can be whatever you like
+                vocab_size=128256,  # from config.json
+                hidden_size=8192,  # "hidden_size": 8192
+                intermediate_size=28672,  # "intermediate_size": 28672
+                num_hidden_layers=80,  # "num_hidden_layers": 80
+                num_attention_heads=64,  # "num_attention_heads": 64
+                num_key_value_heads=8,  # "num_key_value_heads": 8
+                max_position_embeddings=16384, # 131072,  # "max_position_embeddings": 131072
+                rope_theta=5e5,  # "rope_theta": 500000.0
+                rms_norm_eps=1e-5,  # "rms_norm_eps": 1e-05
+            )
         }[model_name]
         return mlxu.update_config_dict(config, updates)
 
