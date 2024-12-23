@@ -230,7 +230,7 @@ class LLaMAConfigurator(object):
                 num_hidden_layers=80,  # "num_hidden_layers": 80
                 num_attention_heads=64,  # "num_attention_heads": 64
                 num_key_value_heads=8,  # "num_key_value_heads": 8
-                max_position_embeddings=16384, # 131072,  # "max_position_embeddings": 131072
+                max_position_embeddings=8192, #16384, # 131072,  # "max_position_embeddings": 131072
                 rope_theta=5e5,  # "rope_theta": 500000.0
                 rms_norm_eps=1e-5,  # "rms_norm_eps": 1e-05
             )
