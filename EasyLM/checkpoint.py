@@ -126,6 +126,7 @@ class StreamingCheckpointer(object):
                     # Initialize LoRA parameters with zeros
                     if isinstance(value, jnp.ndarray):
                         flattend_train_state[key] = jnp.zeros_like(value)
+                        logging.info(f"Initialized LoRA parameter {key} with shape {value.shape}")
                     continue
                 if key not in flattend_train_state and value == empty_node:
                     flattend_train_state[key] = value
