@@ -131,6 +131,8 @@ class StreamingCheckpointer(object):
                     continue
                 if key not in flattend_train_state and value == empty_node:
                     flattend_train_state[key] = value
+        else:
+            logging.info(f"target is None, not initializing LoRA parameters")
 
         train_state = unflatten_dict(flattend_train_state)
         if target is None:
