@@ -319,13 +319,32 @@ def main(argv):
         elif train_state is None and restored_params is not None:
             # For LoRA, we need to initialize LoRA params from scratch
             if llama_config.lora_rank > 0:
+                logging.info(f"Initializing LoRA parameters with rank {llama_config.lora_rank}")
                 init_state = sharded_init_fn(next_rng())
                 # Copy non-LoRA params from checkpoint, keep LoRA params from init
                 restored_params = unfreeze(restored_params)
                 init_params = unfreeze(init_state.params)
+                
+                # Debug: print structure before merging
+                restored_dict = flatten_dict(restored_params)
+                init_dict = flatten_dict(init_params)
+                logging.info(f"Restored params has {len(restored_dict)} parameters")
+                logging.info(f"Init params has {len(init_dict)} parameters")
+                logging.info("Sample of init param paths:")
+                for path in list(init_dict.keys())[:5]:
+                    logging.info(f"  {path}")
+                
+                # Copy while logging
                 for path, param in flatten_dict(restored_params).items():
-                    if 'lora_' not in str(path):
+                    path_str = str(path)
+                    if 'lora_' not in path_str:
                         init_params = set_in_dict(init_params, path, param)
+                        if jax.process_index() == 0:
+                            logging.info(f"Copied parameter: {path_str}")
+                    else:
+                        if jax.process_index() == 0:
+                            logging.info(f"Skipping LoRA parameter: {path_str}")
+                
                 restored_params = freeze(init_params)
             # Create train state with possibly modified params
             train_state = sharded_create_trainstate_from_params(restored_params)
