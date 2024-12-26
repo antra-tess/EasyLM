@@ -306,7 +306,17 @@ def main(argv):
             # Initialize from scratch
             train_state = sharded_init_fn(next_rng())
         elif train_state is None and restored_params is not None:
-            # Restore from params but initialize train_state
+            # For LoRA, we need to initialize LoRA params from scratch
+            if llama_config.lora_rank > 0:
+                init_state = sharded_init_fn(next_rng())
+                # Copy non-LoRA params from checkpoint, keep LoRA params from init
+                restored_params = unfreeze(restored_params)
+                init_params = unfreeze(init_state.params)
+                for path, param in flatten_dict(restored_params).items():
+                    if 'lora_' not in str(path):
+                        init_params = set_in_dict(init_params, path, param)
+                restored_params = freeze(init_params)
+            # Create train state with possibly modified params
             train_state = sharded_create_trainstate_from_params(restored_params)
             del restored_params
 
