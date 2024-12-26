@@ -12,6 +12,8 @@ import jax.numpy as jnp
 from jax.experimental.pjit import pjit
 from jax.sharding import PartitionSpec as PS
 from flax.training.train_state import TrainState
+from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
+from flax.traverse_util import flatten_dict, unflatten_dict
 from transformers import AutoTokenizer
 
 from EasyLM.data import DatasetFactory
@@ -53,6 +55,15 @@ FLAGS, FLAGS_DEF = mlxu.define_flags_with_default(
     jax_distributed=JaxDistributedConfig.get_default_config(),
 )
 
+
+def set_in_dict(d, path, value):
+    """Sets a value in a nested dictionary using a path tuple."""
+    keys = path if isinstance(path, tuple) else (path,)
+    d_ptr = d
+    for key in keys[:-1]:
+        d_ptr = d_ptr[key]
+    d_ptr[keys[-1]] = value
+    return d
 
 def main(argv):
     JaxDistributedConfig.initialize(FLAGS.jax_distributed)
