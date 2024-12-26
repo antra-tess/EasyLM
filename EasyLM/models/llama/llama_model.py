@@ -353,46 +353,82 @@ class FlaxLLaMAAttention(nn.Module):
         config = self.config
         head_dim = config.hidden_size // config.num_attention_heads
 
-        self.wq = nn.Dense(
-            config.num_attention_heads * head_dim,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(
-                self.config.initializer_range / np.sqrt(config.hidden_size)
-            ),
-            precision=self.precision,
-        )
-        self.wk = nn.Dense(
-            config.num_key_value_heads * head_dim,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(
-                self.config.initializer_range / np.sqrt(config.hidden_size)
-            ),
-            precision=self.precision,
-        )
-        self.wv = nn.Dense(
-            config.num_key_value_heads * head_dim,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(
-                self.config.initializer_range / np.sqrt(config.hidden_size)
-            ),
-            precision=self.precision,
-        )
-        self.wo = nn.Dense(
-            config.hidden_size,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(
-                self.config.initializer_range / np.sqrt(config.hidden_size)
-            ),
-            precision=self.precision,
-        )
+        if config.lora_attn:
+            # Use LoRA for attention layers
+            self.wq = LoRALinear(
+                config.num_attention_heads * head_dim,
+                config=config,
+                dtype=self.dtype,
+                param_dtype=self.param_dtype,
+                use_bias=False,
+                precision=self.precision,
+            )
+            self.wk = LoRALinear(
+                config.num_key_value_heads * head_dim,
+                config=config,
+                dtype=self.dtype,
+                param_dtype=self.param_dtype,
+                use_bias=False,
+                precision=self.precision,
+            )
+            self.wv = LoRALinear(
+                config.num_key_value_heads * head_dim,
+                config=config,
+                dtype=self.dtype,
+                param_dtype=self.param_dtype,
+                use_bias=False,
+                precision=self.precision,
+            )
+            self.wo = LoRALinear(
+                config.hidden_size,
+                config=config,
+                dtype=self.dtype,
+                param_dtype=self.param_dtype,
+                use_bias=False,
+                precision=self.precision,
+            )
+        else:
+            # Use regular Dense layers
+            self.wq = nn.Dense(
+                config.num_attention_heads * head_dim,
+                dtype=self.dtype,
+                param_dtype=self.param_dtype,
+                use_bias=False,
+                kernel_init=jax.nn.initializers.normal(
+                    self.config.initializer_range / np.sqrt(config.hidden_size)
+                ),
+                precision=self.precision,
+            )
+            self.wk = nn.Dense(
+                config.num_key_value_heads * head_dim,
+                dtype=self.dtype,
+                param_dtype=self.param_dtype,
+                use_bias=False,
+                kernel_init=jax.nn.initializers.normal(
+                    self.config.initializer_range / np.sqrt(config.hidden_size)
+                ),
+                precision=self.precision,
+            )
+            self.wv = nn.Dense(
+                config.num_key_value_heads * head_dim,
+                dtype=self.dtype,
+                param_dtype=self.param_dtype,
+                use_bias=False,
+                kernel_init=jax.nn.initializers.normal(
+                    self.config.initializer_range / np.sqrt(config.hidden_size)
+                ),
+                precision=self.precision,
+            )
+            self.wo = nn.Dense(
+                config.hidden_size,
+                dtype=self.dtype,
+                param_dtype=self.param_dtype,
+                use_bias=False,
+                kernel_init=jax.nn.initializers.normal(
+                    self.config.initializer_range / np.sqrt(config.hidden_size)
+                ),
+                precision=self.precision,
+            )
 
         self.resid_dropout = nn.Dropout(rate=config.residue_dropout)
 
