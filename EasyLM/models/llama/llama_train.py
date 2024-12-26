@@ -340,7 +340,7 @@ def main(argv):
                 init_state = sharded_init_fn(next_rng())
                 # Copy non-LoRA params from checkpoint, keep LoRA params from init
                 # restored_params = unfreeze(restored_params)
-                # init_params = unfreeze(init_state.params)
+                init_params = init_state.params
                 
                 # Debug: print structure before merging
                 restored_dict = flatten_dict(restored_params)
