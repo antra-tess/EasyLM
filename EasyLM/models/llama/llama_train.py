@@ -363,7 +363,8 @@ def main(argv):
                     else:
                         if jax.process_index() == 0:
                             logging.info(f"Skipping LoRA parameter: {path_str}")
-                
+            else:
+                init_params = restored_params
                 # restored_params = freeze(init_params)
             # Create train state with possibly modified params
             train_state = sharded_create_trainstate_from_params(init_params)
