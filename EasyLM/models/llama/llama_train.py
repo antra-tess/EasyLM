@@ -93,16 +93,26 @@ def main(argv):
     )
     logging.info(f"Model initialization complete: LLaMA {llama_config.base_model}")
     
-    # Print expected parameter structure without materializing
-    def print_expected_params(module, path=''):
-        for name, value in module.variables.items():
-            if isinstance(value, dict):
-                for subname in value:
-                    full_path = f"{path}/{name}/{subname}" if path else f"{name}/{subname}"
-                    logging.info(f"Expected parameter: {full_path}")
+    # Initialize with dummy inputs to get parameter structure
+    rng = next_rng()
+    input_shape = (1, seq_length)
+    init_params = model.init(
+        rng,
+        jnp.zeros(input_shape, dtype=jnp.int32),
+        jnp.ones(input_shape, dtype=jnp.int32),
+        jnp.zeros(input_shape, dtype=jnp.int32),
+    )
     
-    logging.info("Expected model parameters:")
-    print_expected_params(model)
+    def print_params_tree(tree, path=''):
+        if isinstance(tree, dict):
+            for key, value in tree.items():
+                new_path = f"{path}/{key}" if path else key
+                print_params_tree(value, new_path)
+        else:
+            logging.info(f"Parameter: {path} with shape {tree.shape}")
+    
+    logging.info("Model parameters:")
+    print_params_tree(init_params)
 
     def trainable_mask(param_name: str) -> bool:
         """
