@@ -347,8 +347,6 @@ def main(argv):
                 
                 restored_params = freeze(init_params)
             # Create train state with possibly modified params
-            # Ensure restored_params and its nested dicts are all frozen
-            restored_params = freeze({'params': freeze(restored_params)})
             train_state = sharded_create_trainstate_from_params(restored_params)
             del restored_params
 
