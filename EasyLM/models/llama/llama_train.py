@@ -58,12 +58,15 @@ FLAGS, FLAGS_DEF = mlxu.define_flags_with_default(
 
 def set_in_dict(d, path, value):
     """Sets a value in a nested dictionary using a path tuple."""
-    keys = path if isinstance(path, tuple) else (path,)
-    d_ptr = d
-    for key in keys[:-1]:
-        d_ptr = d_ptr[key]
-    d_ptr[keys[-1]] = value
-    return d
+    try:
+        keys = path if isinstance(path, tuple) else (path,)
+        d_ptr = d
+        for key in keys[:-1]:
+            d_ptr = d_ptr[key]
+        d_ptr[keys[-1]] = value
+        return d
+    except KeyError as e:
+        raise KeyError(f"Key not found: {e}, path: {path}, dict: {d}")
 
 def main(argv):
     JaxDistributedConfig.initialize(FLAGS.jax_distributed)
