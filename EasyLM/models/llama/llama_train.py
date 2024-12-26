@@ -138,6 +138,14 @@ def main(argv):
             attention_mask=jnp.ones((4, seq_length), dtype=jnp.int32),
             rngs=rng_generator(LLaMAConfigurator.rng_keys()),
         )
+        # Freeze non-LoRA parameters right after initialization
+        if llama_config.lora_rank > 0:
+            # Convert non-LoRA parameters to FrozenDict
+            params = named_tree_map(
+                lambda path, p: freeze(p) if not trainable_mask(path) else p,
+                params,
+                sep='/'
+            )
         return TrainState.create(params=params, tx=optimizer, apply_fn=None)
 
     def train_step(train_state, rng, batch):
@@ -341,8 +349,6 @@ def main(argv):
                 unwrapped_restored = unfreeze(restored_params)
 
                 for path, param in flatten_dict(unwrapped_restored).items():
-                    # if len(path) > 0 and path[0] == 'params':
-                    #     path = path[1:]
 
                     path_str = str(path)
                     if 'lora_' not in path_str:
