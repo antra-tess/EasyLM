@@ -138,19 +138,19 @@ def main(argv):
             attention_mask=jnp.ones((4, seq_length), dtype=jnp.int32),
             rngs=rng_generator(LLaMAConfigurator.rng_keys()),
         )
-        # Freeze non-LoRA parameters right after initialization
-        if llama_config.lora_rank > 0:
-            # Convert params to dict for manipulation
-            params = unfreeze(params)
-            # Only freeze at dictionary level, not individual tensors
-            for path, param in flatten_dict(params).items():
-                if not trainable_mask('/'.join(str(x) for x in path)):
-                    parent = params
-                    *parts, last = path
-                    for part in parts:
-                        parent = parent[part]
-                    parent[last] = freeze(parent[last])
-            params = freeze(params)
+        # # Freeze non-LoRA parameters right after initialization
+        # if llama_config.lora_rank > 0:
+        #     # Convert params to dict for manipulation
+        #     params = unfreeze(params)
+        #     # Only freeze at dictionary level, not individual tensors
+        #     for path, param in flatten_dict(params).items():
+        #         if not trainable_mask('/'.join(str(x) for x in path)):
+        #             parent = params
+        #             *parts, last = path
+        #             for part in parts:
+        #                 parent = parent[part]
+        #             parent[last] = freeze(parent[last])
+        #     params = freeze(params)
         return TrainState.create(params=params, tx=optimizer, apply_fn=None)
 
     def train_step(train_state, rng, batch):
@@ -339,8 +339,8 @@ def main(argv):
                 logging.info(f"Initializing LoRA parameters with rank {llama_config.lora_rank}")
                 init_state = sharded_init_fn(next_rng())
                 # Copy non-LoRA params from checkpoint, keep LoRA params from init
-                restored_params = unfreeze(restored_params)
-                init_params = unfreeze(init_state.params)
+                # restored_params = unfreeze(restored_params)
+                # init_params = unfreeze(init_state.params)
                 
                 # Debug: print structure before merging
                 restored_dict = flatten_dict(restored_params)
@@ -351,7 +351,7 @@ def main(argv):
                 for path in list(init_dict.keys())[:5]:
                     logging.info(f"  {path}")
 
-                unwrapped_restored = unfreeze(restored_params)
+                # unwrapped_restored = unfreeze(restored_params)
 
                 for path, param in flatten_dict(unwrapped_restored).items():
 
@@ -364,7 +364,7 @@ def main(argv):
                         if jax.process_index() == 0:
                             logging.info(f"Skipping LoRA parameter: {path_str}")
                 
-                restored_params = freeze(init_params)
+                # restored_params = freeze(init_params)
             # Create train state with possibly modified params
             train_state = sharded_create_trainstate_from_params(restored_params)
             del restored_params
