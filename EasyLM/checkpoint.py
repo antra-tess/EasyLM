@@ -126,11 +126,12 @@ class StreamingCheckpointer(object):
                 logging.info(f"Loading target parameter {key} with shape {value.shape}")
                 if 'lora_' in str(key):
                     # Initialize LoRA parameters with zeros
-                    if isinstance(value, jnp.ndarray):
-                        flattend_train_state[key] = jnp.zeros_like(value)
+                    # Handle both actual arrays and ShapeDtypeStruct
+                    if hasattr(value, 'shape') and hasattr(value, 'dtype'):
+                        flattend_train_state[key] = jnp.zeros(value.shape, dtype=value.dtype)
                         logging.info(f"Initialized LoRA parameter {key} with shape {value.shape}")
                     else:
-                        logging.info(f"Skipping LoRA parameter {key} with shape {value.shape} because it's not an ndarray, but {type(value)}")
+                        logging.info(f"Skipping LoRA parameter {key} because it has no shape/dtype: {type(value)}")
                     continue
                 if key not in flattend_train_state and value == empty_node:
                     flattend_train_state[key] = value
