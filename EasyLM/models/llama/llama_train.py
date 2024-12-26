@@ -308,18 +308,19 @@ def main(argv):
             train_state = sharded_create_trainstate_from_params(restored_params)
             del restored_params
 
-        # Print sharded parameter info
-        def print_params_tree(tree, path=''):
-            if isinstance(tree, dict):
-                for key, value in tree.items():
-                    new_path = f"{path}/{key}" if path else key
-                    print_params_tree(value, new_path)
-            else:
-                shape_dtype = jax.eval_shape(lambda: tree)
-                logging.info(f"Parameter: {path} with shape {shape_dtype.shape} and sharding {tree.sharding}")
+        # Print sharded parameter info on worker 0 only
+        if jax.process_index() == 0:
+            def print_params_tree(tree, path=''):
+                if isinstance(tree, dict):
+                    for key, value in tree.items():
+                        new_path = f"{path}/{key}" if path else key
+                        print_params_tree(value, new_path)
+                else:
+                    shape_dtype = jax.eval_shape(lambda: tree)
+                    logging.info(f"Parameter: {path} with shape {shape_dtype.shape} and sharding {tree.sharding}")
 
-        logging.info("Model parameters after sharding:")
-        print_params_tree(train_state.params)
+            logging.info("Model parameters after sharding:")
+            print_params_tree(train_state.params)
 
         start_step = int(jax.device_get(train_state.step))
 
