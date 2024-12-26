@@ -54,6 +54,12 @@ class LLaMAConfigurator(object):
         config.fcm_min_ratio = mlxu.config_placeholder(float)
         config.fcm_max_ratio = mlxu.config_placeholder(float)
         config.lora_rank = mlxu.config_placeholder(int)
+        # LoRA parameters
+        config.lora_alpha = mlxu.config_placeholder(float)
+        config.lora_dropout = mlxu.config_placeholder(float)
+        config.lora_attn = mlxu.config_placeholder(bool)
+        config.lora_mlp = mlxu.config_placeholder(bool)
+        config.lora_merge_weights = mlxu.config_placeholder(bool)
         return mlxu.update_config_dict(config, updates)
 
     @classmethod
