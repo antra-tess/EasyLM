@@ -353,7 +353,7 @@ def main(argv):
 
                 # unwrapped_restored = unfreeze(restored_params)
 
-                for path, param in flatten_dict(unwrapped_restored).items():
+                for path, param in flatten_dict(restored_params).items():
 
                     path_str = str(path)
                     if 'lora_' not in path_str:
