@@ -122,8 +122,10 @@ class StreamingCheckpointer(object):
                 to_state_dict(target), keep_empty_nodes=True
             )
             for key, value in flattened_target.items():
-                # Skip LoRA parameters if they're not in the checkpoint
                 if 'lora_' in str(key):
+                    # Initialize LoRA parameters with zeros
+                    if isinstance(value, jnp.ndarray):
+                        flattend_train_state[key] = jnp.zeros_like(value)
                     continue
                 if key not in flattend_train_state and value == empty_node:
                     flattend_train_state[key] = value
