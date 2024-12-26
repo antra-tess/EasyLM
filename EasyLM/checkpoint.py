@@ -123,6 +123,7 @@ class StreamingCheckpointer(object):
                 to_state_dict(target), keep_empty_nodes=True
             )
             for key, value in flattened_target.items():
+                logging.info(f"Loading target parameter {key} with shape {value.shape}")
                 if 'lora_' in str(key):
                     # Initialize LoRA parameters with zeros
                     if isinstance(value, jnp.ndarray):
