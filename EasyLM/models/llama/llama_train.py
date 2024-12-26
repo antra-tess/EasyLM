@@ -140,12 +140,17 @@ def main(argv):
         )
         # Freeze non-LoRA parameters right after initialization
         if llama_config.lora_rank > 0:
-            # Convert non-LoRA parameters to FrozenDict
-            params = named_tree_map(
-                lambda path, p: freeze(p) if not trainable_mask(path) else p,
-                params,
-                sep='/'
-            )
+            # Convert params to dict for manipulation
+            params = unfreeze(params)
+            # Only freeze at dictionary level, not individual tensors
+            for path, param in flatten_dict(params).items():
+                if not trainable_mask('/'.join(str(x) for x in path)):
+                    parent = params
+                    *parts, last = path
+                    for part in parts:
+                        parent = parent[part]
+                    parent[last] = freeze(parent[last])
+            params = freeze(params)
         return TrainState.create(params=params, tx=optimizer, apply_fn=None)
 
     def train_step(train_state, rng, batch):
