@@ -269,6 +269,11 @@ class LLaMAConfigurator(object):
             # atention
             ("attention/(wq|wk|wv)/kernel", PS("fsdp", "mp")),
             ("attention/wo/kernel", PS("mp", "fsdp")),
+            # LoRA parameters in attention
+            ("attention/(wq|wk|wv)/lora_A", PS("fsdp", None)),  # (hidden_size, lora_rank)
+            ("attention/(wq|wk|wv)/lora_B", PS(None, "fsdp")),  # (lora_rank, hidden_size)
+            ("attention/wo/lora_A", PS("fsdp", None)),          # (hidden_size, lora_rank) 
+            ("attention/wo/lora_B", PS(None, "fsdp")),          # (lora_rank, hidden_size)
             # mlp
             ("feed_forward/w1/kernel", PS("fsdp", "mp")),
             ("feed_forward/w2/kernel", PS("mp", "fsdp")),
