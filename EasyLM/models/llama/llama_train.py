@@ -333,9 +333,13 @@ def main(argv):
                 logging.info("Sample of init param paths:")
                 for path in list(init_dict.keys())[:5]:
                     logging.info(f"  {path}")
-                
-                # Copy while logging
-                for path, param in flatten_dict(restored_params).items():
+
+                unwrapped_restored = unfreeze(restored_params)
+
+                for path, param in flatten_dict(unwrapped_restored).items():
+                    if len(path) > 0 and path[0] == 'params':
+                        path = path[1:]
+
                     path_str = str(path)
                     if 'lora_' not in path_str:
                         init_params = set_in_dict(init_params, path, param)
