@@ -159,8 +159,20 @@ def main(argv):
         batch = with_sharding_constraint(batch, PS(('dp', 'fsdp')))
         logging.info("Batch sharding constraint applied")
         def loss_and_accuracy(params):
+            # Apply stop_gradient to non-LoRA params before forward pass
+            def maybe_stop_grad(path, p):
+                if not trainable_mask(path):
+                    return jax.lax.stop_gradient(p)
+                return p
+            
+            params_for_forward = named_tree_map(
+                maybe_stop_grad,
+                params,
+                sep='/'
+            )
+            
             logits = model.apply(
-                params, batch['input_tokens'], deterministic=False,
+                params_for_forward, batch['input_tokens'], deterministic=False,
                 rngs=rng_generator(LLaMAConfigurator.rng_keys()),
             ).logits
             return cross_entropy_loss_and_accuracy(
