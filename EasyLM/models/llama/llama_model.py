@@ -100,7 +100,7 @@ class LLaMAConfigurator(object):
         config.fcm_max_ratio = 0.0
 
         config.lora_rank = 0          # 0 means "disabled"
-        config.lora_alpha = 32
+        config.lora_alpha = 32.0
         config.lora_dropout = 0.0
         config.lora_attn = True      # whether to apply LoRA to attention W_q, W_k, W_v, W_o
         config.lora_mlp = False      # optionally, also apply LoRA to MLP layers
