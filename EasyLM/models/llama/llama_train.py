@@ -92,6 +92,17 @@ def main(argv):
         param_dtype=get_float_dtype_by_name(FLAGS.param_dtype),
     )
     logging.info(f"Model initialization complete: LLaMA {llama_config.base_model}")
+    
+    # Print expected parameter structure without materializing
+    def print_expected_params(module, path=''):
+        for name, value in module._variables.items():
+            if isinstance(value, dict):
+                for subname in value:
+                    full_path = f"{path}/{name}/{subname}" if path else f"{name}/{subname}"
+                    logging.info(f"Expected parameter: {full_path}")
+    
+    logging.info("Expected model parameters:")
+    print_expected_params(model)
 
     def trainable_mask(param_name: str) -> bool:
         """
