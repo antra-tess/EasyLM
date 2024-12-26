@@ -1088,6 +1088,7 @@ class LoRALinear(nn.Module):
     @nn.compact
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         """If config.lora_rank > 0, uses LoRA; otherwise a normal Dense."""
+        logging.info(f"LoRALinear called with lora_rank={self.config.lora_rank}")
         # Normal Dense kernel
         kernel = self.param(
             "kernel",
@@ -1121,6 +1122,7 @@ class LoRALinear(nn.Module):
         #   A: (in_features, lora_rank)
         #   B: (lora_rank, out_features)
         # Here we name them lora_A and lora_B
+        logging.info(f"Creating LoRA parameters with shapes: A({x.shape[-1]}, {lora_rank}), B({lora_rank}, {self.features})")
         lora_A = self.param(
             "lora_A",
             jax.nn.initializers.zeros,  # or normal with small std
@@ -1133,6 +1135,7 @@ class LoRALinear(nn.Module):
             (lora_rank, self.features),
             self.param_dtype,
         )
+        logging.info(f"Created LoRA parameters: A={lora_A.shape}, B={lora_B.shape}")
 
         # Possibly apply dropout on the input to LoRA
         if self.config.lora_dropout > 0.0:
