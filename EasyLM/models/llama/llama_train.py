@@ -315,6 +315,7 @@ def main(argv):
             train_state, restored_params = checkpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint, train_state_shapes, shard_fns
             )
+        logging.info("Loaded checkpoint")
 
         if train_state is None and restored_params is None:
             # Initialize from scratch
@@ -340,8 +341,8 @@ def main(argv):
                 unwrapped_restored = unfreeze(restored_params)
 
                 for path, param in flatten_dict(unwrapped_restored).items():
-                    if len(path) > 0 and path[0] == 'params':
-                        path = path[1:]
+                    # if len(path) > 0 and path[0] == 'params':
+                    #     path = path[1:]
 
                     path_str = str(path)
                     if 'lora_' not in path_str:
