@@ -53,6 +53,7 @@ class LLaMAConfigurator(object):
         config.scan_mlp_chunk_size = mlxu.config_placeholder(int)
         config.fcm_min_ratio = mlxu.config_placeholder(float)
         config.fcm_max_ratio = mlxu.config_placeholder(float)
+        config.lora_rank = mlxu.config_placeholder(int)
         return mlxu.update_config_dict(config, updates)
 
     @classmethod
@@ -91,6 +92,13 @@ class LLaMAConfigurator(object):
         config.scan_mlp_chunk_size = 1024
         config.fcm_min_ratio = 0.0
         config.fcm_max_ratio = 0.0
+
+        config.lora_rank = 0          # 0 means "disabled"
+        config.lora_alpha = 32
+        config.lora_dropout = 0.0
+        config.lora_attn = True      # whether to apply LoRA to attention W_q, W_k, W_v, W_o
+        config.lora_mlp = False      # optionally, also apply LoRA to MLP layers
+        config.lora_merge_weights = False  # If True, merges LoRA into main weights at inference time
 
         updates = {
             'debug': dict(
@@ -549,36 +557,61 @@ class FlaxLLaMAMLP(nn.Module):
 
     def setup(self) -> None:
         config = self.config
-        self.w1 = nn.Dense(
-            config.intermediate_size,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(
-                self.config.initializer_range / np.sqrt(config.hidden_size)
-            ),
-            precision=self.precision,
-        )
-        self.w2 = nn.Dense(
-            config.hidden_size,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(
-                self.config.initializer_range / np.sqrt(config.intermediate_size)
-            ),
-            precision=self.precision,
-        )
-        self.w3 = nn.Dense(
-            config.intermediate_size,
-            dtype=self.dtype,
-            param_dtype=self.param_dtype,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(
-                self.config.initializer_range / np.sqrt(config.hidden_size)
-            ),
-            precision=self.precision,
-        )
+        lora_cfg = self.config
+
+        if config.lora_mlp:
+            self.w1 = LoRALinear(
+                config.intermediate_size,
+                config=lora_cfg,
+                dtype=self.dtype,
+                param_dtype=self.param_dtype,
+                precision=self.precision,
+            )
+            self.w2 = LoRALinear(
+                config.hidden_size,
+                config=lora_cfg,
+                dtype=self.dtype,
+                param_dtype=self.param_dtype,
+                precision=self.precision,
+            )
+            self.w3 = LoRALinear(
+                config.intermediate_size,
+                config=lora_cfg,
+                dtype=self.dtype,
+                param_dtype=self.param_dtype,
+                precision=self.precision,
+            )
+        else:
+            self.w1 = nn.Dense(
+                config.intermediate_size,
+                dtype=self.dtype,
+                param_dtype=self.param_dtype,
+                use_bias=False,
+                kernel_init=jax.nn.initializers.normal(
+                    self.config.initializer_range / np.sqrt(config.hidden_size)
+                ),
+                precision=self.precision,
+            )
+            self.w2 = nn.Dense(
+                config.hidden_size,
+                dtype=self.dtype,
+                param_dtype=self.param_dtype,
+                use_bias=False,
+                kernel_init=jax.nn.initializers.normal(
+                    self.config.initializer_range / np.sqrt(config.intermediate_size)
+                ),
+                precision=self.precision,
+            )
+            self.w3 = nn.Dense(
+                config.intermediate_size,
+                dtype=self.dtype,
+                param_dtype=self.param_dtype,
+                use_bias=False,
+                kernel_init=jax.nn.initializers.normal(
+                    self.config.initializer_range / np.sqrt(config.hidden_size)
+                ),
+                precision=self.precision,
+            )
         self.dropout = nn.Dropout(rate=self.config.residue_dropout)
 
     def __call__(self, x: jnp.ndarray, deterministic: bool = True) -> jnp.ndarray:
@@ -1035,3 +1068,80 @@ class FlaxLLaMAForCausalLM(FlaxLLaMAPreTrainedModel):
         model_kwargs["past_key_values"] = model_outputs.past_key_values
         model_kwargs["position_ids"] = model_kwargs["position_ids"][:, -1:] + 1
         return model_kwargs
+
+
+class LoRALinear(nn.Module):
+    """A linear layer that can optionally include LoRA."""
+    features: int
+    use_bias: bool = False
+    config: Any = None
+    dtype: jnp.dtype = jnp.float32
+    param_dtype: jnp.dtype = jnp.float32
+    precision: Optional[Union[jax.lax.Precision, str]] = None
+
+    @nn.compact
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        """If config.lora_rank > 0, uses LoRA; otherwise a normal Dense."""
+        # Normal Dense kernel
+        kernel = self.param(
+            "kernel",
+            jax.nn.initializers.normal(stddev=0.02),
+            (x.shape[-1], self.features),
+            self.param_dtype,
+        )
+        # Optional bias
+        bias = None
+        if self.use_bias:
+            bias = self.param(
+                "bias",
+                jax.nn.initializers.zeros,
+                (self.features,),
+                self.param_dtype,
+            )
+
+        # If LoRA is disabled, just do the standard matmul
+        if self.config.lora_rank == 0:
+            y = jnp.matmul(x, kernel.astype(self.dtype))
+            if bias is not None:
+                y = y + bias.astype(self.dtype)
+            return y
+
+        # Otherwise, add LoRA "low-rank" decomposition
+        lora_rank = self.config.lora_rank
+        lora_alpha = self.config.lora_alpha
+        scaling = lora_alpha / lora_rank
+
+        # A and B are the low-rank factors
+        #   A: (in_features, lora_rank)
+        #   B: (lora_rank, out_features)
+        # Here we name them lora_A and lora_B
+        lora_A = self.param(
+            "lora_A",
+            jax.nn.initializers.zeros,  # or normal with small std
+            (x.shape[-1], lora_rank),
+            self.param_dtype,
+        )
+        lora_B = self.param(
+            "lora_B",
+            jax.nn.initializers.zeros,
+            (lora_rank, self.features),
+            self.param_dtype,
+        )
+
+        # Possibly apply dropout on the input to LoRA
+        if self.config.lora_dropout > 0.0:
+            x_lora = nn.Dropout(rate=self.config.lora_dropout)(
+                x, deterministic=not self.is_mutable_collection("dropout")
+            )
+        else:
+            x_lora = x
+
+        # The LoRA contribution
+        delta = jnp.matmul(x_lora, lora_A.astype(self.dtype))
+        delta = jnp.matmul(delta, lora_B.astype(self.dtype)) * scaling
+
+        # Final output = Wx + delta + bias
+        y = jnp.matmul(x, kernel.astype(self.dtype)) + delta
+        if bias is not None:
+            y = y + bias.astype(self.dtype)
+        return y

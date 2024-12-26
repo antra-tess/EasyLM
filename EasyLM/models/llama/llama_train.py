@@ -21,7 +21,7 @@ from EasyLM.jax_utils import (
     JaxRNG, JaxDistributedConfig, next_rng, match_partition_rules,
     cross_entropy_loss_and_accuracy, global_norm, get_float_dtype_by_name,
     set_random_seed, average_metrics, make_shard_and_gather_fns,
-    with_sharding_constraint,
+    with_sharding_constraint, named_tree_map,
 )
 from EasyLM.models.llama.llama_model import (
     LLaMAConfigurator, FlaxLLaMAForCausalLMModule
@@ -93,7 +93,25 @@ def main(argv):
     )
     logging.info(f"Model initialization complete: LLaMA {llama_config.base_model}")
 
-    optimizer, optimizer_info = OptimizerFactory.get_optimizer(FLAGS.optimizer)
+    def trainable_mask(param_name: str) -> bool:
+        """
+        If LoRA is off (lora_rank=0), we return True for all parameters.
+        If LoRA is on (lora_rank>0), we only return True for LoRA param.
+        param_name: a string like: 'transformer/h/0/attention/wq/kernel'
+                    or something JAX derived
+        We'll just check if it has 'lora_A' or 'lora_B' in it.
+        """
+        if llama_config.lora_rank > 0:
+            # Train only LoRA param
+            if 'lora_A' in param_name or 'lora_B' in param_name:
+                return True
+            else:
+                return False
+        else:
+            # Full fine-tune
+            return True
+
+    optimizer, optimizer_info = OptimizerFactory.get_optimizer(FLAGS.optimizer, weight_decay_mask=trainable_mask)
 
     def create_trainstate_from_params(params):
         return TrainState.create(params=params, tx=optimizer, apply_fn=None)
@@ -192,12 +210,64 @@ def main(argv):
         donate_argnums=(1,),
     )
 
+    def remove_frozen_params(tree):
+        """
+        Build a new tree that sets base-weights to None if LoRA is enabled.
+        If lora_rank=0, we return the tree as is (save everything).
+        """
+        if llama_config.lora_rank == 0:
+            return tree  # do nothing
+
+        def maybe_none(param, path):
+            # path is a tuple of keys, e.g. ('transformer','h','0','attention','wq','kernel')
+            param_name = '/'.join(path)
+            if trainable_mask(param_name):
+                return param
+            else:
+                return None
+
+        # We can use named_tree_map for path-based logic:
+        # or replicate that logic manually
+        pruned = named_tree_map(
+            lambda path, leaf: maybe_none(leaf, path),
+            tree, sep='/'
+        )
+        return pruned
+
+    def prune_none(tree):
+        """Recursively remove any `None` leaves to produce a smaller dict."""
+        if isinstance(tree, dict):
+            new_dict = {}
+            for k, v in tree.items():
+                pruned_v = prune_none(v)
+                if pruned_v is not None:
+                    new_dict[k] = pruned_v
+            return new_dict if new_dict else None
+        elif isinstance(tree, (tuple, list)):
+            new_list = []
+            for v in tree:
+                pruned_v = prune_none(v)
+                if pruned_v is not None:
+                    new_list.append(pruned_v)
+            return type(tree)(new_list) if new_list else None
+        else:
+            return tree  # None or actual param
+
+
     def save_checkpoint(train_state, milestone=False):
         step = int(jax.device_get(train_state.step))
         hostname = os.uname().nodename
         process_index = jax.process_index()
         logging.info(f"Checkpoint save called on host {hostname} (process {process_index}) at step {step}...")
-        
+
+        # 1. If LoRA is active, prune the base weights from saving
+        full_params = train_state.params['params']
+        pruned = remove_frozen_params(full_params)
+        pruned = prune_none(pruned)
+
+        # 2. Rebuild a partial train_state with pruned params
+        partial_state = train_state.replace(params={'params': pruned})
+
         metadata = dict(
             step=step,
             variant=variant,
@@ -210,7 +280,7 @@ def main(argv):
             checkpoint_dir = os.path.join(logger.output_dir, f"milestone_{step}")
         logging.info(f"Saving checkpoint to: {checkpoint_dir}")
         checkpointer.save_all(
-            train_state=train_state,
+            train_state=partial_state,
             gather_fns=gather_fns,
             metadata=metadata,
             dataset=dataset.get_state_dict(),
