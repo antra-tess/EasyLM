@@ -95,7 +95,7 @@ def main(argv):
     
     # Print expected parameter structure without materializing
     def print_expected_params(module, path=''):
-        for name, value in module._variables.items():
+        for name, value in module.variables.items():
             if isinstance(value, dict):
                 for subname in value:
                     full_path = f"{path}/{name}/{subname}" if path else f"{name}/{subname}"
