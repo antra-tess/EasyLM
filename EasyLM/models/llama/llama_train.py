@@ -366,7 +366,7 @@ def main(argv):
                 
                 # restored_params = freeze(init_params)
             # Create train state with possibly modified params
-            train_state = sharded_create_trainstate_from_params(restored_params)
+            train_state = sharded_create_trainstate_from_params(init_params)
             del restored_params
 
         # Print sharded parameter info on worker 0 only
