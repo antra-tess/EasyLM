@@ -92,27 +92,6 @@ def main(argv):
         param_dtype=get_float_dtype_by_name(FLAGS.param_dtype),
     )
     logging.info(f"Model initialization complete: LLaMA {llama_config.base_model}")
-    
-    # Initialize with dummy inputs to get parameter structure
-    rng = next_rng()
-    input_shape = (1, seq_length)
-    init_params = model.init(
-        rng,
-        jnp.zeros(input_shape, dtype=jnp.int32),
-        jnp.ones(input_shape, dtype=jnp.int32),
-        jnp.zeros(input_shape, dtype=jnp.int32),
-    )
-    
-    def print_params_tree(tree, path=''):
-        if isinstance(tree, dict):
-            for key, value in tree.items():
-                new_path = f"{path}/{key}" if path else key
-                print_params_tree(value, new_path)
-        else:
-            logging.info(f"Parameter: {path} with shape {tree.shape}")
-    
-    logging.info("Model parameters:")
-    print_params_tree(init_params)
 
     def trainable_mask(param_name: str) -> bool:
         """
