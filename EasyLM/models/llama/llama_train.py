@@ -92,25 +92,6 @@ def main(argv):
         param_dtype=get_float_dtype_by_name(FLAGS.param_dtype),
     )
     logging.info(f"Model initialization complete: LLaMA {llama_config.base_model}")
-    
-    # Print all parameter names
-    def print_param_names(params, prefix=''):
-        if isinstance(params, dict):
-            for k, v in params.items():
-                print_param_names(v, prefix + k + '/')
-        else:
-            logging.info(f"Parameter: {prefix}")
-    
-    # Initialize params to get the structure
-    init_rng = next_rng()
-    init_params = model.init(
-        input_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
-        position_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
-        attention_mask=jnp.ones((4, seq_length), dtype=jnp.int32),
-        rngs={'params': init_rng, 'dropout': init_rng},
-    )
-    logging.info("Model parameter names:")
-    print_param_names(init_params)
 
     def trainable_mask(param_name: str) -> bool:
         """
