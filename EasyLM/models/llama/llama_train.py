@@ -220,7 +220,7 @@ def main(argv):
 
         def maybe_none(param, path):
             # path is a tuple of keys, e.g. ('transformer','h','0','attention','wq','kernel')
-            param_name = '/'.join(path)
+            param_name = '/'.join([str(p) for p in path])
             logging.info(f"Checking parameter: {param_name}")
             is_trainable = trainable_mask(param_name)
             if is_trainable:
