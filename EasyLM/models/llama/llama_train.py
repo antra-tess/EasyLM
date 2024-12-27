@@ -417,9 +417,11 @@ def main(argv):
         step_counter = trange(start_step, FLAGS.total_steps, ncols=0)
 
         for step, (batch, dataset_metrics) in zip(step_counter, dataset):
-            train_state, sharded_rng, metrics = sharded_train_step(
-                train_state, sharded_rng, batch
-            )
+            # Disable JIT for testing
+            with jax.disable_jit():
+                train_state, sharded_rng, metrics = sharded_train_step(
+                    train_state, sharded_rng, batch
+                )
 
             if step % FLAGS.log_freq == 0:
                 if FLAGS.eval_steps > 0:
