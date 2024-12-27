@@ -180,17 +180,7 @@ def main(argv):
         logging.info("Compiling gradient function...")
         grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
         logging.info("Starting grad_fn execution...")
-
-        # Start profiling before gradient computation
-        jax.profiler.start_trace("/tmp/tensorboard")
-
         (loss, accuracy), grads = grad_fn(train_state.params)
-        # Make sure computation is complete before stopping trace
-        jax.tree_map(lambda x: x.block_until_ready(), grads)
-
-        # Stop profiling after gradient computation
-        jax.profiler.stop_trace()
-
         logging.info("Gradient computation complete")
 
         train_state = train_state.apply_gradients(grads=grads)
@@ -418,10 +408,14 @@ def main(argv):
         step_counter = trange(start_step, FLAGS.total_steps, ncols=0)
 
         for step, (batch, dataset_metrics) in zip(step_counter, dataset):
-            # Disable JIT for testing
-            train_state, sharded_rng, metrics = sharded_train_step(
-                train_state, sharded_rng, batch
-            )
+            try:
+                jax.profiler.start_trace("/tmp/tensorboard")
+                # Disable JIT for testing
+                train_state, sharded_rng, metrics = sharded_train_step(
+                    train_state, sharded_rng, batch
+                )
+            finally:
+                jax.profiler.stop_trace()
 
             if step % FLAGS.log_freq == 0:
                 if FLAGS.eval_steps > 0:
