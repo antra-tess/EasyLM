@@ -193,7 +193,17 @@ def main(argv):
         with jax.disable_jit():
             grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
             logging.info("Starting grad_fn execution...")
+            
+            # Start profiling before gradient computation
+            jax.profiler.start_trace("/tmp/tensorboard")
+            
             (loss, accuracy), grads = grad_fn(train_state.params)
+            # Make sure computation is complete before stopping trace
+            jax.tree_map(lambda x: x.block_until_ready(), grads)
+            
+            # Stop profiling after gradient computation
+            jax.profiler.stop_trace()
+            
             logging.info("Gradient computation complete")
         train_state = train_state.apply_gradients(grads=grads)
         metrics = dict(
