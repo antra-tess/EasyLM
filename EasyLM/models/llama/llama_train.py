@@ -117,13 +117,24 @@ def main(argv):
         """
         if llama_config.lora_rank > 0:
             # Train only LoRA param
-            if 'lora_A' in param_name or 'lora_B' in param_name:
-                return True
-            else:
-                return False
+            is_lora = 'lora_A' in param_name or 'lora_B' in param_name
+            return is_lora
         else:
             # Full fine-tune
             return True
+
+    # Test trainable_mask with some example parameter names
+    if jax.process_index() == 0:
+        test_params = [
+            'transformer/h/0/attention/wq/kernel',
+            'transformer/h/0/attention/wq/lora_A',
+            'transformer/h/0/attention/wq/lora_B',
+            'transformer/h/0/feed_forward/w1/kernel'
+        ]
+        logging.info("Testing trainable_mask function:")
+        for param in test_params:
+            is_trainable = trainable_mask(param)
+            logging.info(f"Parameter {param}: {'trainable' if is_trainable else 'frozen'}")
 
     optimizer, optimizer_info = OptimizerFactory.get_optimizer(FLAGS.optimizer, weight_decay_mask=trainable_mask)
 
@@ -166,10 +177,21 @@ def main(argv):
                 logits, batch['target_tokens'], batch['loss_masks']
             )
         logging.info("Compiling gradient function...")
-        grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
-        logging.info("Starting grad_fn execution...")
-        (loss, accuracy), grads = grad_fn(train_state.params)
-        logging.info("Gradient computation complete")
+        with jax.disable_jit():
+            grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
+            logging.info("Starting grad_fn execution...")
+            
+            # Start profiling before gradient computation
+            jax.profiler.start_trace("/tmp/tensorboard")
+            
+            (loss, accuracy), grads = grad_fn(train_state.params)
+            # Make sure computation is complete before stopping trace
+            jax.tree_map(lambda x: x.block_until_ready(), grads)
+            
+            # Stop profiling after gradient computation
+            jax.profiler.stop_trace()
+            
+            logging.info("Gradient computation complete")
         train_state = train_state.apply_gradients(grads=grads)
         metrics = dict(
             loss=loss,
@@ -393,9 +415,11 @@ def main(argv):
         step_counter = trange(start_step, FLAGS.total_steps, ncols=0)
 
         for step, (batch, dataset_metrics) in zip(step_counter, dataset):
-            train_state, sharded_rng, metrics = sharded_train_step(
-                train_state, sharded_rng, batch
-            )
+            # Disable JIT for testing
+            with jax.disable_jit():
+                train_state, sharded_rng, metrics = sharded_train_step(
+                    train_state, sharded_rng, batch
+                )
 
             if step % FLAGS.log_freq == 0:
                 if FLAGS.eval_steps > 0:

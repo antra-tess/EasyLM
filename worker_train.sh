@@ -16,7 +16,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --dtype='bf16' \
     --llama.base_model='llama31_8b' \
     --tokenizer="meta-llama/Meta-Llama-3.1-8B" \
-    --load_checkpoint='params::gs://finetune70b/llama-3.1-8b' \
+    --load_checkpoint='params::/mnt/disk2/llama-3.1-8b' \
     --train_dataset.type='huggingface' \
     --train_dataset.text_processor.fields='[instruction+input],output' \
     --train_dataset.huggingface_dataset.name="" \
@@ -34,4 +34,4 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --logger.online=true \
     --logger.project='levanter-sft' \
     --logger.entity='antra-cyborgism' \
-    --logger.output_dir='gs://finetune70b/easylm_checkpoints2'
+    --logger.output_dir='params::/mnt/disk2/easylm_chkp'
