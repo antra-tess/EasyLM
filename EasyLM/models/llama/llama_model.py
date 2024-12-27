@@ -278,6 +278,14 @@ class LLaMAConfigurator(object):
             ("feed_forward/w1/kernel", PS("fsdp", "mp")),
             ("feed_forward/w2/kernel", PS("mp", "fsdp")),
             ("feed_forward/w3/kernel", PS("fsdp", "mp")),
+            # mlp lora
+            ("feed_forward/w1/lora_A", PS("fsdp", None)),  # or whatever partition spec you need
+            ("feed_forward/w1/lora_B", PS(None, "fsdp")),
+            ("feed_forward/w2/lora_A", PS("fsdp", None)),
+            ("feed_forward/w2/lora_B", PS(None, "fsdp")),
+            ("feed_forward/w3/lora_A", PS("fsdp", None)),
+            ("feed_forward/w3/lora_B", PS(None, "fsdp")),
+
             # layer norms
             ("attention_norm/kernel", PS(None)),
             ("ffn_norm/kernel", PS(None)),
