@@ -105,6 +105,10 @@ You already have a snippet that does:
 
 ```python
 def maybe_stop_grad(path, p):
+    if jax.process_index() == 0:
+        logging.info(f"Checking parameter path in train_step: {path}")
+        logging.info(f"Parameter path type: {type(path)}")
+        logging.info(f"Parameter trainable: {trainable_mask(path)}")
     if not trainable_mask(path):
         return jax.lax.stop_gradient(p)
     return p
