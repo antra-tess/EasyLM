@@ -1,3 +1,4 @@
+import logging
 import os
 import math
 from typing import Any, Mapping, Text, Tuple, Union, NamedTuple
@@ -374,6 +375,7 @@ def match_partition_rules(rules, params):
             return PS()
         for rule, ps in rules:
             if re.search(rule, name) is not None:
+                logging.info(f'Partition rule matched for param: {name}', rule)
                 return ps
         raise ValueError(f'Partition rule not found for param: {name}')
     return named_tree_map(get_partition_spec, params, sep='/')
