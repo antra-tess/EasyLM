@@ -190,10 +190,11 @@ def main(argv):
                 logits, batch['target_tokens'], batch['loss_masks']
             )
         logging.info("Compiling gradient function...")
-        grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
-        logging.info("Starting grad_fn execution...")
-        (loss, accuracy), grads = grad_fn(train_state.params)
-        logging.info("Gradient computation complete")
+        with jax.disable_jit():
+            grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
+            logging.info("Starting grad_fn execution...")
+            (loss, accuracy), grads = grad_fn(train_state.params)
+            logging.info("Gradient computation complete")
         train_state = train_state.apply_gradients(grads=grads)
         metrics = dict(
             loss=loss,
