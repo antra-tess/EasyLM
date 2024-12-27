@@ -270,21 +270,19 @@ class LLaMAConfigurator(object):
             ("attention/(wq|wk|wv)/kernel", PS("fsdp", "mp")),
             ("attention/wo/kernel", PS("mp", "fsdp")),
             # LoRA parameters in attention
-            ("attention/(wq|wk|wv)/lora_A", PS("fsdp", None)),  # (hidden_size, lora_rank)
-            ("attention/(wq|wk|wv)/lora_B", PS(None, "fsdp")),  # (lora_rank, hidden_size)
-            ("attention/wo/lora_A", PS("fsdp", None)),          # (hidden_size, lora_rank) 
-            ("attention/wo/lora_B", PS(None, "fsdp")),          # (lora_rank, hidden_size)
+            ("attention/(wq|wk|wv)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
+            ("attention/(wq|wk|wv)/lora_B", PS(None, "mp")),  # shape [lora_rank, hidden_size]
+            ("attention/wo/lora_A", PS("mp", None)),  # shape [hidden_size, lora_rank]
+            ("attention/wo/lora_B", PS(None, "fsdp")),  # shape [lora_rank, hidden_size]
             # mlp
             ("feed_forward/w1/kernel", PS("fsdp", "mp")),
             ("feed_forward/w2/kernel", PS("mp", "fsdp")),
             ("feed_forward/w3/kernel", PS("fsdp", "mp")),
             # mlp lora
-            ("feed_forward/w1/lora_A", PS("fsdp", None)),  # or whatever partition spec you need
-            ("feed_forward/w1/lora_B", PS(None, "fsdp")),
-            ("feed_forward/w2/lora_A", PS("fsdp", None)),
-            ("feed_forward/w2/lora_B", PS(None, "fsdp")),
-            ("feed_forward/w3/lora_A", PS("fsdp", None)),
-            ("feed_forward/w3/lora_B", PS(None, "fsdp")),
+            ("feed_forward/(w1|w3)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
+            ("feed_forward/(w1|w3)/lora_B", PS(None, "mp")),  # shape [lora_rank, intermediate_size]
+            ("feed_forward/w2/lora_A", PS("mp", None)),          # shape [intermediate_size, lora_rank]
+            ("feed_forward/w2/lora_B", PS(None, "fsdp")),        # shape [lora_rank, hidden_size]
 
             # layer norms
             ("attention_norm/kernel", PS(None)),
