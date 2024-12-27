@@ -117,13 +117,24 @@ def main(argv):
         """
         if llama_config.lora_rank > 0:
             # Train only LoRA param
-            if 'lora_A' in param_name or 'lora_B' in param_name:
-                return True
-            else:
-                return False
+            is_lora = 'lora_A' in param_name or 'lora_B' in param_name
+            return is_lora
         else:
             # Full fine-tune
             return True
+
+    # Test trainable_mask with some example parameter names
+    if jax.process_index() == 0:
+        test_params = [
+            'transformer/h/0/attention/wq/kernel',
+            'transformer/h/0/attention/wq/lora_A',
+            'transformer/h/0/attention/wq/lora_B',
+            'transformer/h/0/feed_forward/w1/kernel'
+        ]
+        logging.info("Testing trainable_mask function:")
+        for param in test_params:
+            is_trainable = trainable_mask(param)
+            logging.info(f"Parameter {param}: {'trainable' if is_trainable else 'frozen'}")
 
     optimizer, optimizer_info = OptimizerFactory.get_optimizer(FLAGS.optimizer, weight_decay_mask=trainable_mask)
 
