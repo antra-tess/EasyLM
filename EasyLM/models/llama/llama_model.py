@@ -1153,49 +1153,54 @@ class LoRALinear(nn.Module):
                 self.param_dtype,
             )
 
-        # If LoRA is disabled, just do the standard matmul
+        # Always compute the base matmul first
+        base_out = jnp.matmul(x, kernel.astype(self.dtype))
+
+        # If LoRA is enabled, stop gradients through base output
+        if self.config.lora_rank > 0:
+            base_out = jax.lax.stop_gradient(base_out)
+
+        # If LoRA is disabled, just return base output
         if self.config.lora_rank == 0:
-            y = jnp.matmul(x, kernel.astype(self.dtype))
-            if bias is not None:
-                y = y + bias.astype(self.dtype)
-            return y
-
-        # Otherwise, add LoRA "low-rank" decomposition
-        lora_rank = self.config.lora_rank
-        lora_alpha = self.config.lora_alpha
-        scaling = lora_alpha / lora_rank
-
-        # A and B are the low-rank factors
-        #   A: (in_features, lora_rank)
-        #   B: (lora_rank, out_features)
-        # Here we name them lora_A and lora_B
-        lora_A = self.param(
-            "lora_A",
-            jax.nn.initializers.zeros,  # or normal with small std
-            (x.shape[-1], lora_rank),
-            self.param_dtype,
-        )
-        lora_B = self.param(
-            "lora_B",
-            jax.nn.initializers.zeros,
-            (lora_rank, self.features),
-            self.param_dtype,
-        )
-
-        # Possibly apply dropout on the input to LoRA
-        if self.config.lora_dropout > 0.0:
-            x_lora = nn.Dropout(rate=self.config.lora_dropout)(
-                x, deterministic=not self.is_mutable_collection("dropout")
-            )
+            y = base_out
         else:
-            x_lora = x
+            # Add LoRA "low-rank" decomposition
+            lora_rank = self.config.lora_rank
+            lora_alpha = self.config.lora_alpha
+            scaling = lora_alpha / lora_rank
 
-        # The LoRA contribution
-        delta = jnp.matmul(x_lora, lora_A.astype(self.dtype))
-        delta = jnp.matmul(delta, lora_B.astype(self.dtype)) * scaling
+            # A and B are the low-rank factors
+            #   A: (in_features, lora_rank)
+            #   B: (lora_rank, out_features)
+            lora_A = self.param(
+                "lora_A",
+                jax.nn.initializers.zeros,  # or normal with small std
+                (x.shape[-1], lora_rank),
+                self.param_dtype,
+            )
+            lora_B = self.param(
+                "lora_B",
+                jax.nn.initializers.zeros,
+                (lora_rank, self.features),
+                self.param_dtype,
+            )
 
-        # Final output = Wx + delta + bias
-        y = jnp.matmul(x, kernel.astype(self.dtype)) + delta
+            # Possibly apply dropout on the input to LoRA
+            if self.config.lora_dropout > 0.0:
+                x_lora = nn.Dropout(rate=self.config.lora_dropout)(
+                    x, deterministic=not self.is_mutable_collection("dropout")
+                )
+            else:
+                x_lora = x
+
+            # Compute LoRA contribution (keeping gradients)
+            delta = jnp.matmul(x_lora, lora_A.astype(self.dtype))
+            delta = jnp.matmul(delta, lora_B.astype(self.dtype)) * scaling
+
+            # Add LoRA contribution to stopped base output
+            y = base_out + delta
+
+        # Add bias if present
         if bias is not None:
             y = y + bias.astype(self.dtype)
         return y
