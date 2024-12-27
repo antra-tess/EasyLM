@@ -176,22 +176,23 @@ def main(argv):
             return cross_entropy_loss_and_accuracy(
                 logits, batch['target_tokens'], batch['loss_masks']
             )
+
         logging.info("Compiling gradient function...")
-        with jax.disable_jit():
-            grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
-            logging.info("Starting grad_fn execution...")
-            
-            # Start profiling before gradient computation
-            jax.profiler.start_trace("/tmp/tensorboard")
-            
-            (loss, accuracy), grads = grad_fn(train_state.params)
-            # Make sure computation is complete before stopping trace
-            jax.tree_map(lambda x: x.block_until_ready(), grads)
-            
-            # Stop profiling after gradient computation
-            jax.profiler.stop_trace()
-            
-            logging.info("Gradient computation complete")
+        grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
+        logging.info("Starting grad_fn execution...")
+
+        # Start profiling before gradient computation
+        jax.profiler.start_trace("/tmp/tensorboard")
+
+        (loss, accuracy), grads = grad_fn(train_state.params)
+        # Make sure computation is complete before stopping trace
+        jax.tree_map(lambda x: x.block_until_ready(), grads)
+
+        # Stop profiling after gradient computation
+        jax.profiler.stop_trace()
+
+        logging.info("Gradient computation complete")
+
         train_state = train_state.apply_gradients(grads=grads)
         metrics = dict(
             loss=loss,
@@ -200,6 +201,8 @@ def main(argv):
             gradient_norm=global_norm(grads),
             param_norm=global_norm(train_state.params),
         )
+        logging.info("Training step complete")
+
         return train_state, rng_generator(), metrics
 
     def eval_step(train_state, rng, batch):
@@ -416,10 +419,9 @@ def main(argv):
 
         for step, (batch, dataset_metrics) in zip(step_counter, dataset):
             # Disable JIT for testing
-            with jax.disable_jit():
-                train_state, sharded_rng, metrics = sharded_train_step(
-                    train_state, sharded_rng, batch
-                )
+            train_state, sharded_rng, metrics = sharded_train_step(
+                train_state, sharded_rng, batch
+            )
 
             if step % FLAGS.log_freq == 0:
                 if FLAGS.eval_steps > 0:
