@@ -1155,6 +1155,11 @@ class LoRALinear(nn.Module):
 
         # Always compute the base matmul first
         base_out = jnp.matmul(x, kernel.astype(self.dtype))
+        # Add sharding constraint based on kernel sharding
+        if 'attention/wo/' in self.name:
+            base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
+        else:
+            base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
 
         # If LoRA is enabled, stop gradients through base output
         if self.config.lora_rank > 0:
@@ -1193,9 +1198,16 @@ class LoRALinear(nn.Module):
             else:
                 x_lora = x
 
-            # Compute LoRA contribution (keeping gradients)
+            # First LoRA matmul - keep batch sharding but don't shard small lora_rank dim
             delta = jnp.matmul(x_lora, lora_A.astype(self.dtype))
+            delta = with_sharding_constraint(delta, PS(("dp", "fsdp"), None, None))
+
+            # Second LoRA matmul - output must match base_out sharding
             delta = jnp.matmul(delta, lora_B.astype(self.dtype)) * scaling
+            if 'attention/wo/' in self.name:
+                delta = with_sharding_constraint(delta, PS(("dp", "fsdp"), None, "mp"))
+            else:
+                delta = with_sharding_constraint(delta, PS(("dp", "fsdp"), None, "mp"))
 
             # Add LoRA contribution to stopped base output
             y = base_out + delta
