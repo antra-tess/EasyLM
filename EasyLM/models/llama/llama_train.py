@@ -152,10 +152,10 @@ def main(argv):
         return TrainState.create(params=params, tx=optimizer, apply_fn=None)
 
     def train_step(train_state, rng, batch):
-        logging.info("Starting training step...")
+        jax.debug.print("Starting training step...")
         rng_generator = JaxRNG(rng)
         batch = with_sharding_constraint(batch, PS(('dp', 'fsdp')))
-        logging.info("Batch sharding constraint applied")
+        jax.debug.print("Batch sharding constraint applied")
         def loss_and_accuracy(params):
             # Apply stop_gradient to non-LoRA params before forward pass
             def maybe_stop_grad(path, p):
@@ -177,13 +177,16 @@ def main(argv):
                 logits, batch['target_tokens'], batch['loss_masks']
             )
 
-        logging.info("Compiling gradient function...")
+        jax.debug.print("Compiling gradient function...")
         grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
-        logging.info("Starting grad_fn execution...")
+        jax.debug.print("Starting grad_fn execution...")
         (loss, accuracy), grads = grad_fn(train_state.params)
-        logging.info("Gradient computation complete")
+        jax.debug.print("Gradient computation complete")
 
+        jax.debug.print("Starting apply_gradients...")
         train_state = train_state.apply_gradients(grads=grads)
+        jax.debug.print("apply_gradients complete")
+
         metrics = dict(
             loss=loss,
             accuracy=accuracy,
@@ -191,7 +194,7 @@ def main(argv):
             gradient_norm=global_norm(grads),
             param_norm=global_norm(train_state.params),
         )
-        logging.info("Training step complete")
+        jax.debug.print("Training step complete")
 
         return train_state, rng_generator(), metrics
 
