@@ -135,7 +135,12 @@ def main(argv):
             is_trainable = trainable_mask(param)
             logging.info(f"Parameter {param}: {'trainable' if is_trainable else 'frozen'}")
 
-    optimizer, optimizer_info = OptimizerFactory.get_optimizer(FLAGS.optimizer, weight_decay_mask=trainable_mask)
+    # Use trainable_mask for both weight decay and controlling optimizer state allocation
+    optimizer, optimizer_info = OptimizerFactory.get_optimizer(
+        FLAGS.optimizer,
+        weight_decay_mask=trainable_mask,
+        trainable_mask=trainable_mask
+    )
 
     def create_trainstate_from_params(params):
         train_state = TrainState.create(params=params, tx=optimizer, apply_fn=None)

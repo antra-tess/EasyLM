@@ -36,15 +36,15 @@ class OptimizerFactory(object):
         return config
 
     @classmethod
-    def get_optimizer(cls, config, weight_decay_mask=None):
+    def get_optimizer(cls, config, weight_decay_mask=None, trainable_mask=None):
         config = cls.get_default_config(config)
         if config.type == 'palm':
             optimizer, optimizer_info = PalmOptimizerFactory.get_optimizer(
-                config.palm_optimizer, weight_decay_mask
+                config.palm_optimizer, weight_decay_mask, trainable_mask
             )
         elif config.type == 'adamw':
             optimizer, optimizer_info = AdamWOptimizerFactory.get_optimizer(
-                config.adamw_optimizer, weight_decay_mask
+                config.adamw_optimizer, weight_decay_mask, trainable_mask
             )
         else:
             raise ValueError(f'Unknown optimizer type: {config.type}')
@@ -141,7 +141,7 @@ class AdamWOptimizerFactory(object):
         return config
 
     @classmethod
-    def get_optimizer(cls, config, weight_decay_mask=None):
+    def get_optimizer(cls, config, weight_decay_mask=None, trainable_mask=None):
         config = cls.get_default_config(config)
 
         learning_rate_schedule = optax.warmup_cosine_decay_schedule(
@@ -159,14 +159,17 @@ class AdamWOptimizerFactory(object):
         if config.multiply_by_parameter_scale:
             optimizer = optax.chain(
                 optax.clip_by_global_norm(config.clip_gradient),
-                optax.adafactor(
-                    learning_rate=learning_rate_schedule,
-                    multiply_by_parameter_scale=True,
-                    momentum=config.b1,
-                    decay_rate=config.b2,
-                    factored=False,
-                    clipping_threshold=None,
-                    dtype_momentum=jnp.bfloat16 if config.bf16_momentum else jnp.float32,
+                optax.masked(  # Only create optimizer state for trainable params
+                    optax.adafactor(
+                        learning_rate=learning_rate_schedule,
+                        multiply_by_parameter_scale=True,
+                        momentum=config.b1,
+                        decay_rate=config.b2,
+                        factored=False,
+                        clipping_threshold=None,
+                        dtype_momentum=jnp.bfloat16 if config.bf16_momentum else jnp.float32,
+                    ),
+                    trainable_mask
                 ),
                 optax_add_scheduled_weight_decay(
                     lambda step: -learning_rate_schedule(step) * config.weight_decay,
@@ -176,13 +179,16 @@ class AdamWOptimizerFactory(object):
         else:
             optimizer = optax.chain(
                 optax.clip_by_global_norm(config.clip_gradient),
-                optax.adamw(
-                    learning_rate=learning_rate_schedule,
-                    weight_decay=config.weight_decay,
-                    b1=config.b1,
-                    b2=config.b2,
-                    mask=weight_decay_mask,
-                    mu_dtype=jnp.bfloat16 if config.bf16_momentum else jnp.float32,
+                optax.masked(  # Only create optimizer state for trainable params
+                    optax.adamw(
+                        learning_rate=learning_rate_schedule,
+                        weight_decay=config.weight_decay,
+                        b1=config.b1,
+                        b2=config.b2,
+                        mask=weight_decay_mask,  # This controls weight decay
+                        mu_dtype=jnp.bfloat16 if config.bf16_momentum else jnp.float32,
+                    ),
+                    trainable_mask  # This controls which params get optimizer state
                 ),
             )
 
