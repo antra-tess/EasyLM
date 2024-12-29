@@ -249,25 +249,25 @@ def main(argv):
         LLaMAConfigurator.get_partition_rules(), train_state_shapes
     )
 
-    # Log partition specs and actual shapes
-    if jax.process_index() == 0:
-        logging.info("Examining train state partitioning:")
-        # Flatten each field of TrainState separately
-        for field in ["params", "opt_state", "step"]:
-            logging.info(f"\nExamining {field}:")
-            field_partition = getattr(train_state_partition, field)
-            field_shapes = getattr(train_state_shapes, field)
-            if isinstance(field_partition, (dict, FrozenDict)):
-                flat_partition = flatten_dict(field_partition)
-                flat_shapes = flatten_dict(field_shapes)
-                for name, spec in flat_partition.items():
-                    shape = flat_shapes[name].shape if hasattr(flat_shapes[name], 'shape') else None
-                    logging.info(f"Parameter {name}:")
-                    logging.info(f"  Shape: {shape}")
-                    logging.info(f"  Partition spec: {spec}")
-            else:
-                logging.info(f"  Shape: {getattr(field_shapes, 'shape', None)}")
-                logging.info(f"  Partition spec: {field_partition}")
+    # # Log partition specs and actual shapes
+    # if jax.process_index() == 0:
+    #     logging.info("Examining train state partitioning:")
+    #     # Flatten each field of TrainState separately
+    #     for field in ["params", "opt_state", "step"]:
+    #         logging.info(f"\nExamining {field}:")
+    #         field_partition = getattr(train_state_partition, field)
+    #         field_shapes = getattr(train_state_shapes, field)
+    #         if isinstance(field_partition, (dict, FrozenDict)):
+    #             flat_partition = flatten_dict(field_partition)
+    #             flat_shapes = flatten_dict(field_shapes)
+    #             for name, spec in flat_partition.items():
+    #                 shape = flat_shapes[name].shape if hasattr(flat_shapes[name], 'shape') else None
+    #                 logging.info(f"Parameter {name}:")
+    #                 logging.info(f"  Shape: {shape}")
+    #                 logging.info(f"  Partition spec: {spec}")
+    #         else:
+    #             logging.info(f"  Shape: {getattr(field_shapes, 'shape', None)}")
+    #             logging.info(f"  Partition spec: {field_partition}")
 
     shard_fns, gather_fns = make_shard_and_gather_fns(
         train_state_partition, train_state_shapes
@@ -316,11 +316,11 @@ def main(argv):
             # path is a tuple of keys, e.g. ('transformer','h','0','attention','wq','kernel')
             #param_name = '/'.join([str(p) for p in path])
             param_name = str(path)
-            if jax.process_index() == 0:
-                logging.info(f"Checking parameter: {param_name}")
+            # if jax.process_index() == 0:
+            #     logging.info(f"Checking parameter: {param_name}")
             is_trainable = trainable_mask(param_name)
-            if is_trainable and jax.process_index() == 0:
-                logging.info(f"Keeping parameter: {param_name}")
+            # if is_trainable and jax.process_index() == 0:
+            #     logging.info(f"Keeping parameter: {param_name}")
             return param if is_trainable else None
 
         # We can use named_tree_map for path-based logic:
@@ -425,11 +425,11 @@ def main(argv):
                     path_str = str(path)
                     if 'lora_' not in path_str:
                         init_params = set_in_dict(init_params, path, param)
-                        if jax.process_index() == 0:
-                            logging.info(f"Copied parameter: {path_str}")
-                    else:
-                        if jax.process_index() == 0:
-                            logging.info(f"Skipping LoRA parameter: {path_str}")
+                        # if jax.process_index() == 0:
+                        #     logging.info(f"Copied parameter: {path_str}")
+                    # else:
+                    #     if jax.process_index() == 0:
+                    #         logging.info(f"Skipping LoRA parameter: {path_str}")
             else:
                 init_params = restored_params
                 # restored_params = freeze(init_params)
