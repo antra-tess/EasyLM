@@ -494,20 +494,30 @@ class FlaxLLaMAAttention(nn.Module):
         xk = with_sharding_constraint(xk, PS(("dp", "fsdp"), None, "mp"))
         xv = with_sharding_constraint(xv, PS(("dp", "fsdp"), None, "mp"))
 
+        # Add sharding constraint before rearranging/repeating
+        xq = with_sharding_constraint(xq, PS(("dp", "fsdp"), None, "mp"))
+        xk = with_sharding_constraint(xk, PS(("dp", "fsdp"), None, "mp"))
+        xv = with_sharding_constraint(xv, PS(("dp", "fsdp"), None, "mp"))
+
         xq = einops.rearrange(
             xq, 'b s (h d) -> b s h d',
             h=self.config.num_attention_heads,
         )
+        xq = with_sharding_constraint(xq, PS(("dp", "fsdp"), None, "mp", None))
+
         xk = einops.repeat(
             xk, 'b s (h d) -> b s (h g) d',
             h=self.config.num_key_value_heads,
             g=self.config.num_attention_heads // self.config.num_key_value_heads,
         )
+        xk = with_sharding_constraint(xk, PS(("dp", "fsdp"), None, "mp", None))
+
         xv = einops.repeat(
             xv, 'b s (h d) -> b s (h g) d',
             h=self.config.num_key_value_heads,
             g=self.config.num_attention_heads // self.config.num_key_value_heads,
         )
+        xv = with_sharding_constraint(xv, PS(("dp", "fsdp"), None, "mp", None))
 
         xq, xk = apply_rotary_emb(
             xq, xk, position_ids,
