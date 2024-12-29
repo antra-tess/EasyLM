@@ -190,12 +190,8 @@ def main(argv):
         return TrainState.create(params=params, tx=optimizer, apply_fn=None)
 
     def train_step(train_state, rng, batch):
-        jax.debug.print("D: Starting training step...")
-        print("P: Starting training step...")
         rng_generator = JaxRNG(rng)
         batch = with_sharding_constraint(batch, PS(('dp', 'fsdp')))
-        jax.debug.print("D: Batch sharding constraint applied")
-        print("P: Batch sharding constraint applied")
         def loss_and_accuracy(params):
             # Apply stop_gradient to non-LoRA params before forward pass
             def maybe_stop_grad(path, p):
@@ -217,21 +213,9 @@ def main(argv):
                 logits, batch['target_tokens'], batch['loss_masks']
             )
 
-        jax.debug.print("D: Compiling gradient function...")
-        print("P: Compiling gradient function...")
         grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
-        jax.debug.print("D: Starting grad_fn execution...")
-        print("P: Starting grad_fn execution...")
         (loss, accuracy), grads = grad_fn(train_state.params)
-        jax.debug.print("D: Gradient computation complete")
-        print("P: Gradient computation complete")
-
-        jax.debug.print("D: Starting apply_gradients...")
-        print("P: Starting apply_gradients...")
         train_state = train_state.apply_gradients(grads=grads)
-        jax.debug.print("D: apply_gradients complete")
-        print("P: apply_gradients complete")
-
         metrics = dict(
             loss=loss,
             accuracy=accuracy,
@@ -239,13 +223,7 @@ def main(argv):
             gradient_norm=global_norm(grads),
             param_norm=global_norm(train_state.params),
         )
-
-        jax.debug.print("D: before rng")
-        print("P: before rng")
         rng = rng_generator()
-
-        jax.debug.print("D: Training step complete")
-        print("P: Training step complete")
 
         return train_state, rng, metrics
 
@@ -482,17 +460,9 @@ def main(argv):
         step_counter = trange(start_step, FLAGS.total_steps, ncols=0)
 
         for step, (batch, dataset_metrics) in zip(step_counter, dataset):
-            try:
-                jax.profiler.start_trace("/tmp/tensorboard")
-                # Disable JIT for testing
-                print("P: Starting training step (outer)...")
-                train_state, sharded_rng, metrics = sharded_train_step(
-                    train_state, sharded_rng, batch
-                )
-                print("P: Training step complete (outer)...")
-            finally:
-                print("P: Stopping profiler...")
-                jax.profiler.stop_trace()
+            train_state, sharded_rng, metrics = sharded_train_step(
+                train_state, sharded_rng, batch
+            )
 
             if step % FLAGS.log_freq == 0:
                 if FLAGS.eval_steps > 0:
