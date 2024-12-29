@@ -160,28 +160,6 @@ def main(argv):
         for path, is_trainable in flatten_dict(mask_result).items():
             logging.info(f"Parameter {'/'.join(str(x) for x in path)}: {'trainable' if is_trainable else 'frozen'}")
 
-    # Use trainable_mask for both weight decay and controlling optimizer state allocation
-    optimizer, optimizer_info = OptimizerFactory.get_optimizer(
-        FLAGS.optimizer,
-        weight_decay_mask=trainable_mask,
-        trainable_mask=trainable_mask
-    )
-
-    def create_trainstate_from_params(params):
-        train_state = TrainState.create(params=params, tx=optimizer, apply_fn=None)
-        #Debug prints for optimizer state examination
-
-        if jax.process_index() == 0:
-            print("Examining optimizer state:")
-            for state in jax.tree_util.tree_leaves(train_state.opt_state):
-                print(f"Optimizer state type: {type(state)}")
-                print(f"Optimizer state attributes: {dir(state)}")
-                print(f"Optimizer state shape: {getattr(state, 'shape', 'no shape')}")
-                print(f"Optimizer state sharding: {getattr(state, 'sharding', 'no sharding')}")
-                if hasattr(state, 'device_buffers'):
-                    print(f"Optimizer state device_buffers: {state.device_buffers}")
-        return train_state
-
     def init_fn(rng):
         rng_generator = JaxRNG(rng)
         params = model.init(
@@ -190,7 +168,7 @@ def main(argv):
             attention_mask=jnp.ones((4, seq_length), dtype=jnp.int32),
             rngs=rng_generator(LLaMAConfigurator.rng_keys()),
         )
-        return TrainState.create(params=params, tx=optimizer, apply_fn=None)
+        return params  # Just return params, not train_state
 
     def train_step(train_state, rng, batch):
         rng_generator = JaxRNG(rng)
@@ -419,12 +397,30 @@ def main(argv):
             trainable_mask=trainable_mask
         )
 
+        # Now create optimizer with sharded parameters
+        optimizer, optimizer_info = OptimizerFactory.get_optimizer(
+            FLAGS.optimizer,
+            weight_decay_mask=trainable_mask,
+            trainable_mask=trainable_mask
+        )
+
         # Create train state from sharded parameters
         train_state = TrainState.create(
             params=params,
             tx=optimizer,
             apply_fn=None
         )
+
+        # Debug prints for optimizer state examination
+        if jax.process_index() == 0:
+            print("Examining optimizer state:")
+            for state in jax.tree_util.tree_leaves(train_state.opt_state):
+                print(f"Optimizer state type: {type(state)}")
+                print(f"Optimizer state attributes: {dir(state)}")
+                print(f"Optimizer state shape: {getattr(state, 'shape', 'no shape')}")
+                print(f"Optimizer state sharding: {getattr(state, 'sharding', 'no sharding')}")
+                if hasattr(state, 'device_buffers'):
+                    print(f"Optimizer state device_buffers: {state.device_buffers}")
 
         # Print sharded parameter info on worker 0 only
         if jax.process_index() == 0:
