@@ -261,7 +261,7 @@ def main(argv):
     sharded_init_fn = pjit(
         init_fn,
         in_shardings=PS(),
-        out_shardings=params_partition
+        out_shardings=train_state_partition.params['params']
     )
 
     sharded_train_step = pjit(
