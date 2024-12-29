@@ -136,3 +136,4 @@ Llama-3.1-8B
 request_logs
 .aider*
 *.md
+*.json
