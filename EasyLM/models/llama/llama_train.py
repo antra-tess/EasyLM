@@ -200,10 +200,15 @@ def main(argv):
             gradient_norm=global_norm(grads),
             param_norm=global_norm(train_state.params),
         )
+
+        jax.debug.print("D: before rng")
+        print("P: before rng")
+        rng = rng_generator()
+
         jax.debug.print("D: Training step complete")
         print("P: Training step complete")
 
-        return train_state, rng_generator(), metrics
+        return train_state, rng, metrics
 
     def eval_step(train_state, rng, batch):
         rng_generator = JaxRNG(rng)
