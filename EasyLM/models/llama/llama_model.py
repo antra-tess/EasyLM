@@ -1153,23 +1153,16 @@ class LoRALinear(nn.Module):
                 self.param_dtype,
             )
 
-        # Always compute the base matmul first
-        base_out = jnp.matmul(x, kernel.astype(self.dtype))
-        # Add sharding constraint based on kernel sharding
-        if 'attention/wo/' in self.name:
-            base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
-        else:
-            base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
-
-        # If LoRA is enabled, stop gradients through base output
-        if self.config.lora_rank > 0:
-            base_out = jax.lax.stop_gradient(base_out)
-
-        # If LoRA is disabled, just return base output
         if self.config.lora_rank == 0:
-            y = base_out
+            # If LoRA is disabled, just do normal matmul
+            y = jnp.matmul(x, kernel.astype(self.dtype))
+            # Add sharding constraint based on kernel sharding
+            if 'attention/wo/' in self.name:
+                y = with_sharding_constraint(y, PS(("dp", "fsdp"), None, "mp"))
+            else:
+                y = with_sharding_constraint(y, PS(("dp", "fsdp"), None, "mp"))
         else:
-            # Add LoRA "low-rank" decomposition
+            # LoRA is enabled - compute LoRA contribution first
             lora_rank = self.config.lora_rank
             lora_alpha = self.config.lora_alpha
             scaling = lora_alpha / lora_rank
@@ -1202,14 +1195,19 @@ class LoRALinear(nn.Module):
             delta = jnp.matmul(x_lora, lora_A.astype(self.dtype))
             delta = with_sharding_constraint(delta, PS(("dp", "fsdp"), None, None))
 
-            # Second LoRA matmul - output must match base_out sharding
+            # Second LoRA matmul - output must match final sharding
             delta = jnp.matmul(delta, lora_B.astype(self.dtype)) * scaling
             if 'attention/wo/' in self.name:
                 delta = with_sharding_constraint(delta, PS(("dp", "fsdp"), None, "mp"))
             else:
                 delta = with_sharding_constraint(delta, PS(("dp", "fsdp"), None, "mp"))
 
-            # Add LoRA contribution to stopped base output
+            # Compute base output with stop_gradient and add LoRA contribution
+            base_out = jax.lax.stop_gradient(jnp.matmul(x, kernel.astype(self.dtype)))
+            if 'attention/wo/' in self.name:
+                base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
+            else:
+                base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
             y = base_out + delta
 
         # Add bias if present
