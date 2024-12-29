@@ -106,12 +106,13 @@ def main(argv):
     )
     logging.info(f"Model initialization complete: LLaMA {llama_config.base_model}")
 
-    def trainable_mask(param_name: str) -> bool:
+    def trainable_mask(param_name: str, param_value=None) -> bool:
         """
         If LoRA is off (lora_rank=0), we return True for all parameters.
         If LoRA is on (lora_rank>0), we only return True for LoRA param.
         param_name: a string like: 'transformer/h/0/attention/wq/kernel'
                     or something JAX derived
+        param_value: actual parameter value (unused but needed for named_tree_map)
         We'll just check if it has 'lora_A' or 'lora_B' in it.
         """
         if llama_config.lora_rank > 0:
