@@ -144,6 +144,9 @@ def main(argv):
             print(f"Optimizer state type: {type(state)}")
             print(f"Optimizer state attributes: {dir(state)}")
             print(f"Optimizer state shape: {getattr(state, 'shape', 'no shape')}")
+            print(f"Optimizer state sharding: {getattr(state, 'sharding', 'no sharding')}")
+            if hasattr(state, 'device_buffers'):
+                print(f"Optimizer state device_buffers: {state.device_buffers}")
         return train_state
 
     def init_fn(rng):
