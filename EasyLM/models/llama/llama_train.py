@@ -386,52 +386,45 @@ def main(argv):
     mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
     logging.info("JAX mesh initialized")
     with mesh:
-        train_state, restored_params = None, None
+        # First get sharded parameters
+        params, restored_params = None, None
         if FLAGS.load_checkpoint != '':
-            train_state, restored_params = checkpointer.load_trainstate_checkpoint(
-                FLAGS.load_checkpoint, train_state_shapes, shard_fns
+            _, restored_params = checkpointer.load_trainstate_checkpoint(
+                FLAGS.load_checkpoint, params_shapes, shard_fns
             )
         logging.info("Loaded checkpoint")
 
-        if train_state is None and restored_params is None:
+        if restored_params is None:
             # Initialize from scratch
-            train_state = sharded_init_fn(next_rng())
-        elif train_state is None and restored_params is not None:
+            params = sharded_init_fn(next_rng())
+        else:
             # For LoRA, we need to initialize LoRA params from scratch
             if llama_config.lora_rank > 0:
                 logging.info(f"Initializing LoRA parameters with rank {llama_config.lora_rank}")
-                init_state = sharded_init_fn(next_rng())
-                # Copy non-LoRA params from checkpoint, keep LoRA params from init
-                # restored_params = unfreeze(restored_params)
-                init_params = init_state.params
+                init_params = sharded_init_fn(next_rng())
                 
-                # Debug: print structure before merging
-                restored_dict = flatten_dict(restored_params)
-                init_dict = flatten_dict(init_params)
-                logging.info(f"Restored params has {len(restored_dict)} parameters")
-                logging.info(f"Init params has {len(init_dict)} parameters")
-                logging.info("Sample of init param paths:")
-                for path in list(init_dict.keys())[:5]:
-                    logging.info(f"  {path}")
-
-                # unwrapped_restored = unfreeze(restored_params)
-
                 for path, param in flatten_dict(restored_params).items():
-
                     path_str = str(path)
                     if 'lora_' not in path_str:
                         init_params = set_in_dict(init_params, path, param)
-                        # if jax.process_index() == 0:
-                        #     logging.info(f"Copied parameter: {path_str}")
-                    # else:
-                    #     if jax.process_index() == 0:
-                    #         logging.info(f"Skipping LoRA parameter: {path_str}")
+                params = init_params
             else:
-                init_params = restored_params
-                # restored_params = freeze(init_params)
-            # Create train state with possibly modified params
-            train_state = sharded_create_trainstate_from_params(init_params)
+                params = restored_params
             del restored_params
+
+        # Now create optimizer with sharded parameters
+        optimizer, optimizer_info = OptimizerFactory.get_optimizer(
+            FLAGS.optimizer,
+            weight_decay_mask=trainable_mask,
+            trainable_mask=trainable_mask
+        )
+
+        # Create train state from sharded parameters
+        train_state = TrainState.create(
+            params=params,
+            tx=optimizer,
+            apply_fn=None
+        )
 
         # Print sharded parameter info on worker 0 only
         if jax.process_index() == 0:
