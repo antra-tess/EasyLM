@@ -15,7 +15,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --mesh_dim='1,-1,1' \
     --dtype='bf16' \
     --llama.base_model='llama31_8b' \
-    --llama.lora_rank=8 \
+    --llama.lora_rank=16 \
     --llama.lora_alpha=32 \
     --llama.lora_dropout=0.1 \
     --llama.lora_attn=true \
@@ -29,8 +29,8 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --train_dataset.huggingface_dataset.seq_length=1024 \
     --train_dataset.huggingface_dataset.batch_size=64 \
     --optimizer.type='adamw' \
-    --optimizer.adamw_optimizer.lr=3e-4 \
-    --optimizer.adamw_optimizer.end_lr=3e-5 \
+    --optimizer.adamw_optimizer.lr=5e-4 \
+    --optimizer.adamw_optimizer.end_lr=5e-5 \
     --optimizer.adamw_optimizer.lr_warmup_steps=100 \
     --optimizer.adamw_optimizer.lr_decay_steps=1000 \
     --total_steps=2000 \
