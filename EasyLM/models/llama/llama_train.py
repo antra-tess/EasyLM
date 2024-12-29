@@ -279,17 +279,11 @@ def main(argv):
         enable=jax.process_index() == 0,
     )
 
+    # Create sharded init function for just parameters
     sharded_init_fn = pjit(
         init_fn,
         in_shardings=PS(),
-        out_shardings=train_state_partition
-    )
-
-    sharded_create_trainstate_from_params = pjit(
-        create_trainstate_from_params,
-        in_shardings=(train_state_partition.params, ),
-        out_shardings=train_state_partition,
-        donate_argnums=(0, ),
+        out_shardings=train_state_partition.params  # Only shard params
     )
 
     sharded_train_step = pjit(
