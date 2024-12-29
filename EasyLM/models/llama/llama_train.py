@@ -169,15 +169,17 @@ def main(argv):
 
     def create_trainstate_from_params(params):
         train_state = TrainState.create(params=params, tx=optimizer, apply_fn=None)
-        # Debug prints for optimizer state examination
-        # print("Examining optimizer state:")
-        # for state in jax.tree_util.tree_leaves(train_state.opt_state):
-        #     print(f"Optimizer state type: {type(state)}")
-        #     print(f"Optimizer state attributes: {dir(state)}")
-        #     print(f"Optimizer state shape: {getattr(state, 'shape', 'no shape')}")
-        #     print(f"Optimizer state sharding: {getattr(state, 'sharding', 'no sharding')}")
-        #     if hasattr(state, 'device_buffers'):
-        #         print(f"Optimizer state device_buffers: {state.device_buffers}")
+        #Debug prints for optimizer state examination
+
+        if jax.process_index() == 0:
+            print("Examining optimizer state:")
+            for state in jax.tree_util.tree_leaves(train_state.opt_state):
+                print(f"Optimizer state type: {type(state)}")
+                print(f"Optimizer state attributes: {dir(state)}")
+                print(f"Optimizer state shape: {getattr(state, 'shape', 'no shape')}")
+                print(f"Optimizer state sharding: {getattr(state, 'sharding', 'no sharding')}")
+                if hasattr(state, 'device_buffers'):
+                    print(f"Optimizer state device_buffers: {state.device_buffers}")
         return train_state
 
     def init_fn(rng):
@@ -249,25 +251,25 @@ def main(argv):
         LLaMAConfigurator.get_partition_rules(), train_state_shapes
     )
 
-    # # Log partition specs and actual shapes
-    # if jax.process_index() == 0:
-    #     logging.info("Examining train state partitioning:")
-    #     # Flatten each field of TrainState separately
-    #     for field in ["params", "opt_state", "step"]:
-    #         logging.info(f"\nExamining {field}:")
-    #         field_partition = getattr(train_state_partition, field)
-    #         field_shapes = getattr(train_state_shapes, field)
-    #         if isinstance(field_partition, (dict, FrozenDict)):
-    #             flat_partition = flatten_dict(field_partition)
-    #             flat_shapes = flatten_dict(field_shapes)
-    #             for name, spec in flat_partition.items():
-    #                 shape = flat_shapes[name].shape if hasattr(flat_shapes[name], 'shape') else None
-    #                 logging.info(f"Parameter {name}:")
-    #                 logging.info(f"  Shape: {shape}")
-    #                 logging.info(f"  Partition spec: {spec}")
-    #         else:
-    #             logging.info(f"  Shape: {getattr(field_shapes, 'shape', None)}")
-    #             logging.info(f"  Partition spec: {field_partition}")
+    # Log partition specs and actual shapes
+    if jax.process_index() == 0:
+        logging.info("Examining train state partitioning:")
+        # Flatten each field of TrainState separately
+        for field in ["params", "opt_state", "step"]:
+            logging.info(f"\nExamining {field}:")
+            field_partition = getattr(train_state_partition, field)
+            field_shapes = getattr(train_state_shapes, field)
+            if isinstance(field_partition, (dict, FrozenDict)):
+                flat_partition = flatten_dict(field_partition)
+                flat_shapes = flatten_dict(field_shapes)
+                for name, spec in flat_partition.items():
+                    shape = flat_shapes[name].shape if hasattr(flat_shapes[name], 'shape') else None
+                    logging.info(f"Parameter {name}:")
+                    logging.info(f"  Shape: {shape}")
+                    logging.info(f"  Partition spec: {spec}")
+            else:
+                logging.info(f"  Shape: {getattr(field_shapes, 'shape', None)}")
+                logging.info(f"  Partition spec: {field_partition}")
 
     shard_fns, gather_fns = make_shard_and_gather_fns(
         train_state_partition, train_state_shapes
