@@ -29,8 +29,6 @@ from EasyLM.models.llama.llama_model import (
     LLaMAConfigurator, FlaxLLaMAForCausalLMModule
 )
 
-jax.config.update("jax_disable_jit", True)
-
 FLAGS, FLAGS_DEF = mlxu.define_flags_with_default(
     seed=42,
     mesh_dim='1,-1,1',
