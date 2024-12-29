@@ -35,7 +35,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --optimizer.adamw_optimizer.lr_decay_steps=1000 \
     --total_steps=2000 \
     --log_freq=50 \
-    --save_model_freq=500 \
+    --save_model_freq=0 \
     --logger.online=true \
     --logger.project='levanter-sft' \
     --logger.entity='antra-cyborgism' \
