@@ -169,14 +169,15 @@ def main(argv):
 
     def create_trainstate_from_params(params):
         train_state = TrainState.create(params=params, tx=optimizer, apply_fn=None)
-        print("Examining optimizer state:")
-        for state in jax.tree_util.tree_leaves(train_state.opt_state):
-            print(f"Optimizer state type: {type(state)}")
-            print(f"Optimizer state attributes: {dir(state)}")
-            print(f"Optimizer state shape: {getattr(state, 'shape', 'no shape')}")
-            print(f"Optimizer state sharding: {getattr(state, 'sharding', 'no sharding')}")
-            if hasattr(state, 'device_buffers'):
-                print(f"Optimizer state device_buffers: {state.device_buffers}")
+        # Debug prints for optimizer state examination
+        # print("Examining optimizer state:")
+        # for state in jax.tree_util.tree_leaves(train_state.opt_state):
+        #     print(f"Optimizer state type: {type(state)}")
+        #     print(f"Optimizer state attributes: {dir(state)}")
+        #     print(f"Optimizer state shape: {getattr(state, 'shape', 'no shape')}")
+        #     print(f"Optimizer state sharding: {getattr(state, 'sharding', 'no sharding')}")
+        #     if hasattr(state, 'device_buffers'):
+        #         print(f"Optimizer state device_buffers: {state.device_buffers}")
         return train_state
 
     def init_fn(rng):
