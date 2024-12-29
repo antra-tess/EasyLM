@@ -13,6 +13,7 @@ import jax.numpy as jnp
 import numpy as np
 from absl import logging
 import optax
+from flax.traverse_util import flatten_dict, unflatten_dict
 
 from EasyLM.jax_utils import float_to_dtype
 
