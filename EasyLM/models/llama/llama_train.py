@@ -421,10 +421,13 @@ def main(argv):
             try:
                 jax.profiler.start_trace("/tmp/tensorboard")
                 # Disable JIT for testing
+                print("P: Starting training step (outer)...")
                 train_state, sharded_rng, metrics = sharded_train_step(
                     train_state, sharded_rng, batch
                 )
+                print("P: Training step complete (outer)...")
             finally:
+                print("P: Stopping profiler...")
                 jax.profiler.stop_trace()
 
             if step % FLAGS.log_freq == 0:
