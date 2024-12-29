@@ -367,7 +367,7 @@ def main(argv):
         params, restored_params = None, None
         if FLAGS.load_checkpoint != '':
             _, restored_params = checkpointer.load_trainstate_checkpoint(
-                FLAGS.load_checkpoint, params_shapes, shard_fns
+                FLAGS.load_checkpoint, train_state_shapes, shard_fns
             )
         logging.info("Loaded checkpoint")
 
