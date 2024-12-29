@@ -224,44 +224,36 @@ def main(argv):
         )
         return rng_generator(), metrics
 
-    train_state_shapes = jax.eval_shape(init_fn, next_rng())
-    train_state_partition = match_partition_rules(
-        LLaMAConfigurator.get_partition_rules(), train_state_shapes
+    # Get parameter shapes and partition specs first
+    params_shapes = jax.eval_shape(init_fn, next_rng())
+    params_partition = match_partition_rules(
+        LLaMAConfigurator.get_partition_rules(), params_shapes
     )
 
-    # Log partition specs and actual shapes
+    # Log parameter partition specs and shapes
     if jax.process_index() == 0:
-        logging.info("Examining train state partitioning:")
-        # Flatten each field of TrainState separately
-        for field in ["params", "opt_state", "step"]:
-            logging.info(f"\nExamining {field}:")
-            field_partition = getattr(train_state_partition, field)
-            field_shapes = getattr(train_state_shapes, field)
-            if isinstance(field_partition, (dict, FrozenDict)):
-                flat_partition = flatten_dict(field_partition)
-                flat_shapes = flatten_dict(field_shapes)
-                for name, spec in flat_partition.items():
-                    shape = flat_shapes[name].shape if hasattr(flat_shapes[name], 'shape') else None
-                    logging.info(f"Parameter {name}:")
-                    logging.info(f"  Shape: {shape}")
-                    logging.info(f"  Partition spec: {spec}")
-            else:
-                logging.info(f"  Shape: {getattr(field_shapes, 'shape', None)}")
-                logging.info(f"  Partition spec: {field_partition}")
+        logging.info("Examining parameter partitioning:")
+        flat_partition = flatten_dict(params_partition)
+        flat_shapes = flatten_dict(params_shapes)
+        for name, spec in flat_partition.items():
+            shape = flat_shapes[name].shape if hasattr(flat_shapes[name], 'shape') else None
+            logging.info(f"Parameter {name}:")
+            logging.info(f"  Shape: {shape}")
+            logging.info(f"  Partition spec: {spec}")
 
     shard_fns, gather_fns = make_shard_and_gather_fns(
-        train_state_partition, train_state_shapes
+        params_partition, params_shapes
     )
     checkpointer = StreamingCheckpointer(
         FLAGS.checkpointer, logger.output_dir,
         enable=jax.process_index() == 0,
     )
 
-    # Create sharded init function for just parameters
+    # Create sharded init function with proper parameter sharding
     sharded_init_fn = pjit(
         init_fn,
         in_shardings=PS(),
-        out_shardings=train_state_partition.params  # Only shard params
+        out_shardings=params_partition
     )
 
     sharded_train_step = pjit(
