@@ -243,10 +243,12 @@ class AdamWOptimizerFactory(object):
                     labels[path] = 'freeze'  # Base params get zero optimizer
             return unflatten_dict(labels)
 
-        # Create multi-transform optimizer
+        # Create multi-transform optimizer that preserves sharding
         optimizer = optax.multi_transform(
             transforms,
-            param_labels
+            param_labels,
+            # Pass through sharding from params to optimizer state
+            partition_spec_fn=lambda x: x.sharding
         )
 
         return optimizer, optimizer_info
