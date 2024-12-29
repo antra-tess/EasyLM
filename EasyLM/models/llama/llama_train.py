@@ -241,6 +241,13 @@ def main(argv):
             logging.info(f"  Shape: {shape}")
             logging.info(f"  Partition spec: {spec}")
 
+    # Create train state partition specs from parameter partition specs
+    train_state_partition = freeze({
+        'params': {'params': params_partition},
+        'step': PS(),
+        'opt_state': PS()
+    })
+
     shard_fns, gather_fns = make_shard_and_gather_fns(
         params_partition, params_shapes
     )
@@ -360,7 +367,7 @@ def main(argv):
         params, restored_params = None, None
         if FLAGS.load_checkpoint != '':
             _, restored_params = checkpointer.load_trainstate_checkpoint(
-                FLAGS.load_checkpoint, train_state_shapes, shard_fns
+                FLAGS.load_checkpoint, params_shapes, shard_fns
             )
         logging.info("Loaded checkpoint")
 
