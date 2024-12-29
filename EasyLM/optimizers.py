@@ -43,9 +43,15 @@ class OptimizerFactory(object):
                 config.palm_optimizer, weight_decay_mask, trainable_mask
             )
         elif config.type == 'adamw':
-            optimizer, optimizer_info = AdamWOptimizerFactory.get_optimizer(
-                config.adamw_optimizer, weight_decay_mask, trainable_mask
-            )
+            # For LoRA training, use multi_transform instead of masked optimizer
+            if trainable_mask is not None:
+                optimizer, optimizer_info = AdamWOptimizerFactory.get_lora_optimizer(
+                    config.adamw_optimizer
+                )
+            else:
+                optimizer, optimizer_info = AdamWOptimizerFactory.get_optimizer(
+                    config.adamw_optimizer, weight_decay_mask, trainable_mask
+                )
         else:
             raise ValueError(f'Unknown optimizer type: {config.type}')
 
@@ -142,6 +148,7 @@ class AdamWOptimizerFactory(object):
 
     @classmethod
     def get_optimizer(cls, config, weight_decay_mask=None, trainable_mask=None):
+        """Original optimizer for full fine-tuning"""
         config = cls.get_default_config(config)
 
         learning_rate_schedule = optax.warmup_cosine_decay_schedule(
@@ -159,7 +166,7 @@ class AdamWOptimizerFactory(object):
         if config.multiply_by_parameter_scale:
             optimizer = optax.chain(
                 optax.clip_by_global_norm(config.clip_gradient),
-                optax.masked(  # Only create optimizer state for trainable params
+                optax.masked(
                     optax.adafactor(
                         learning_rate=learning_rate_schedule,
                         multiply_by_parameter_scale=True,
@@ -179,18 +186,67 @@ class AdamWOptimizerFactory(object):
         else:
             optimizer = optax.chain(
                 optax.clip_by_global_norm(config.clip_gradient),
-                optax.masked(  # Only create optimizer state for trainable params
-                    optax.adamw(
-                        learning_rate=learning_rate_schedule,
-                        weight_decay=config.weight_decay,
-                        b1=config.b1,
-                        b2=config.b2,
-                        mask=weight_decay_mask,  # This controls weight decay
-                        mu_dtype=jnp.bfloat16 if config.bf16_momentum else jnp.float32,
-                    ),
-                    trainable_mask  # This controls which params get optimizer state
+                optax.adamw(
+                    learning_rate=learning_rate_schedule,
+                    weight_decay=config.weight_decay,
+                    b1=config.b1,
+                    b2=config.b2,
+                    mask=weight_decay_mask,
+                    mu_dtype=jnp.bfloat16 if config.bf16_momentum else jnp.float32,
                 ),
             )
+
+        return optimizer, optimizer_info
+
+    @classmethod
+    def get_lora_optimizer(cls, config):
+        """Special optimizer for LoRA training using multi_transform"""
+        config = cls.get_default_config(config)
+
+        learning_rate_schedule = optax.warmup_cosine_decay_schedule(
+            init_value=config.init_lr,
+            peak_value=config.lr,
+            warmup_steps=config.lr_warmup_steps,
+            decay_steps=config.lr_decay_steps,
+            end_value=config.end_lr,
+        )
+
+        optimizer_info = dict(
+            learning_rate_schedule=learning_rate_schedule,
+        )
+
+        # Create transform dictionary
+        transforms = {
+            'train': optax.chain(
+                optax.clip_by_global_norm(config.clip_gradient),
+                optax.adamw(
+                    learning_rate=learning_rate_schedule,
+                    weight_decay=config.weight_decay,
+                    b1=config.b1,
+                    b2=config.b2,
+                    mu_dtype=jnp.bfloat16 if config.bf16_momentum else jnp.float32,
+                )
+            ),
+            'freeze': optax.set_to_zero()
+        }
+
+        # Create parameter labels dictionary
+        def param_labels(params):
+            flat_params = flatten_dict(params)
+            labels = {}
+            for path, _ in flat_params.items():
+                path_str = '/'.join(str(x) for x in path)
+                if 'lora_A' in path_str or 'lora_B' in path_str:
+                    labels[path] = 'train'  # LoRA params get full optimizer
+                else:
+                    labels[path] = 'freeze'  # Base params get zero optimizer
+            return unflatten_dict(labels)
+
+        # Create multi-transform optimizer
+        optimizer = optax.multi_transform(
+            transforms,
+            param_labels
+        )
 
         return optimizer, optimizer_info
 
