@@ -240,6 +240,17 @@ def main(argv):
         LLaMAConfigurator.get_partition_rules(), train_state_shapes
     )
 
+    # Log partition specs and actual shapes
+    if jax.process_index() == 0:
+        logging.info("Examining train state partitioning:")
+        flat_partition = flatten_dict(train_state_partition)
+        flat_shapes = flatten_dict(train_state_shapes)
+        for name, spec in flat_partition.items():
+            shape = flat_shapes[name].shape
+            logging.info(f"Parameter {name}:")
+            logging.info(f"  Shape: {shape}")
+            logging.info(f"  Partition spec: {spec}")
+
     shard_fns, gather_fns = make_shard_and_gather_fns(
         train_state_partition, train_state_shapes
     )
