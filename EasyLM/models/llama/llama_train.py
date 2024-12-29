@@ -135,6 +135,30 @@ def main(argv):
             is_trainable = trainable_mask(param)
             logging.info(f"Parameter {param}: {'trainable' if is_trainable else 'frozen'}")
 
+    # Test trainable mask with some example parameters
+    if jax.process_index() == 0:
+        logging.info("\nTesting trainable_mask before passing to optimizer:")
+        test_params = {
+            'params': {
+                'transformer': {
+                    'h': {
+                        '0': {
+                            'attention': {
+                                'wq': {
+                                    'kernel': jnp.array([1.0]),
+                                    'lora_A': jnp.array([1.0]),
+                                    'lora_B': jnp.array([1.0])
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        mask_result = named_tree_map(trainable_mask, test_params, sep='/')
+        for path, is_trainable in flatten_dict(mask_result).items():
+            logging.info(f"Parameter {'/'.join(str(x) for x in path)}: {'trainable' if is_trainable else 'frozen'}")
+
     # Use trainable_mask for both weight decay and controlling optimizer state allocation
     optimizer, optimizer_info = OptimizerFactory.get_optimizer(
         FLAGS.optimizer,
