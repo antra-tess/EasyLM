@@ -401,25 +401,41 @@ def main(argv):
     logginginfo("Setting up JAX mesh...")
     mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
     logginginfo("JAX mesh initialized")
+    def log_memory_usage(prefix=""):
+        if jax.process_index() == 0:
+            live_arrays = jax.live_arrays()
+            total_bytes = sum(x.nbytes for x in live_arrays)
+            logging.info(f"{prefix} Memory usage on device 0: {total_bytes / 1e9:.2f} GB")
+            # Log individual large arrays
+            for arr in sorted(live_arrays, key=lambda x: x.nbytes, reverse=True)[:5]:
+                logging.info(f"  Large array: shape={arr.shape}, dtype={arr.dtype}, size={arr.nbytes / 1e9:.2f} GB")
+
     with mesh:
         train_state, restored_params = None, None
+        log_memory_usage("Before checkpoint load")
+        
         if FLAGS.load_checkpoint != '':
             logginginfo("Loading checkpoint...")
             train_state, restored_params = checkpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint, train_state_shapes, shard_fns
             )
             logginginfo("Loaded checkpoint")
+            log_memory_usage("After checkpoint load")
 
         if train_state is None and restored_params is None:
             # Initialize from scratch
             logginginfo("Initializing from scratch")
+            log_memory_usage("Before initialization")
             train_state = sharded_init_fn(next_rng())
+            log_memory_usage("After initialization")
             logginginfo("Initialization complete")
         elif train_state is None and restored_params is not None:
             # For LoRA, we need to initialize LoRA params from scratch
             if llama_config.lora_rank > 0:
                 logginginfo(f"Initializing LoRA parameters with rank {llama_config.lora_rank}")
+                log_memory_usage("Before LoRA init")
                 init_state = sharded_init_fn(next_rng())
+                log_memory_usage("After LoRA init")
                 # Copy non-LoRA params from checkpoint, keep LoRA params from init
                 # restored_params = unfreeze(restored_params)
                 init_params = init_state.params
