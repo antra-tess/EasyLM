@@ -171,7 +171,7 @@ def main(argv):
         trainable_mask=trainable_mask,
         lora_mode=llama_config.lora_rank > 0,
     )
-    logging.info(f"Optimizer setup complete: {optimizer_info['name']}")
+    logging.info(f"Optimizer setup complete: {str(optimizer_info)}, {str(optimizer)}, {str(type(optimizer))}")
 
     def create_trainstate_from_params(params):
         train_state = TrainState.create(params=params, tx=optimizer, apply_fn=None)
