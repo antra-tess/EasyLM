@@ -309,12 +309,9 @@ def main(argv):
         enable=jax.process_index() == 0,
     )
 
-    # Create dummy optimizer for shape determination
-    dummy_optimizer = create_dummy_optimizer()
-    
-    # Get shapes using dummy optimizer
+    # Initialize parameters first
     def init_model_params(rng):
-        """Initialize model parameters with dummy batch and return a dummy train state."""
+        """Initialize model parameters only."""
         rng_generator = JaxRNG(rng)
         params = model.init(
             input_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
@@ -322,47 +319,42 @@ def main(argv):
             attention_mask=jnp.ones((4, seq_length), dtype=jnp.int32),
             rngs=rng_generator(LLaMAConfigurator.rng_keys()),
         )
-        # Create a dummy train state with just parameters
+        return params
+
+    # Create partition specs for parameters only first
+    params_partition = match_partition_rules(
+        LLaMAConfigurator.get_partition_rules(),
+        train_state_shapes.params
+    )
+
+    # Create sharded init function for parameters
+    sharded_init_fn = pjit(
+        init_model_params,
+        in_shardings=PS(),
+        out_shardings=params_partition,
+    )
+
+    # Create train state after parameters are sharded
+    def create_train_state(params, optimizer):
+        """Create train state from sharded parameters and optimizer."""
         return train_state.TrainState.create(
             apply_fn=None,
             params=params,
-            tx=dummy_optimizer,
-            opt_state=dummy_optimizer.init(params)
+            tx=optimizer,
         )
 
-    # Create train state partition specs
+    # Full train state partition specs
     train_state_partition = dict(
-        params=dict(
-            params=match_partition_rules(
-                LLaMAConfigurator.get_partition_rules(),
-                train_state_shapes.params
-            )
-        ),
+        params=dict(params=params_partition),
         tx=None,
         step=PS(),
         opt_state=PS(),
         apply_fn=None,
     )
 
-    # Create sharding rules for each field
-    train_state_sharding = {
-        'params': train_state_partition['params'],
-        'opt_state': train_state_partition['opt_state'],
-        'step': train_state_partition['step'],
-        'tx': None,
-        'apply_fn': None
-    }
-
-    # Create sharded init functions
-    # Create sharded functions with consistent dictionary-based partition specs
-    sharded_init_fn = pjit(
-        init_model_params,
-        in_shardings=PS(),
-        out_shardings=train_state_partition['params'],
-    )
-
+    # Create sharded train state creation function
     sharded_create_train_state = pjit(
-        create_train_state_with_params,
+        create_train_state,
         in_shardings=(train_state_partition['params'], None),
         out_shardings=train_state_partition,
     )
@@ -481,25 +473,23 @@ def main(argv):
     mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
     logging.info("JAX mesh initialized")
     with mesh:
-        # Phase 1: Load parameters with dummy optimizer
-        train_state, restored_params = None, None
+        # Phase 1: Initialize or load parameters
+        restored_params = None
         if FLAGS.load_checkpoint != '':
-            train_state, restored_params = checkpointer.load_trainstate_checkpoint(
+            _, restored_params = checkpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint, train_state_shapes, shard_fns
             )
-        logging.info("Loaded checkpoint")
+            logging.info("Loaded checkpoint parameters")
 
         # Phase 2: Initialize and shard parameters
         if restored_params is None:
             # Initialize from scratch
-            dummy_train_state = sharded_init_fn(next_rng())
-            sharded_params = dummy_train_state.params
+            sharded_params = sharded_init_fn(next_rng())
         else:
             if llama_config.lora_rank > 0:
                 # Initialize LoRA params from scratch while keeping base params
                 logging.info(f"Initializing LoRA parameters with rank {llama_config.lora_rank}")
-                dummy_train_state = sharded_init_fn(next_rng())
-                init_params = dummy_train_state.params
+                init_params = sharded_init_fn(next_rng())
                 
                 # Debug: print structure before merging
                 restored_dict = flatten_dict(restored_params)
@@ -519,7 +509,11 @@ def main(argv):
             else:
                 sharded_params = restored_params
 
-        # Phase 3: Create real optimizer with sharded parameters
+        # Ensure parameters are sharded before creating optimizer
+        sharded_params = jax.block_until_ready(sharded_params)
+        logging.info("Parameters sharded and ready on device")
+
+        # Phase 3: Create optimizer with sharded parameters
         optimizer, optimizer_info = create_optimizer_for_sharded_params(
             sharded_params, FLAGS.optimizer
         )
