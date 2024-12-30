@@ -404,21 +404,32 @@ def main(argv):
     def log_memory_usage(prefix=""):
         if jax.process_index() == 0:
             logging.info(f"\n{prefix} Memory Report:")
-            # Get per-device memory info
-            for i, device in enumerate(jax.devices()):
-                mem_info = device.memory_stats()
-                if mem_info:  # Some devices may not report stats
-                    peak = mem_info.get('peak_bytes', 0) / 1e9
-                    current = mem_info.get('current_bytes', 0) / 1e9
-                    logging.info(f"Device {i}: Current: {current:.2f} GB, Peak: {peak:.2f} GB")
             
-            # Also log live arrays for additional context
-            live_arrays = jax.live_arrays()
-            total_live = sum(x.nbytes for x in live_arrays) / 1e9
-            logging.info(f"Total live array bytes: {total_live:.2f} GB")
-            logging.info("Top 5 largest arrays:")
-            for arr in sorted(live_arrays, key=lambda x: x.nbytes, reverse=True)[:5]:
-                logging.info(f"  shape={arr.shape}, dtype={arr.dtype}, size={arr.nbytes / 1e9:.2f} GB")
+            # Try to get per-device memory info if supported
+            try:
+                for i, device in enumerate(jax.devices()):
+                    try:
+                        mem_info = device.memory_stats()
+                        if mem_info:  # Some devices may report stats
+                            peak = mem_info.get('peak_bytes', 0) / 1e9
+                            current = mem_info.get('current_bytes', 0) / 1e9
+                            logging.info(f"Device {i}: Current: {current:.2f} GB, Peak: {peak:.2f} GB")
+                    except (RuntimeError, AttributeError):
+                        # Skip if device doesn't support memory stats
+                        pass
+            except Exception as e:
+                logging.info(f"Device memory stats not available: {str(e)}")
+            
+            # Log live arrays which should work on all devices
+            try:
+                live_arrays = jax.live_arrays()
+                total_live = sum(x.nbytes for x in live_arrays) / 1e9
+                logging.info(f"Total live array bytes: {total_live:.2f} GB")
+                logging.info("Top 5 largest arrays:")
+                for arr in sorted(live_arrays, key=lambda x: x.nbytes, reverse=True)[:5]:
+                    logging.info(f"  shape={arr.shape}, dtype={arr.dtype}, size={arr.nbytes / 1e9:.2f} GB")
+            except Exception as e:
+                logging.info(f"Unable to get live array info: {str(e)}")
 
     with mesh:
         train_state, restored_params = None, None
