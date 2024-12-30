@@ -37,7 +37,7 @@ class OptimizerFactory(object):
         return config
 
     @classmethod
-    def get_optimizer(cls, config, weight_decay_mask=None, trainable_mask=None):
+    def get_optimizer(cls, config, weight_decay_mask=None, trainable_mask=None, lora_mode=False):
         config = cls.get_default_config(config)
         if config.type == 'palm':
             optimizer, optimizer_info = PalmOptimizerFactory.get_optimizer(
@@ -45,7 +45,7 @@ class OptimizerFactory(object):
             )
         elif config.type == 'adamw':
             # For LoRA training, use multi_transform instead of masked optimizer
-            if trainable_mask is not None:
+            if lora_mode:
                 optimizer, optimizer_info = AdamWOptimizerFactory.get_lora_optimizer(
                     config.adamw_optimizer
                 )
