@@ -273,7 +273,7 @@ def main(argv):
         # Flatten each field of TrainState separately
         for field in ["params", "opt_state", "step"]:
             logging.info(f"\nExamining {field}:")
-            field_partition = getattr(train_state_partition, field)
+            field_partition = train_state_partition[field] if field in train_state_partition else None
             field_shapes = getattr(train_state_shapes, field)
             if isinstance(field_partition, (dict, FrozenDict)):
                 flat_partition = flatten_dict(field_partition)
