@@ -271,10 +271,13 @@ def main(argv):
         )
         return rng_generator(), metrics
 
+    logginginfo("Calculating partitioning...")
     train_state_shapes = jax.eval_shape(init_fn, next_rng())
+    logginginfo("Train state shape calculation complete")
     train_state_partition = match_partition_rules(
         LLaMAConfigurator.get_partition_rules(), train_state_shapes
     )
+    logginginfo("Train state partitioning complete")
 
     # # Log partition specs and actual shapes
     # if jax.process_index() == 0:
@@ -304,11 +307,13 @@ def main(argv):
         enable=jax.process_index() == 0,
     )
 
+    logginginfo("Setting up partitioned functions...")
     sharded_init_fn = pjit(
         init_fn,
         in_shardings=PS(),
         out_shardings=train_state_partition
     )
+    logginginfo("Partitioned initialization function created")
 
     sharded_create_trainstate_from_params = pjit(
         create_trainstate_from_params,
@@ -330,6 +335,7 @@ def main(argv):
         out_shardings=(PS(), PS()),
         donate_argnums=(1,),
     )
+    logginginfo("Partitioned functions created")
 
     def remove_frozen_params(tree):
         """
@@ -555,7 +561,7 @@ def main(argv):
             # Create train state with possibly modified params
             logginginfo("Creating train state from restored params")
             train_state = sharded_create_trainstate_from_params(init_params)
-            logginginfo("Train state creation complete")
+            logginginfo("Train state creation complete2")
             del restored_params
             logginginfo("Deleted restored params")
 
@@ -582,6 +588,7 @@ def main(argv):
 
         step_counter = trange(start_step, FLAGS.total_steps, ncols=0)
 
+        log_memory_usage("Before training loop")
         logginginfo("Starting training loop...")
         for step, (batch, dataset_metrics) in zip(step_counter, dataset):
             train_state, sharded_rng, metrics = sharded_train_step(
