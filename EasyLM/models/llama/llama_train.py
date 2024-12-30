@@ -405,29 +405,32 @@ def main(argv):
         if jax.process_index() == 0:
             logging.info(f"\n{prefix} Memory Report:")
             
-            # Try to get per-device memory info if supported
-            try:
-                for i, device in enumerate(jax.devices()):
-                    try:
-                        mem_info = device.memory_stats()
-                        if mem_info:  # Some devices may report stats
-                            peak = mem_info.get('peak_bytes', 0) / 1e9
-                            current = mem_info.get('current_bytes', 0) / 1e9
-                            logging.info(f"Device {i}: Current: {current:.2f} GB, Peak: {peak:.2f} GB")
-                    except (RuntimeError, AttributeError):
-                        # Skip if device doesn't support memory stats
-                        pass
-            except Exception as e:
-                logging.info(f"Device memory stats not available: {str(e)}")
-            
-            # Log live arrays which should work on all devices
+            # Log live arrays by device
             try:
                 live_arrays = jax.live_arrays()
+                # Group arrays by device
+                arrays_by_device = {}
+                for arr in live_arrays:
+                    try:
+                        device = arr.device_buffer.device()
+                        if device not in arrays_by_device:
+                            arrays_by_device[device] = []
+                        arrays_by_device[device].append(arr)
+                    except AttributeError:
+                        continue
+                
+                # Print total memory usage
                 total_live = sum(x.nbytes for x in live_arrays) / 1e9
-                logging.info(f"Total live array bytes: {total_live:.2f} GB")
-                logging.info("Top 5 largest arrays:")
-                for arr in sorted(live_arrays, key=lambda x: x.nbytes, reverse=True)[:5]:
-                    logging.info(f"  shape={arr.shape}, dtype={arr.dtype}, size={arr.nbytes / 1e9:.2f} GB")
+                logging.info(f"Total live array bytes across all devices: {total_live:.2f} GB")
+                
+                # Print per-device memory usage
+                for device, arrays in sorted(arrays_by_device.items()):
+                    device_total = sum(x.nbytes for x in arrays) / 1e9
+                    logging.info(f"\nDevice {device}:")
+                    logging.info(f"Total memory: {device_total:.2f} GB")
+                    logging.info("Top 5 largest arrays:")
+                    for arr in sorted(arrays, key=lambda x: x.nbytes, reverse=True)[:5]:
+                        logging.info(f"  shape={arr.shape}, dtype={arr.dtype}, size={arr.nbytes / 1e9:.2f} GB")
             except Exception as e:
                 logging.info(f"Unable to get live array info: {str(e)}")
 
