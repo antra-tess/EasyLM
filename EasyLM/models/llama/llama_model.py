@@ -567,11 +567,7 @@ class FlaxLLaMAAttention(nn.Module):
                 row_ids = jnp.arange(key_length)[None, None, :, None]  # [1, 1, key_length, 1]
                 col_ids = jnp.arange(key_length)[None, None, None, :]  # [1, 1, 1, key_length]
                 
-                # Apply sharding constraints to the indices
-                row_ids = with_sharding_constraint(row_ids, PS(("dp", "fsdp"), None, None, None))
-                col_ids = with_sharding_constraint(col_ids, PS(("dp", "fsdp"), None, None, None))
-                
-                # Create causal mask with sharding maintained
+                # Create causal mask directly
                 full_causal_mask = (row_ids >= col_ids).astype("bool")
                 full_causal_mask = with_sharding_constraint(full_causal_mask, PS(("dp", "fsdp"), None, None, None))
 
