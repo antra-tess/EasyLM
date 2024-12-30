@@ -320,6 +320,8 @@ def main(argv):
         opt_state=PS(),
         apply_fn=None,
     )
+    # Ensure params has the correct structure
+    train_state_partition['params'] = {'params': train_state_partition['params']}
 
     # Create sharded init functions
     sharded_init_fn = pjit(
@@ -330,7 +332,7 @@ def main(argv):
 
     sharded_create_trainstate = pjit(
         create_trainstate_from_params,
-        in_shardings=(train_state_partition.params, None),
+        in_shardings=(train_state_partition['params'], None),
         out_shardings=train_state_partition,
     )
 
