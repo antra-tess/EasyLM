@@ -198,7 +198,7 @@ def main(argv):
             attention_mask=jnp.ones((4, seq_length), dtype=jnp.int32),
             rngs=rng_generator(LLaMAConfigurator.rng_keys()),
         )
-        return train_state.TrainState.create(params=params, tx=optimizer, apply_fn=None)
+        return train_state.TrainState.create(params=params, tx=dummy_optimizer, apply_fn=None)
 
     def train_step(train_state, rng, batch):
         rng_generator = JaxRNG(rng)
