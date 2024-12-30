@@ -421,7 +421,7 @@ def main(argv):
                         if hasattr(arr, 'device_buffer'):
                             device = str(arr.device_buffer.device())
                         elif hasattr(arr, 'devices'):
-                            device = str(arr.devices()[0])  # Take first device if sharded
+                            device = str(list(arr.devices())[0])  # Take first device if sharded
                         elif hasattr(arr, 'device'):
                             device = str(arr.device())
                         elif hasattr(arr, '_device'):
