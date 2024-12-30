@@ -316,6 +316,12 @@ def main(argv):
         out_shardings=train_state_partition,
     )
 
+    sharded_create_trainstate = pjit(
+        create_trainstate_from_params,
+        in_shardings=(train_state_partition.params, None),
+        out_shardings=train_state_partition,
+    )
+
     sharded_train_step = pjit(
         train_step,
         in_shardings=(train_state_partition, PS(), PS()),
@@ -459,8 +465,8 @@ def main(argv):
             sharded_params, FLAGS.optimizer, trainable_mask
         )
         
-        # Phase 4: Create final train state
-        train_state = create_trainstate_from_params(sharded_params, optimizer)
+        # Phase 4: Create final train state using pjit
+        train_state = sharded_create_trainstate(sharded_params, optimizer)
         del restored_params
 
         # Print sharded parameter info on worker 0 only
