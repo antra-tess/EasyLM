@@ -15,6 +15,7 @@ from flax.training.train_state import TrainState
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.traverse_util import flatten_dict, unflatten_dict
 from transformers import AutoTokenizer
+import optax
 
 from EasyLM.data import DatasetFactory
 from EasyLM.checkpoint import StreamingCheckpointer
