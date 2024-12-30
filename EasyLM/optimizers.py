@@ -245,8 +245,9 @@ class AdamWOptimizerFactory(object):
                 else:
                     labels[path] = 'freeze'  # Base params get zero optimizer
                     frozen += 1
-            logging.info(f'Params labeled: Number of trainable parameters (LoRA): {trainable}')
-            logging.info(f'Params labeled: Number of frozen parameters (base): {frozen}')
+            if jax.process_index() == 0:
+                logging.info(f'Params labeled: Number of trainable parameters (LoRA): {trainable}')
+                logging.info(f'Params labeled: Number of frozen parameters (base): {frozen}')
 
             return unflatten_dict(labels)
 
