@@ -561,15 +561,13 @@ class FlaxLLaMAAttention(nn.Module):
             attn_output = with_sharding_constraint(attn_output, PS(("dp", "fsdp"), None, "mp", None))
         else:
             query_length, key_length = xq.shape[1], xk.shape[1]
+            # Create causal mask only for the sequence length we need
+            query_length, key_length = xq.shape[1], xk.shape[1]
             with jax.ensure_compile_time_eval():
                 full_causal_mask = make_causal_mask(
-                    jnp.ones((1, self.config.max_position_embeddings), dtype="bool"),
+                    jnp.ones((1, key_length), dtype="bool"),
                     dtype="bool"
                 )
-                # Force sharding of the persistent full_causal_mask - replicate across devices
-                mesh = jax.sharding.Mesh(np.array(jax.devices()).reshape(-1, 1, 1), ('dp', 'fsdp', 'mp'))
-                sharding = jax.sharding.NamedSharding(mesh, PS(None, None, None, None))  # Replicate across all devices
-                full_causal_mask = jax.device_put(full_causal_mask, sharding)
 
             if self.has_variable("cache", "cached_key"):
                 mask_shift = self.variables["cache"]["cache_index"]
