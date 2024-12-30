@@ -564,8 +564,14 @@ class FlaxLLaMAAttention(nn.Module):
             # Create causal mask only for the sequence length we need
             query_length, key_length = xq.shape[1], xk.shape[1]
             with jax.ensure_compile_time_eval():
-                full_causal_mask = make_causal_mask(
+                # Start with a sharded ones array
+                sharded_ones = with_sharding_constraint(
                     jnp.ones((1, key_length), dtype="bool"),
+                    PS(("dp", "fsdp"), None)
+                )
+                # Create mask from sharded array
+                full_causal_mask = make_causal_mask(
+                    sharded_ones,
                     dtype="bool"
                 )
 
