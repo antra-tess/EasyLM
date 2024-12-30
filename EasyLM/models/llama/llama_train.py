@@ -301,8 +301,14 @@ def main(argv):
             else:
                 logging.info(f"No partition spec found for field: {field}")
 
+    # Extract partition specs dictionary from train state
+    partition_specs = {
+        'params': train_state_partition['params'],
+        'opt_state': train_state_partition['opt_state'],
+        'step': train_state_partition['step']
+    }
     shard_fns, gather_fns = make_shard_and_gather_fns(
-        train_state_partition, train_state_shapes
+        partition_specs, train_state_shapes
     )
     checkpointer = StreamingCheckpointer(
         FLAGS.checkpointer, logger.output_dir,
