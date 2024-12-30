@@ -163,6 +163,7 @@ def main(argv):
         for path, is_trainable in flatten_dict(mask_result).items():
             logging.info(f"Parameter {'/'.join(str(x) for x in path)}: {'trainable' if is_trainable else 'frozen'}")
 
+    logging.info("Setting up optimizer...")
     # Use trainable_mask for both weight decay and controlling optimizer state allocation
     optimizer, optimizer_info = OptimizerFactory.get_optimizer(
         FLAGS.optimizer,
@@ -170,6 +171,7 @@ def main(argv):
         trainable_mask=trainable_mask,
         lora_mode=llama_config.lora_rank > 0,
     )
+    logging.info(f"Optimizer setup complete: {optimizer_info['name']}")
 
     def create_trainstate_from_params(params):
         train_state = TrainState.create(params=params, tx=optimizer, apply_fn=None)
