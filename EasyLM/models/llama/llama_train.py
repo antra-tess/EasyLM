@@ -405,34 +405,64 @@ def main(argv):
         if jax.process_index() == 0:
             logging.info(f"\n{prefix} Memory Report:")
             
-            # Log live arrays by device
             try:
                 live_arrays = jax.live_arrays()
-                # Group arrays by device
+                total_live = sum(x.nbytes for x in live_arrays) / 1e9
+                logging.info(f"Total live array bytes: {total_live:.2f} GB")
+                
+                # Group arrays by device and type
                 arrays_by_device = {}
+                arrays_by_type = {}
+                total_arrays = len(live_arrays)
+                
                 for arr in live_arrays:
                     try:
+                        # Group by device
                         device = arr.device_buffer.device()
                         if device not in arrays_by_device:
                             arrays_by_device[device] = []
                         arrays_by_device[device].append(arr)
+                        
+                        # Group by shape pattern
+                        shape_pattern = 'x'.join(str(x) for x in arr.shape)
+                        if shape_pattern not in arrays_by_type:
+                            arrays_by_type[shape_pattern] = []
+                        arrays_by_type[shape_pattern].append(arr)
                     except AttributeError:
                         continue
+
+                # Print summary statistics
+                logging.info(f"\nTotal number of arrays: {total_arrays}")
                 
-                # Print total memory usage
-                total_live = sum(x.nbytes for x in live_arrays) / 1e9
-                logging.info(f"Total live array bytes across all devices: {total_live:.2f} GB")
-                
-                # Print per-device memory usage
+                # Print device statistics
+                logging.info("\nMemory by device:")
                 for device, arrays in sorted(arrays_by_device.items()):
                     device_total = sum(x.nbytes for x in arrays) / 1e9
+                    array_count = len(arrays)
                     logging.info(f"\nDevice {device}:")
-                    logging.info(f"Total memory: {device_total:.2f} GB")
-                    logging.info("Top 5 largest arrays:")
+                    logging.info(f"  Total memory: {device_total:.2f} GB")
+                    logging.info(f"  Array count: {array_count}")
+                    logging.info("  Top 5 largest arrays:")
                     for arr in sorted(arrays, key=lambda x: x.nbytes, reverse=True)[:5]:
-                        logging.info(f"  shape={arr.shape}, dtype={arr.dtype}, size={arr.nbytes / 1e9:.2f} GB")
+                        logging.info(f"    shape={arr.shape}, dtype={arr.dtype}, size={arr.nbytes / 1e9:.2f} GB")
+                
+                # Print shape pattern statistics
+                logging.info("\nArrays grouped by shape pattern:")
+                for shape_pattern, arrays in sorted(arrays_by_type.items(), 
+                                                 key=lambda x: sum(a.nbytes for a in x[1]), 
+                                                 reverse=True)[:10]:
+                    total_size = sum(x.nbytes for x in arrays) / 1e9
+                    array_count = len(arrays)
+                    if array_count > 0:  # Only show non-empty groups
+                        logging.info(f"\nShape pattern: {shape_pattern}")
+                        logging.info(f"  Count: {array_count}")
+                        logging.info(f"  Total size: {total_size:.2f} GB")
+                        logging.info(f"  Example dtype: {arrays[0].dtype}")
+
             except Exception as e:
                 logging.info(f"Unable to get live array info: {str(e)}")
+                import traceback
+                logging.info(f"Traceback: {traceback.format_exc()}")
 
     with mesh:
         train_state, restored_params = None, None
