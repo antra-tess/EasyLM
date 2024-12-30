@@ -566,6 +566,10 @@ class FlaxLLaMAAttention(nn.Module):
                     jnp.ones((1, self.config.max_position_embeddings), dtype="bool"),
                     dtype="bool"
                 )
+                # Force sharding of the persistent full_causal_mask
+                mesh = jax.sharding.Mesh(np.array(jax.devices()).reshape(-1, 1, 1), ('dp', 'fsdp', 'mp'))
+                sharding = jax.sharding.NamedSharding(mesh, PS(('dp', 'fsdp'), None, None, None))
+                full_causal_mask = jax.device_put(full_causal_mask, sharding)
 
             if self.has_variable("cache", "cached_key"):
                 mask_shift = self.variables["cache"]["cache_index"]
