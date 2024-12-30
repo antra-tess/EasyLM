@@ -12,7 +12,7 @@ echo "HF_TOKEN is${HF_TOKEN:+ set}${HF_TOKEN:-" not set"}"
 
 ## Run training
 cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
-    --mesh_dim='1,-1,2' \
+    --mesh_dim='1,-1,4' \
     --dtype='bf16' \
     --llama.base_model='llama31_8b' \
     --llama.lora_rank=16 \
