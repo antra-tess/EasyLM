@@ -416,20 +416,30 @@ def main(argv):
                 total_arrays = len(live_arrays)
                 
                 for arr in live_arrays:
+                    # Get device info safely
                     try:
-                        # Group by device
-                        device = arr.device_buffer.device()
-                        if device not in arrays_by_device:
-                            arrays_by_device[device] = []
-                        arrays_by_device[device].append(arr)
+                        if hasattr(arr, 'device_buffer'):
+                            device = arr.device_buffer.device()
+                        elif hasattr(arr, 'devices'):
+                            device = arr.devices()[0]  # Take first device if sharded
+                        else:
+                            device = 'unknown'
+                    except Exception:
+                        device = 'unknown'
                         
-                        # Group by shape pattern
+                    # Add to device grouping
+                    if device not in arrays_by_device:
+                        arrays_by_device[device] = []
+                    arrays_by_device[device].append(arr)
+                    
+                    # Add to shape pattern grouping
+                    if hasattr(arr, 'shape'):
                         shape_pattern = 'x'.join(str(x) for x in arr.shape)
-                        if shape_pattern not in arrays_by_type:
-                            arrays_by_type[shape_pattern] = []
-                        arrays_by_type[shape_pattern].append(arr)
-                    except AttributeError:
-                        continue
+                    else:
+                        shape_pattern = 'unknown'
+                    if shape_pattern not in arrays_by_type:
+                        arrays_by_type[shape_pattern] = []
+                    arrays_by_type[shape_pattern].append(arr)
 
                 # Print summary statistics
                 logging.info(f"\nTotal number of arrays: {total_arrays}")
