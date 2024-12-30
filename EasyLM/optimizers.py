@@ -242,7 +242,7 @@ class AdamWOptimizerFactory(object):
                 if 'lora_A' in path_str or 'lora_B' in path_str:
                     labels[path] = 'train'  # LoRA params get full optimizer
                     trainable += 1
-                    if jazz.process_index() == 0:
+                    if jax.process_index() == 0:
                         logging.info(f'Params labeled: {path_str}')
                 else:
                     labels[path] = 'freeze'  # Base params get zero optimizer
