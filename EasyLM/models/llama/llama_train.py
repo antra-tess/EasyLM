@@ -270,22 +270,18 @@ def main(argv):
     # Log partition specs and actual shapes
     if jax.process_index() == 0:
         logging.info("Examining train state partitioning:")
-        # Flatten each field of TrainState separately
-        for field in ["params", "opt_state", "step"]:
-            logging.info(f"\nExamining {field}:")
-            field_partition = train_state_partition[field] if field in train_state_partition else None
-            field_shapes = getattr(train_state_shapes, field)
-            if isinstance(field_partition, (dict, FrozenDict)):
-                flat_partition = flatten_dict(field_partition)
-                flat_shapes = flatten_dict(field_shapes)
-                for name, spec in flat_partition.items():
-                    shape = flat_shapes[name].shape if hasattr(flat_shapes[name], 'shape') else None
-                    logging.info(f"Parameter {name}:")
-                    logging.info(f"  Shape: {shape}")
-                    logging.info(f"  Partition spec: {spec}")
-            else:
-                logging.info(f"  Shape: {getattr(field_shapes, 'shape', None)}")
-                logging.info(f"  Partition spec: {field_partition}")
+        # Flatten train state shapes for examination
+        flat_shapes = flatten_dict(train_state_shapes)
+        flat_partition = flatten_dict(train_state_partition)
+            
+        for path, spec in flat_partition.items():
+            shape = None
+            if path in flat_shapes:
+                shape = getattr(flat_shapes[path], 'shape', None)
+            path_str = '/'.join(str(x) for x in path)
+            logging.info(f"Parameter {path_str}:")
+            logging.info(f"  Shape: {shape}")
+            logging.info(f"  Partition spec: {spec}")
 
     shard_fns, gather_fns = make_shard_and_gather_fns(
         train_state_partition, train_state_shapes
