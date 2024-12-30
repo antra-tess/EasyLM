@@ -273,7 +273,7 @@ def main(argv):
         # Flatten each field of TrainState separately
         for field in ["params", "opt_state", "step"]:
             logging.info(f"\nExamining {field}:")
-            field_partition = train_state_partition[field] if field in train_state_partition else None
+            field_partition = getattr(train_state_partition, field)
             field_shapes = getattr(train_state_shapes, field)
             if isinstance(field_partition, (dict, FrozenDict)):
                 flat_partition = flatten_dict(field_partition)
@@ -308,6 +308,18 @@ def main(argv):
             rngs=rng_generator(LLaMAConfigurator.rng_keys()),
         )
         return TrainState.create(params=params, tx=dummy_optimizer, apply_fn=None)
+
+    # Create train state partition specs
+    train_state_partition = TrainState(
+        params=match_partition_rules(
+            LLaMAConfigurator.get_partition_rules(),
+            train_state_shapes.params
+        ),
+        tx=None,
+        step=PS(),
+        opt_state=PS(),
+        apply_fn=None,
+    )
 
     # Create sharded init functions
     sharded_init_fn = pjit(
