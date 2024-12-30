@@ -119,8 +119,8 @@ def main(argv):
         param_value: actual parameter value (unused but needed for named_tree_map)
         We'll just check if it has 'lora_A' or 'lora_B' in it.
         """
-        if True:
-            return False
+        # if True:
+        #     return False
 
         if llama_config.lora_rank > 0:
             # Train only LoRA param
@@ -187,7 +187,10 @@ def main(argv):
                 logginginfo(f"Optimizer state type: {type(state)}")
                 logginginfo(f"Optimizer state attributes: {dir(state)}")
                 logginginfo(f"Optimizer state shape: {getattr(state, 'shape', 'no shape')}")
-                logginginfo(f"Optimizer state sharding: {getattr(state, 'sharding', 'no sharding')}")
+                # print all attributes
+                for attr in dir(state):
+                    #if not attr.startswith('_'):
+                    logginginfo(f"  {attr}: {getattr(state, attr)}")
                 if hasattr(state, 'device_buffers'):
                     logginginfo(f"Optimizer state device_buffers: {state.device_buffers}")
         return train_state
