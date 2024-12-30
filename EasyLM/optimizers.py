@@ -235,16 +235,18 @@ class AdamWOptimizerFactory(object):
         def param_labels(params):
             flat_params = flatten_dict(params)
             labels = {}
+            trainable = 0
+            frozen = 0
             for path, _ in flat_params.items():
                 path_str = '/'.join(str(x) for x in path)
                 if 'lora_A' in path_str or 'lora_B' in path_str:
                     labels[path] = 'train'  # LoRA params get full optimizer
+                    trainable += 1
                 else:
                     labels[path] = 'freeze'  # Base params get zero optimizer
-            # count and print number of trainable parameters
-            logging.info(f'Params labeled: Number of trainable parameters: {len(labels)}')
-            # count and print number of frozen parameters
-            logging.info(f'Params labeled: Number of frozen parameters: {len(flat_params) - len(labels)}')
+                    frozen += 1
+            logging.info(f'Params labeled: Number of trainable parameters (LoRA): {trainable}')
+            logging.info(f'Params labeled: Number of frozen parameters (base): {frozen}')
 
             return unflatten_dict(labels)
 
