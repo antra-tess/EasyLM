@@ -473,41 +473,32 @@ def main(argv):
     mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
     logging.info("JAX mesh initialized")
     with mesh:
-        # Phase 1: Initialize or load parameters
-        restored_params = None
+        # Phase 1: Initialize fresh parameters
+        init_params = sharded_init_fn(next_rng())
+        
+        # Phase 2: Load checkpoint if specified
         if FLAGS.load_checkpoint != '':
             _, restored_params = checkpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint, train_state_shapes, shard_fns
             )
             logging.info("Loaded checkpoint parameters")
-
-        # Phase 2: Initialize and shard parameters
-        if restored_params is None:
-            # Initialize from scratch
-            sharded_params = sharded_init_fn(next_rng())
-        else:
+            
             if llama_config.lora_rank > 0:
-                # Initialize LoRA params from scratch while keeping base params
+                # For LoRA: Keep base model params from checkpoint, use fresh LoRA params
                 logging.info(f"Initializing LoRA parameters with rank {llama_config.lora_rank}")
-                init_params = sharded_init_fn(next_rng())
-                
-                # Debug: print structure before merging
                 restored_dict = flatten_dict(restored_params)
-                init_dict = flatten_dict(init_params)
-                logging.info(f"Restored params has {len(restored_dict)} parameters")
-                logging.info(f"Init params has {len(init_dict)} parameters")
-                logging.info("Sample of init param paths:")
-                for path in list(init_dict.keys())[:5]:
-                    logging.info(f"  {path}")
-
-                # Merge parameters
-                for path, param in flatten_dict(restored_params).items():
-                    path_str = str(path)
+                # Copy over non-LoRA params from checkpoint
+                for path, param in restored_dict.items():
+                    path_str = str(path) 
                     if 'lora_' not in path_str:
                         init_params = set_in_dict(init_params, path, param)
                 sharded_params = init_params
             else:
+                # For full fine-tuning: Use all params from checkpoint
                 sharded_params = restored_params
+        else:
+            # No checkpoint - use freshly initialized params
+            sharded_params = init_params
 
         # Ensure parameters are sharded before creating optimizer
         sharded_params = jax.block_until_ready(sharded_params)
