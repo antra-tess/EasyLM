@@ -419,12 +419,20 @@ def main(argv):
                     # Get device info safely
                     try:
                         if hasattr(arr, 'device_buffer'):
-                            device = arr.device_buffer.device()
+                            device = str(arr.device_buffer.device())
                         elif hasattr(arr, 'devices'):
-                            device = arr.devices()[0]  # Take first device if sharded
+                            device = str(arr.devices()[0])  # Take first device if sharded
+                        elif hasattr(arr, 'device'):
+                            device = str(arr.device())
+                        elif hasattr(arr, '_device'):
+                            device = str(arr._device)
+                        elif isinstance(arr, jax.Array):
+                            device = str(arr.sharding.device_set[0])
                         else:
                             device = 'unknown'
-                    except Exception:
+                    except Exception as e:
+                        if jax.process_index() == 0:
+                            logging.info(f"Error getting device info: {str(e)}")
                         device = 'unknown'
                         
                     # Add to device grouping
