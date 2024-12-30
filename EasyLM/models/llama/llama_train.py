@@ -115,6 +115,9 @@ def main(argv):
         param_value: actual parameter value (unused but needed for named_tree_map)
         We'll just check if it has 'lora_A' or 'lora_B' in it.
         """
+        if True:
+            return False
+
         if llama_config.lora_rank > 0:
             # Train only LoRA param
             is_lora = 'lora_A' in param_name or 'lora_B' in param_name
