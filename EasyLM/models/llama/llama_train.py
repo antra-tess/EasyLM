@@ -403,12 +403,22 @@ def main(argv):
     logginginfo("JAX mesh initialized")
     def log_memory_usage(prefix=""):
         if jax.process_index() == 0:
+            logging.info(f"\n{prefix} Memory Report:")
+            # Get per-device memory info
+            for i, device in enumerate(jax.devices()):
+                mem_info = device.memory_stats()
+                if mem_info:  # Some devices may not report stats
+                    peak = mem_info.get('peak_bytes', 0) / 1e9
+                    current = mem_info.get('current_bytes', 0) / 1e9
+                    logging.info(f"Device {i}: Current: {current:.2f} GB, Peak: {peak:.2f} GB")
+            
+            # Also log live arrays for additional context
             live_arrays = jax.live_arrays()
-            total_bytes = sum(x.nbytes for x in live_arrays)
-            logging.info(f"{prefix} Memory usage on device 0: {total_bytes / 1e9:.2f} GB")
-            # Log individual large arrays
+            total_live = sum(x.nbytes for x in live_arrays) / 1e9
+            logging.info(f"Total live array bytes: {total_live:.2f} GB")
+            logging.info("Top 5 largest arrays:")
             for arr in sorted(live_arrays, key=lambda x: x.nbytes, reverse=True)[:5]:
-                logging.info(f"  Large array: shape={arr.shape}, dtype={arr.dtype}, size={arr.nbytes / 1e9:.2f} GB")
+                logging.info(f"  shape={arr.shape}, dtype={arr.dtype}, size={arr.nbytes / 1e9:.2f} GB")
 
     with mesh:
         train_state, restored_params = None, None
