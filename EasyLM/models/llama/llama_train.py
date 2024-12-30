@@ -204,13 +204,18 @@ def main(argv):
 
     def init_fn(rng):
         rng_generator = JaxRNG(rng)
+        logginginfo("Initializing model parameters...")
         params = model.init(
             input_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
             position_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
             attention_mask=jnp.ones((4, seq_length), dtype=jnp.int32),
             rngs=rng_generator(LLaMAConfigurator.rng_keys()),
         )
-        return TrainState.create(params=params, tx=optimizer, apply_fn=None)
+        logginginfo("Model parameter initialization complete")
+        logginginfo("Creating train state from parameters...")
+        train_state = TrainState.create(params=params, tx=optimizer, apply_fn=None)
+        logginginfo("Train state creation complete")
+        return train_state
 
     def train_step(train_state, rng, batch):
         rng_generator = JaxRNG(rng)
