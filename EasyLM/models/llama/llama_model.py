@@ -569,7 +569,7 @@ class FlaxLLaMAAttention(nn.Module):
                 
                 # Create causal mask directly
                 full_causal_mask = (row_ids >= col_ids).astype("bool")
-                full_causal_mask = with_sharding_constraint(full_causal_mask, PS(("dp", "fsdp"), None, None, None))
+                full_causal_mask = with_sharding_constraint(full_causal_mask, PS(None, None, "fsdp", "fsdp"))
 
             if self.has_variable("cache", "cached_key"):
                 mask_shift = self.variables["cache"]["cache_index"]
