@@ -239,12 +239,16 @@ class AdamWOptimizerFactory(object):
             frozen = 0
             for path, _ in flat_params.items():
                 path_str = '/'.join(str(x) for x in path)
-                if ('lora_A' in path_str or 'lora_B' in path_str) and False: # TODO: remove temp
+                if 'lora_A' in path_str or 'lora_B' in path_str:
                     labels[path] = 'train'  # LoRA params get full optimizer
                     trainable += 1
+                    if jazz.process_index() == 0:
+                        logging.info(f'Params labeled: {path_str}')
                 else:
                     labels[path] = 'freeze'  # Base params get zero optimizer
                     frozen += 1
+                    if jax.process_index() == 0:
+                        logging.info("Freezing", path_str)
             if jax.process_index() == 0:
                 logging.info(f'Params labeled: Number of trainable parameters (LoRA): {trainable}')
                 logging.info(f'Params labeled: Number of frozen parameters (base): {frozen}')
