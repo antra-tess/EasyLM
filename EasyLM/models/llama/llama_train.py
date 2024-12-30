@@ -270,30 +270,20 @@ def main(argv):
     # Log partition specs and actual shapes
     if jax.process_index() == 0:
         logging.info("Examining train state partitioning:")
-        # Log each field separately
-        for field in ["params", "opt_state", "step"]:
-            logging.info(f"\nExamining {field}:")
-            if field in train_state_partition:
-                field_partition = train_state_partition[field]
-                field_shapes = getattr(train_state_shapes, field)
-                    
-                # Handle nested structures
-                if isinstance(field_partition, (dict, FrozenDict)):
-                    flat_partition = flatten_dict(field_partition)
-                    flat_shapes = flatten_dict(field_shapes)
-                    for path, spec in flat_partition.items():
-                        shape = None
-                        if path in flat_shapes:
-                            shape = getattr(flat_shapes[path], 'shape', None)
-                        path_str = '/'.join(str(x) for x in path)
-                        logging.info(f"Parameter {path_str}:")
-                        logging.info(f"  Shape: {shape}")
-                        logging.info(f"  Partition spec: {spec}")
-                else:
-                    # Handle non-nested fields
-                    shape = getattr(field_shapes, 'shape', None)
-                    logging.info(f"Shape: {shape}")
-                    logging.info(f"Partition spec: {field_partition}")
+            
+        # Flatten both structures for consistent access
+        flat_partition = flatten_dict(train_state_partition)
+        flat_shapes = flatten_dict(train_state_shapes)
+            
+        # Log all paths
+        for path, spec in flat_partition.items():
+            path_str = '/'.join(str(x) for x in path)
+            shape = None
+            if path in flat_shapes:
+                shape = getattr(flat_shapes[path], 'shape', None)
+            logging.info(f"Parameter {path_str}:")
+            logging.info(f"  Shape: {shape}")
+            logging.info(f"  Partition spec: {spec}")
 
     shard_fns, gather_fns = make_shard_and_gather_fns(
         train_state_partition, train_state_shapes
@@ -319,17 +309,17 @@ def main(argv):
 
     # Create train state partition specs
     train_state_partition = dict(
-        params=match_partition_rules(
-            LLaMAConfigurator.get_partition_rules(),
-            train_state_shapes.params
+        params=dict(
+            params=match_partition_rules(
+                LLaMAConfigurator.get_partition_rules(),
+                train_state_shapes.params
+            )
         ),
         tx=None,
         step=PS(),
         opt_state=PS(),
         apply_fn=None,
     )
-    # Ensure params has the correct structure
-    train_state_partition['params'] = {'params': train_state_partition['params']}
 
     # Create sharded init functions
     sharded_init_fn = pjit(
