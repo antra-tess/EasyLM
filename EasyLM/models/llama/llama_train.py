@@ -11,10 +11,11 @@ import jax
 import jax.numpy as jnp
 from jax.experimental.pjit import pjit
 from jax.sharding import PartitionSpec as PS
-from flax.training.train_state import TrainState
+from flax.training import train_state
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.traverse_util import flatten_dict, unflatten_dict
 from transformers import AutoTokenizer
+import optax
 
 from EasyLM.data import DatasetFactory
 from EasyLM.checkpoint import StreamingCheckpointer
@@ -69,6 +70,7 @@ def set_in_dict(d, path, value):
 
 def main(argv):
     JaxDistributedConfig.initialize(FLAGS.jax_distributed)
+    from flax.training import train_state
     variant = mlxu.get_user_flags(FLAGS, FLAGS_DEF)
     flags_config_dict = mlxu.user_flags_to_config_dict(FLAGS, FLAGS_DEF)
     
@@ -161,26 +163,32 @@ def main(argv):
             logging.info(f"Parameter {'/'.join(str(x) for x in path)}: {'trainable' if is_trainable else 'frozen'}")
 
     # Use trainable_mask for both weight decay and controlling optimizer state allocation
-    optimizer, optimizer_info = OptimizerFactory.get_optimizer(
-        FLAGS.optimizer,
-        weight_decay_mask=trainable_mask,
-        trainable_mask=trainable_mask
-    )
+    def create_dummy_optimizer():
+        """Create a dummy optimizer for shape determination only."""
+        return optax.chain(
+            optax.clip_by_global_norm(1.0),
+            optax.adam(learning_rate=0.0),
+        )
 
-    def create_trainstate_from_params(params):
-        train_state = TrainState.create(params=params, tx=optimizer, apply_fn=None)
-        #Debug prints for optimizer state examination
+    def create_optimizer_for_sharded_params(params, config):
+        """Create the real optimizer after parameters are sharded."""
+        optimizer, optimizer_info = OptimizerFactory.get_optimizer(
+            config,
+            weight_decay_mask=trainable_mask,
+            trainable_mask=trainable_mask
+        )
+        return optimizer, optimizer_info
 
-        if jax.process_index() == 0:
-            print("Examining optimizer state:")
-            for state in jax.tree_util.tree_leaves(train_state.opt_state):
-                print(f"Optimizer state type: {type(state)}")
-                print(f"Optimizer state attributes: {dir(state)}")
-                print(f"Optimizer state shape: {getattr(state, 'shape', 'no shape')}")
-                print(f"Optimizer state sharding: {getattr(state, 'sharding', 'no sharding')}")
-                if hasattr(state, 'device_buffers'):
-                    print(f"Optimizer state device_buffers: {state.device_buffers}")
-        return train_state
+    # Start with dummy optimizer for shape determination
+    dummy_optimizer = create_dummy_optimizer()
+
+    def create_train_state_with_params(params, optimizer):
+        """Create the real train state with sharded params and optimizer."""
+        return train_state.TrainState.create(
+            params=params,
+            tx=optimizer,
+            apply_fn=None
+        )
 
     def init_fn(rng):
         rng_generator = JaxRNG(rng)
@@ -190,7 +198,7 @@ def main(argv):
             attention_mask=jnp.ones((4, seq_length), dtype=jnp.int32),
             rngs=rng_generator(LLaMAConfigurator.rng_keys()),
         )
-        return TrainState.create(params=params, tx=optimizer, apply_fn=None)
+        return train_state.TrainState.create(params=params, tx=optimizer, apply_fn=None)
 
     def train_step(train_state, rng, batch):
         rng_generator = JaxRNG(rng)
@@ -246,10 +254,22 @@ def main(argv):
         )
         return rng_generator(), metrics
 
+    # Create train state shapes and partition specs
     train_state_shapes = jax.eval_shape(init_fn, next_rng())
-    train_state_partition = match_partition_rules(
-        LLaMAConfigurator.get_partition_rules(), train_state_shapes
-    )
+    
+    # Create complete partition spec dictionary
+    train_state_partition = {
+        'params': {
+            'params': match_partition_rules(
+                LLaMAConfigurator.get_partition_rules(),
+                train_state_shapes.params
+            )
+        },
+        'opt_state': PS(),
+        'step': PS(),
+        'tx': None,
+        'apply_fn': None
+    }
 
     # Log partition specs and actual shapes
     if jax.process_index() == 0:
@@ -257,19 +277,29 @@ def main(argv):
         # Flatten each field of TrainState separately
         for field in ["params", "opt_state", "step"]:
             logging.info(f"\nExamining {field}:")
-            field_partition = getattr(train_state_partition, field)
+            field_partition = train_state_partition.get(field, None)
             field_shapes = getattr(train_state_shapes, field)
-            if isinstance(field_partition, (dict, FrozenDict)):
-                flat_partition = flatten_dict(field_partition)
-                flat_shapes = flatten_dict(field_shapes)
-                for name, spec in flat_partition.items():
-                    shape = flat_shapes[name].shape if hasattr(flat_shapes[name], 'shape') else None
-                    logging.info(f"Parameter {name}:")
-                    logging.info(f"  Shape: {shape}")
-                    logging.info(f"  Partition spec: {spec}")
+                
+            if field_partition is not None:
+                # Handle nested structures
+                if isinstance(field_partition, (dict, FrozenDict)):
+                    flat_partition = flatten_dict(field_partition)
+                    flat_shapes = flatten_dict(field_shapes)
+                    for path, spec in flat_partition.items():
+                        shape = None
+                        if path in flat_shapes:
+                            shape = getattr(flat_shapes[path], 'shape', None)
+                        path_str = '/'.join(str(x) for x in path)
+                        logging.info(f"Parameter {path_str}:")
+                        logging.info(f"  Shape: {shape}")
+                        logging.info(f"  Partition spec: {spec}")
+                else:
+                    # Handle non-nested fields
+                    shape = getattr(field_shapes, 'shape', None)
+                    logging.info(f"Shape: {shape}")
+                    logging.info(f"Partition spec: {field_partition}")
             else:
-                logging.info(f"  Shape: {getattr(field_shapes, 'shape', None)}")
-                logging.info(f"  Partition spec: {field_partition}")
+                logging.info(f"No partition spec found for field: {field}")
 
     shard_fns, gather_fns = make_shard_and_gather_fns(
         train_state_partition, train_state_shapes
@@ -279,11 +309,76 @@ def main(argv):
         enable=jax.process_index() == 0,
     )
 
-    # Create sharded init function for just parameters
+    # Create dummy optimizer for shape determination
+    dummy_optimizer = create_dummy_optimizer()
+    
+    # Get shapes using dummy optimizer
+    def init_model_params(rng):
+        """Initialize model parameters with dummy batch and return a dummy train state."""
+        rng_generator = JaxRNG(rng)
+        params = model.init(
+            input_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
+            position_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
+            attention_mask=jnp.ones((4, seq_length), dtype=jnp.int32),
+            rngs=rng_generator(LLaMAConfigurator.rng_keys()),
+        )
+        # Create a dummy train state with just parameters
+        return train_state.TrainState.create(
+            apply_fn=None,
+            params=params,
+            tx=dummy_optimizer,
+            opt_state=dummy_optimizer.init(params)
+        )
+
+    # Create train state partition specs
+    train_state_partition = dict(
+        params=dict(
+            params=match_partition_rules(
+                LLaMAConfigurator.get_partition_rules(),
+                train_state_shapes.params
+            )
+        ),
+        tx=None,
+        step=PS(),
+        opt_state=PS(),
+        apply_fn=None,
+    )
+
+    # Create sharding rules for each field
+    train_state_sharding = {
+        'params': train_state_partition['params'],
+        'opt_state': train_state_partition['opt_state'],
+        'step': train_state_partition['step'],
+        'tx': None,
+        'apply_fn': None
+    }
+
+    # Create sharded init functions
+    # Create sharded functions with consistent dictionary-based partition specs
     sharded_init_fn = pjit(
-        init_fn,
+        init_model_params,
         in_shardings=PS(),
-        out_shardings=train_state_partition.params  # Only shard params
+        out_shardings=train_state_partition['params'],
+    )
+
+    sharded_create_train_state = pjit(
+        create_train_state_with_params,
+        in_shardings=(train_state_partition['params'], None),
+        out_shardings=train_state_partition,
+    )
+
+    sharded_train_step = pjit(
+        train_step,
+        in_shardings=(train_state_partition, PS(), PS()),
+        out_shardings=(train_state_partition, PS(), PS()),
+        donate_argnums=(0, 1),
+    )
+
+    sharded_eval_step = pjit(
+        eval_step,
+        in_shardings=(train_state_partition, PS(), PS()),
+        out_shardings=(PS(), PS()),
+        donate_argnums=(1,),
     )
 
     sharded_train_step = pjit(
@@ -386,6 +481,7 @@ def main(argv):
     mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
     logging.info("JAX mesh initialized")
     with mesh:
+        # Phase 1: Load parameters with dummy optimizer
         train_state, restored_params = None, None
         if FLAGS.load_checkpoint != '':
             train_state, restored_params = checkpointer.load_trainstate_checkpoint(
@@ -393,17 +489,17 @@ def main(argv):
             )
         logging.info("Loaded checkpoint")
 
-        if train_state is None and restored_params is None:
+        # Phase 2: Initialize and shard parameters
+        if restored_params is None:
             # Initialize from scratch
-            train_state = sharded_init_fn(next_rng())
-        elif train_state is None and restored_params is not None:
-            # For LoRA, we need to initialize LoRA params from scratch
+            dummy_train_state = sharded_init_fn(next_rng())
+            sharded_params = dummy_train_state.params
+        else:
             if llama_config.lora_rank > 0:
+                # Initialize LoRA params from scratch while keeping base params
                 logging.info(f"Initializing LoRA parameters with rank {llama_config.lora_rank}")
-                init_state = sharded_init_fn(next_rng())
-                # Copy non-LoRA params from checkpoint, keep LoRA params from init
-                # restored_params = unfreeze(restored_params)
-                init_params = init_state.params
+                dummy_train_state = sharded_init_fn(next_rng())
+                init_params = dummy_train_state.params
                 
                 # Debug: print structure before merging
                 restored_dict = flatten_dict(restored_params)
@@ -414,24 +510,23 @@ def main(argv):
                 for path in list(init_dict.keys())[:5]:
                     logging.info(f"  {path}")
 
-                # unwrapped_restored = unfreeze(restored_params)
-
+                # Merge parameters
                 for path, param in flatten_dict(restored_params).items():
-
                     path_str = str(path)
                     if 'lora_' not in path_str:
                         init_params = set_in_dict(init_params, path, param)
-                        # if jax.process_index() == 0:
-                        #     logging.info(f"Copied parameter: {path_str}")
-                    # else:
-                    #     if jax.process_index() == 0:
-                    #         logging.info(f"Skipping LoRA parameter: {path_str}")
+                sharded_params = init_params
             else:
-                init_params = restored_params
-                # restored_params = freeze(init_params)
-            # Create train state with possibly modified params
-            train_state = sharded_create_trainstate_from_params(init_params)
-            del restored_params
+                sharded_params = restored_params
+
+        # Phase 3: Create real optimizer with sharded parameters
+        optimizer, optimizer_info = create_optimizer_for_sharded_params(
+            sharded_params, FLAGS.optimizer
+        )
+        
+        # Phase 4: Create final train state using pjit
+        train_state = sharded_create_train_state(sharded_params, optimizer)
+        del restored_params
 
         # Print sharded parameter info on worker 0 only
         if jax.process_index() == 0:
