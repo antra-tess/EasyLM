@@ -584,6 +584,7 @@ class FlaxLLaMAAttention(nn.Module):
             attention_mask = with_sharding_constraint(attention_mask, PS(("dp", "fsdp"), None, None, None))
             attention_mask = combine_masks(attention_mask, causal_mask, fcm_mask)
             attention_mask = with_sharding_constraint(attention_mask, PS(("dp", "fsdp"), None, None, None))
+            del causal_mask
 
             # During fast autoregressive decoding, we feed one position at a time,
             # and cache the keys and values step by step.
