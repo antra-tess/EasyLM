@@ -189,8 +189,15 @@ def main(argv):
                 logginginfo(f"Optimizer state shape: {getattr(state, 'shape', 'no shape')}")
                 # print all attributes
                 for attr in dir(state):
-                    #if not attr.startswith('_'):
-                    logginginfo(f"  {attr}: {getattr(state, attr)}")
+                    if attr.startswith('__'):
+                        continue
+                    # if method, skip
+                    try:
+                        if callable(getattr(state, attr)):
+                            continue
+                        logginginfo(f"  {attr}: {getattr(state, attr)}")
+                    except Exception as e:
+                        logginginfo(f"  {attr}: inaccessible")
                 if hasattr(state, 'device_buffers'):
                     logginginfo(f"Optimizer state device_buffers: {state.device_buffers}")
         return train_state
@@ -570,6 +577,7 @@ def main(argv):
 
         step_counter = trange(start_step, FLAGS.total_steps, ncols=0)
 
+        logginginfo("Starting training loop...")
         for step, (batch, dataset_metrics) in zip(step_counter, dataset):
             train_state, sharded_rng, metrics = sharded_train_step(
                 train_state, sharded_rng, batch
