@@ -241,6 +241,11 @@ class AdamWOptimizerFactory(object):
                     labels[path] = 'train'  # LoRA params get full optimizer
                 else:
                     labels[path] = 'freeze'  # Base params get zero optimizer
+            # count and print number of trainable parameters
+            logging.info(f'Params labeled: Number of trainable parameters: {len(labels)}')
+            # count and print number of frozen parameters
+            logging.info(f'Params labeled: Number of frozen parameters: {len(flat_params) - len(labels)}')
+
             return unflatten_dict(labels)
 
         # Create multi-transform optimizer
