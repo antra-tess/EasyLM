@@ -187,19 +187,19 @@ def main(argv):
                 logginginfo(f"Optimizer state type: {type(state)}")
                 logginginfo(f"Optimizer state attributes: {dir(state)}")
                 logginginfo(f"Optimizer state shape: {getattr(state, 'shape', 'no shape')}")
-                # print all attributes
-                for attr in dir(state):
-                    if attr.startswith('__'):
-                        continue
-                    # if method, skip
-                    try:
-                        if callable(getattr(state, attr)):
-                            continue
-                        logginginfo(f"  {attr}: {getattr(state, attr)}")
-                    except Exception as e:
-                        logginginfo(f"  {attr}: inaccessible")
-                if hasattr(state, 'device_buffers'):
-                    logginginfo(f"Optimizer state device_buffers: {state.device_buffers}")
+                # # print all attributes
+                # for attr in dir(state):
+                #     if attr.startswith('__'):
+                #         continue
+                #     # if method, skip
+                #     try:
+                #         if callable(getattr(state, attr)):
+                #             continue
+                #         logginginfo(f"  {attr}: {getattr(state, attr)}")
+                #     except Exception as e:
+                #         logginginfo(f"  {attr}: inaccessible")
+                # if hasattr(state, 'device_buffers'):
+                #     logginginfo(f"Optimizer state device_buffers: {state.device_buffers}")
         return train_state
 
     def init_fn(rng):
@@ -271,25 +271,25 @@ def main(argv):
         LLaMAConfigurator.get_partition_rules(), train_state_shapes
     )
 
-    # Log partition specs and actual shapes
-    if jax.process_index() == 0:
-        logginginfo("Examining train state partitioning:")
-        # Flatten each field of TrainState separately
-        for field in ["params", "opt_state", "step"]:
-            logginginfo(f"\nExamining {field}:")
-            field_partition = getattr(train_state_partition, field)
-            field_shapes = getattr(train_state_shapes, field)
-            if isinstance(field_partition, (dict, FrozenDict)):
-                flat_partition = flatten_dict(field_partition)
-                flat_shapes = flatten_dict(field_shapes)
-                for name, spec in flat_partition.items():
-                    shape = flat_shapes[name].shape if hasattr(flat_shapes[name], 'shape') else None
-                    logginginfo(f"Parameter {name}:")
-                    logginginfo(f"  Shape: {shape}")
-                    logginginfo(f"  Partition spec: {spec}")
-            else:
-                logginginfo(f"  Shape: {getattr(field_shapes, 'shape', None)}")
-                logginginfo(f"  Partition spec: {field_partition}")
+    # # Log partition specs and actual shapes
+    # if jax.process_index() == 0:
+    #     logginginfo("Examining train state partitioning:")
+    #     # Flatten each field of TrainState separately
+    #     for field in ["params", "opt_state", "step"]:
+    #         logginginfo(f"\nExamining {field}:")
+    #         field_partition = getattr(train_state_partition, field)
+    #         field_shapes = getattr(train_state_shapes, field)
+    #         if isinstance(field_partition, (dict, FrozenDict)):
+    #             flat_partition = flatten_dict(field_partition)
+    #             flat_shapes = flatten_dict(field_shapes)
+    #             for name, spec in flat_partition.items():
+    #                 shape = flat_shapes[name].shape if hasattr(flat_shapes[name], 'shape') else None
+    #                 logginginfo(f"Parameter {name}:")
+    #                 logginginfo(f"  Shape: {shape}")
+    #                 logginginfo(f"  Partition spec: {spec}")
+    #         else:
+    #             logginginfo(f"  Shape: {getattr(field_shapes, 'shape', None)}")
+    #             logginginfo(f"  Partition spec: {field_partition}")
 
     shard_fns, gather_fns = make_shard_and_gather_fns(
         train_state_partition, train_state_shapes
