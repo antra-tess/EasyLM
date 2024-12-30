@@ -427,7 +427,8 @@ def main(argv):
                         elif hasattr(arr, '_device'):
                             device = str(arr._device)
                         elif isinstance(arr, jax.Array):
-                            device = str(arr.sharding.device_set[0])
+                            # device_set is a set, convert to list to index
+                            device = str(list(arr.sharding.device_set)[0])
                         else:
                             device = 'unknown'
                     except Exception as e:
