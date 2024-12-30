@@ -239,7 +239,7 @@ class AdamWOptimizerFactory(object):
             frozen = 0
             for path, _ in flat_params.items():
                 path_str = '/'.join(str(x) for x in path)
-                if 'lora_A' in path_str or 'lora_B' in path_str:
+                if 'lora_A' in path_str or 'lora_B' in path_str or False: # TODO: remove temp
                     labels[path] = 'train'  # LoRA params get full optimizer
                     trainable += 1
                 else:
