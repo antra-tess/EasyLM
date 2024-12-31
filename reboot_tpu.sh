@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# This script should be run on the host machine, not on workers
-# It will copy itself to workers and execute the worker portion there
+# This script runs on the host to coordinate worker cleanup and TPU reboot
 
 set -eu
 
@@ -18,32 +17,17 @@ if [ -z "$TPU_NAME" ]; then
     exit 1
 fi
 
-if [[ -f /.dockerenv ]] || grep -q '/docker/' /proc/self/cgroup; then
-    # We are on a worker - do worker cleanup
-    log "Running on worker $(hostname)"
-    
-    # Clear TPU logs
-    log "Clearing TPU logs..."
-    sudo rm -rf /tmp/tpu_logs/*
-    sudo mkdir -p /tmp/tpu_logs
-    sudo chmod 777 /tmp/tpu_logs
-    
-    log "Worker cleanup complete on $(hostname)"
-    exit 0
-fi
-
-# We are on the host - orchestrate the cleanup
 log "Running on host, coordinating worker cleanup..."
 
-# Copy this script to all workers and run it
+# Copy worker cleanup script to all workers
 log "Copying cleanup script to workers..."
 for i in {0..31}; do
-    gcloud compute tpus tpu-vm scp "$0" ${TPU_NAME}:~/reboot_tpu.sh --zone=us-central2-b --worker=$i &
+    gcloud compute tpus tpu-vm scp worker_cleanup.sh ${TPU_NAME}:~/worker_cleanup.sh --zone=us-central2-b --worker=$i &
 done
 wait
 
 log "Running cleanup on all workers..."
-gcloud compute tpus tpu-vm ssh ${TPU_NAME} --zone=us-central2-b --worker=all --command="chmod +x ~/reboot_tpu.sh && ~/reboot_tpu.sh"
+gcloud compute tpus tpu-vm ssh ${TPU_NAME} --zone=us-central2-b --worker=all --command="chmod +x ~/worker_cleanup.sh && ~/worker_cleanup.sh"
 
 # Now do the actual TPU reboot
 log "Rebooting TPU: $TPU_NAME..."
