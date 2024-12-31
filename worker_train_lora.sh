@@ -15,8 +15,8 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --mesh_dim='1,-1,4' \
     --dtype='bf16' \
     --llama.base_model='llama31_8b' \
-    --llama.lora_rank=16 \
-    --llama.lora_alpha=32 \
+    --llama.lora_rank=8 \
+    --llama.lora_alpha=16 \
     --llama.lora_dropout=0.1 \
     --llama.lora_attn=true \
     --llama.lora_mlp=false \
@@ -26,7 +26,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --train_dataset.text_processor.fields='[instruction+input],output' \
     --train_dataset.huggingface_dataset.name="" \
     --train_dataset.huggingface_dataset.path='tatsu-lab/alpaca' \
-    --train_dataset.huggingface_dataset.seq_length=4096 \
+    --train_dataset.huggingface_dataset.seq_length=1024 \
     --train_dataset.huggingface_dataset.batch_size=64 \
     --optimizer.type='adamw' \
     --optimizer.adamw_optimizer.lr=5e-4 \
