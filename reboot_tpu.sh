@@ -21,7 +21,7 @@ log "Running on host, coordinating worker cleanup..."
 
 # Copy worker cleanup script to all workers
 log "Copying cleanup script to workers..."
-for i in {0..31}; do
+for i in {0..7}; do
     gcloud compute tpus tpu-vm scp worker_cleanup.sh ${TPU_NAME}:~/worker_cleanup.sh --zone=us-central2-b --worker=$i &
 done
 wait
