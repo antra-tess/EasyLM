@@ -24,6 +24,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --train_dataset.huggingface_dataset.seq_length=2048 \
     --train_dataset.huggingface_dataset.batch_size=2 \
     --optimizer.type='adamw' \
+    --optimizer.accumulate_gradient_steps=8 \
     --optimizer.adamw_optimizer.lr=1e-5 \
     --optimizer.adamw_optimizer.end_lr=1e-6 \
     --optimizer.adamw_optimizer.lr_warmup_steps=100 \
