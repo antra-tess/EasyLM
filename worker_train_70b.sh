@@ -21,8 +21,8 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --train_dataset.text_processor.fields='[instruction+input],output' \
     --train_dataset.huggingface_dataset.name="" \
     --train_dataset.huggingface_dataset.path='tatsu-lab/alpaca' \
-    --train_dataset.huggingface_dataset.seq_length=2048 \
-    --train_dataset.huggingface_dataset.batch_size=2 \
+    --train_dataset.huggingface_dataset.seq_length=1024 \
+    --train_dataset.huggingface_dataset.batch_size=1 \
     --optimizer.type='adamw' \
     --optimizer.accumulate_gradient_steps=8 \
     --optimizer.adamw_optimizer.lr=1e-5 \
