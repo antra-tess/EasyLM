@@ -555,16 +555,12 @@ class FlaxLLaMAAttention(nn.Module):
             )
             attn_output = with_sharding_constraint(attn_output, PS(("dp", "fsdp"), None, "mp", None))
         else:
-            # Create causal mask only for the sequence length we need
             query_length, key_length = xq.shape[1], xk.shape[1]
             with jax.ensure_compile_time_eval():
-                # Create sharded row and column indices
-                row_ids = jnp.arange(key_length)[None, None, :, None]  # [1, 1, key_length, 1]
-                col_ids = jnp.arange(key_length)[None, None, None, :]  # [1, 1, 1, key_length]
-                
-                # Create causal mask directly
-                full_causal_mask = (row_ids >= col_ids).astype("bool")
-                #full_causal_mask = with_sharding_constraint(full_causal_mask, PS(None, None, "fsdp", "mp"))
+                full_causal_mask = make_causal_mask(
+                    jnp.ones((1, self.config.max_position_embeddings), dtype="bool"),
+                    dtype="bool"
+                )
 
             if self.has_variable("cache", "cached_key"):
                 mask_shift = self.variables["cache"]["cache_index"]
