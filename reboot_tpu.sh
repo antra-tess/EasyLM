@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export TPU_NAME=finetune-70b
+
 set -eu  # Exit on error and undefined variables
 
 # Function to check if command exists
