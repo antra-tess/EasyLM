@@ -171,7 +171,7 @@ def main(argv):
     # Use trainable_mask for both weight decay and controlling optimizer state allocation
     optimizer, optimizer_info = OptimizerFactory.get_optimizer(
         FLAGS.optimizer,
-        weight_decay_mask=trainable_mask,
+        weight_decay_mask=None,
         trainable_mask=trainable_mask,
         lora_mode=llama_config.lora_rank > 0,
     )
