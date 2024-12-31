@@ -26,6 +26,9 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --optimizer.type='adamw' \
     --optimizer.accumulate_gradient_steps=4 \
     --optimizer.adamw_optimizer.lr=1e-5 \
+    --llama.scan_attention=true \
+    --llama.scan_query_chunk_size=1024 \
+    --llama.scan_key_chunk_size=1024 \
     --optimizer.adamw_optimizer.end_lr=1e-6 \
     --optimizer.adamw_optimizer.lr_warmup_steps=100 \
     --optimizer.adamw_optimizer.lr_decay_steps=1000 \
