@@ -1217,6 +1217,27 @@ class LoRALinear(nn.Module):
                 base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
             else:
                 base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
+            
+            # Log LoRA contribution metrics
+            base_norm = jnp.linalg.norm(base_out)
+            delta_norm = jnp.linalg.norm(delta)
+            if jax.process_index() == 0 and self.is_mutable_collection('metrics'):
+                self.sow(
+                    'metrics',
+                    f'{self.name}_base_norm',
+                    base_norm
+                )
+                self.sow(
+                    'metrics',
+                    f'{self.name}_lora_norm',
+                    delta_norm
+                )
+                self.sow(
+                    'metrics',
+                    f'{self.name}_lora_ratio',
+                    delta_norm / (base_norm + 1e-9)
+                )
+            
             y = base_out + delta
 
         # Add bias if present
