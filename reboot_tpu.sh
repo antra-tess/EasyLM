@@ -28,10 +28,6 @@ if [ -z "$TPU_NAME" ]; then
     exit 1
 fi
 
-# Stop all python processes
-log "Stopping all python processes..."
-pkill -9 python || true  # Don't fail if no processes found
-
 # Clear TPU logs
 log "Clearing TPU logs..."
 sudo rm -rf /tmp/tpu_logs/*
