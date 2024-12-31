@@ -29,6 +29,11 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --llama.scan_attention=true \
     --llama.scan_query_chunk_size=1024 \
     --llama.scan_key_chunk_size=1024 \
+    --llama.lora_rank=16 \
+    --llama.lora_alpha=32 \
+    --llama.lora_dropout=0.1 \
+    --llama.lora_attn=true \
+    --llama.lora_mlp=false \
     --optimizer.adamw_optimizer.end_lr=1e-6 \
     --optimizer.adamw_optimizer.lr_warmup_steps=100 \
     --optimizer.adamw_optimizer.lr_decay_steps=1000 \
