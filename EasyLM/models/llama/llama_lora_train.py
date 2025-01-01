@@ -161,62 +161,6 @@ def main(argv):
     )
     logginginfo(f"Model initialization complete: LLaMA {llama_config.base_model}")
 
-    def trainable_mask(param_name: str, param_value=None) -> bool:
-        """
-        If LoRA is off (lora_rank=0), we return True for all parameters.
-        If LoRA is on (lora_rank>0), we only return True for LoRA param.
-        param_name: a string like: 'transformer/h/0/attention/wq/kernel'
-                    or something JAX derived
-        param_value: actual parameter value (unused but needed for named_tree_map)
-        We'll just check if it has 'lora_A' or 'lora_B' in it.
-        """
-        # if True:
-        #     return False
-
-        if llama_config.lora_rank > 0:
-            # Train only LoRA param
-            is_lora = 'lora_A' in param_name or 'lora_B' in param_name
-            return is_lora
-        else:
-            # Full fine-tune
-            return True
-
-    # Test trainable_mask with some example parameter names
-    if jax.process_index() == 0:
-        test_params = [
-            'transformer/h/0/attention/wq/kernel',
-            'transformer/h/0/attention/wq/lora_A',
-            'transformer/h/0/attention/wq/lora_B',
-            'transformer/h/0/feed_forward/w1/kernel'
-        ]
-        logginginfo("Testing trainable_mask function:")
-        for param in test_params:
-            is_trainable = trainable_mask(param)
-            logginginfo(f"Parameter {param}: {'trainable' if is_trainable else 'frozen'}")
-
-    # Test trainable mask with some example parameters
-    if jax.process_index() == 0:
-        logginginfo("\nTesting trainable_mask before passing to optimizer:")
-        test_params = {
-            'params': {
-                'transformer': {
-                    'h': {
-                        '0': {
-                            'attention': {
-                                'wq': {
-                                    'kernel': jnp.array([1.0]),
-                                    'lora_A': jnp.array([1.0]),
-                                    'lora_B': jnp.array([1.0])
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        mask_result = named_tree_map(trainable_mask, test_params, sep='/')
-        for path, is_trainable in flatten_dict(mask_result).items():
-            logginginfo(f"Parameter {'/'.join(str(x) for x in path)}: {'trainable' if is_trainable else 'frozen'}")
 
     logginginfo("Setting up optimizer...")
     # Use trainable_mask for both weight decay and controlling optimizer state allocation
