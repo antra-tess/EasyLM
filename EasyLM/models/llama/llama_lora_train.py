@@ -246,7 +246,7 @@ def main(argv):
         )
         logginginfo("Model parameter initialization complete")
         logginginfo("Creating train state from parameters...")
-        train_state = TrainState.create(params=params, tx=optimizer, apply_fn=None)
+        train_state = LoRATrainState.create(params=params, tx=optimizer)
         logginginfo("Train state creation complete")
         return train_state
 
