@@ -587,8 +587,10 @@ def main(argv):
                 base_param_partition, base_param_shapes
             )[0]
             
+            # Wrap base_shard_fns in the expected structure
+            wrapped_shard_fns = {'params': {'params': base_shard_fns}}
             train_state, restored_params = checkpointer.load_trainstate_checkpoint(
-                FLAGS.load_checkpoint, train_state_shapes, base_shard_fns
+                FLAGS.load_checkpoint, train_state_shapes, wrapped_shard_fns
             )
             logginginfo("Loaded checkpoint")
             log_memory_usage("After checkpoint load")
