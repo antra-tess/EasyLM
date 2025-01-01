@@ -11,7 +11,39 @@ import jax
 import jax.numpy as jnp
 from jax.experimental.pjit import pjit
 from jax.sharding import PartitionSpec as PS
-from flax.training.train_state import TrainState
+from typing import Any
+import flax.struct
+import optax
+
+class LoRATrainState(flax.struct.PyTreeNode):
+    """Simple train state for LoRA training."""
+    step: int
+    params: Any
+    opt_state: Any
+    tx: optax.GradientTransformation = flax.struct.field(pytree_node=False)
+    
+    def apply_gradients(self, *, grads, **kwargs):
+        """Apply gradients to state."""
+        updates, new_opt_state = self.tx.update(grads, self.opt_state, self.params)
+        new_params = optax.apply_updates(self.params, updates)
+        return self.replace(
+            step=self.step + 1,
+            params=new_params,
+            opt_state=new_opt_state,
+            **kwargs
+        )
+
+    @classmethod
+    def create(cls, *, params, tx, **kwargs):
+        """Creates a new instance with parameters and their optimizer states."""
+        opt_state = tx.init(params)
+        return cls(
+            step=0,
+            params=params,
+            opt_state=opt_state,
+            tx=tx,
+            **kwargs
+        )
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.traverse_util import flatten_dict, unflatten_dict
 from transformers import AutoTokenizer
@@ -179,7 +211,7 @@ def main(argv):
     logginginfo(f"Optimizer setup complete: {str(optimizer_info)}, {str(optimizer)}, {str(type(optimizer))}")
 
     def create_trainstate_from_params(params):
-        train_state = TrainState.create(params=params, tx=optimizer, apply_fn=None)
+        train_state = LoRATrainState.create(params=params, tx=optimizer)
         #Debug prints for optimizer state examination
 
         # if jax.process_index() == 0:
