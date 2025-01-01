@@ -436,13 +436,17 @@ def main(argv):
         process_index = jax.process_index()
         logginginfo(f"Checkpoint save called on host {hostname} (process {process_index}) at step {step}...")
 
-        # 1. If LoRA is active, prune the base weights from saving
+        # Extract only LoRA parameters for saving
         full_params = train_state.params['params']
-        pruned = remove_frozen_params(full_params)
-        pruned = prune_none(pruned)
+        flat_params = flatten_dict(full_params)
+        lora_params = {}
+        for k, v in flat_params.items():
+            if 'lora_' in str(k):
+                lora_params[k] = v
+        lora_params = unflatten_dict(lora_params)
 
-        # 2. Rebuild a partial train_state with pruned params
-        partial_state = train_state.replace(params={'params': pruned})
+        # Create partial state with only LoRA parameters
+        partial_state = train_state.replace(params={'params': lora_params})
 
         metadata = dict(
             step=step,
@@ -462,7 +466,6 @@ def main(argv):
             dataset=dataset.get_state_dict(),
             milestone=milestone,
         )
-        logginginfo("Checkpoint save complete")
         logginginfo("Checkpoint save complete")
 
     logginginfo("Setting up JAX mesh...")
