@@ -219,6 +219,11 @@ def main(argv):
 
     def split_params(params):
         """Split params into base_params and lora_params."""
+        if jax.process_index() == 0:
+            logging.info("Original params structure:")
+            for k, v in flatten_dict(params).items():
+                logging.info(f"  {'/'.join(str(x) for x in k)}: shape={getattr(v, 'shape', None)}")
+
         # Handle the full parameter tree
         flat_params = flatten_dict(params)
         base_dict = {}
@@ -231,10 +236,18 @@ def main(argv):
             else:
                 base_dict[path] = param
     
-        return (
-            unflatten_dict(base_dict),
-            unflatten_dict(lora_dict)
-        )
+        base_params = unflatten_dict(base_dict)
+        lora_params = unflatten_dict(lora_dict)
+
+        if jax.process_index() == 0:
+            logging.info("\nBase params structure:")
+            for k, v in flatten_dict(base_params).items():
+                logging.info(f"  {'/'.join(str(x) for x in k)}: shape={getattr(v, 'shape', None)}")
+            logging.info("\nLoRA params structure:")
+            for k, v in flatten_dict(lora_params).items():
+                logging.info(f"  {'/'.join(str(x) for x in k)}: shape={getattr(v, 'shape', None)}")
+
+        return base_params, lora_params
 
     def combine_params(base_params, lora_params):
         """Combine base_params and lora_params back into a single param tree."""
