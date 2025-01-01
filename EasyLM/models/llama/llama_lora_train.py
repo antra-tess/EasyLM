@@ -62,6 +62,7 @@ class LoRATrainState(flax.struct.PyTreeNode):
             tx=tx,
             **kwargs
         )
+
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.traverse_util import flatten_dict, unflatten_dict
 from transformers import AutoTokenizer
@@ -218,55 +219,16 @@ def main(argv):
         logginginfo("Train state creation complete")
         return train_state
 
-    def split_params(params):
-        """Split params into base_params and lora_params."""
-        if jax.process_index() == 0:
-            logging.info("Original params structure:")
-            for k, v in flatten_dict(params).items():
-                logging.info(f"  {'/'.join(str(x) for x in k)}: shape={getattr(v, 'shape', None)}")
-
-        # Handle the full parameter tree
-        flat_params = flatten_dict(params)
-        base_dict = {}
-        lora_dict = {}
-    
-        for path, param in flat_params.items():
-            path_str = '/'.join(str(x) for x in path)
-            if 'lora_' in path_str:
-                lora_dict[path] = param
-            else:
-                base_dict[path] = param
-    
-        base_params = unflatten_dict(base_dict)
-        lora_params = unflatten_dict(lora_dict)
-
-        if jax.process_index() == 0:
-            logging.info("\nBase params structure:")
-            for k, v in flatten_dict(base_params).items():
-                logging.info(f"  {'/'.join(str(x) for x in k)}: shape={getattr(v, 'shape', None)}")
-            logging.info("\nLoRA params structure:")
-            for k, v in flatten_dict(lora_params).items():
-                logging.info(f"  {'/'.join(str(x) for x in k)}: shape={getattr(v, 'shape', None)}")
-
-        return base_params, lora_params
-
     def combine_params(base_params, lora_params):
         """Combine base_params and lora_params back into a single param tree."""
         # Flatten the full parameter trees
         base_dict = flatten_dict(base_params)
         lora_dict = flatten_dict(lora_params)
         combined_dict = {**base_dict, **lora_dict}
+        print("Combined dict:")
+        pprint.pprint(combined_dict)
         return unflatten_dict(combined_dict)
 
-    def apply_lora_gradients(train_state, grads):
-        """Custom gradient application for LoRA that handles partial gradient trees."""
-        updates, new_opt_state = train_state.tx.update(grads, train_state.opt_state, train_state.params)
-        new_params = optax.apply_updates(train_state.params, updates)
-        return train_state.replace(
-            step=train_state.step + 1,
-            params=new_params,
-            opt_state=new_opt_state
-        )
 
     def train_step(train_state, base_params, rng, batch):
         """Training step with separate base and LoRA parameters.
