@@ -196,16 +196,25 @@ def main(argv):
 
     def init_fn(rng):
         rng_generator = JaxRNG(rng)
-        logginginfo("Initializing model parameters...")
-        params = model.init(
-            input_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
-            position_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
-            attention_mask=jnp.ones((4, seq_length), dtype=jnp.int32),
-            rngs=rng_generator(LLaMAConfigurator.rng_keys()),
-        )
-        logginginfo("Model parameter initialization complete")
-        logginginfo("Creating train state from parameters...")
-        train_state = LoRATrainState.create(params=params, tx=optimizer)
+        logginginfo("Initializing LoRA parameters...")
+        # Create empty LoRA parameter structure
+        lora_params = {'params': {}}
+        for layer_idx in range(llama_config.num_hidden_layers):
+            layer_params = {}
+            # Attention LoRA params
+            if llama_config.lora_attn:
+                for name in ['wq', 'wk', 'wv', 'wo']:
+                    layer_params[f'attention/{name}/lora_A'] = jnp.zeros((llama_config.hidden_size, llama_config.lora_rank))
+                    layer_params[f'attention/{name}/lora_B'] = jnp.zeros((llama_config.lora_rank, llama_config.hidden_size))
+            # MLP LoRA params if enabled
+            if llama_config.lora_mlp:
+                for name in ['w1', 'w2', 'w3']:
+                    layer_params[f'feed_forward/{name}/lora_A'] = jnp.zeros((llama_config.hidden_size, llama_config.lora_rank))
+                    layer_params[f'feed_forward/{name}/lora_B'] = jnp.zeros((llama_config.lora_rank, llama_config.hidden_size))
+            lora_params['params'][f'transformer/h/{layer_idx}'] = layer_params
+        
+        logginginfo("Creating train state from LoRA parameters...")
+        train_state = LoRATrainState.create(params=lora_params, tx=optimizer)
         logginginfo("Train state creation complete")
         return train_state
 
@@ -346,8 +355,22 @@ def main(argv):
     logginginfo("Calculating partitioning...")
     train_state_shapes = jax.eval_shape(init_fn, next_rng())
     logginginfo("Train state shape calculation complete")
+    # Get partition specs for LoRA train state
     train_state_partition = match_partition_rules(
         LLaMAConfigurator.get_lora_partition_rules(), train_state_shapes
+    )
+    
+    # Get partition specs for base parameters
+    base_param_shapes = jax.eval_shape(
+        lambda: model.init(
+            input_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
+            position_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
+            attention_mask=jnp.ones((4, seq_length), dtype=jnp.int32),
+            rngs=next_rng(LLaMAConfigurator.rng_keys()),
+        )
+    )
+    base_param_partition = match_partition_rules(
+        LLaMAConfigurator.get_partition_rules(), base_param_shapes
     )
     logginginfo("Train state partitioning complete")
 
