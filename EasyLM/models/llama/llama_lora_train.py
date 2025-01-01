@@ -251,10 +251,27 @@ def main(argv):
         return base_params, lora_params
 
     def combine_params(base_params, lora_params):
-        """Combine base_params and lora_params back into a single param tree."""
-        # Flatten the full parameter trees
-        base_dict = flatten_dict(base_params)
+        """Combine base_params and lora_params back into a single param tree.
+        
+        Maintains the nested structure of base_params while adding LoRA params.
+        """
+        # First unflatten base_params to ensure proper structure
+        if isinstance(base_params, dict) and 'params' in base_params:
+            base_params = {'params': {
+                'transformer': {'h': {}},
+                'lm_head': base_params['params']['lm_head']
+            }}
+            # Reorganize transformer params into proper hierarchy
+            flat_base = flatten_dict(base_params['params'])
+            for k, v in flat_base.items():
+                if k[0] == 'transformer' and k[1].startswith('h/'):
+                    layer_num = k[1].split('/')[1]
+                    new_key = ('transformer', 'h', layer_num) + k[2:]
+                    base_params['params'] = set_in_dict(base_params['params'], new_key, v)
+
+        # Now combine with LoRA params
         lora_dict = flatten_dict(lora_params)
+        base_dict = flatten_dict(base_params)
         combined_dict = {**base_dict, **lora_dict}
         return unflatten_dict(combined_dict)
 
