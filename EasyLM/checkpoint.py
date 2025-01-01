@@ -190,6 +190,7 @@ class StreamingCheckpointer(object):
             params_target = None
 
         if trainstate_shard_fns is not None:
+            print("trainstate_shard_fns: ", trainstate_shard_fns)
             params_shard_fns = trainstate_shard_fns.params['params']
         else:
             params_shard_fns = None
