@@ -361,12 +361,13 @@ def main(argv):
     )
     
     # Get partition specs for base parameters
+    init_rng = next_rng()
     base_param_shapes = jax.eval_shape(
         lambda: model.init(
             input_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
             position_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
             attention_mask=jnp.ones((4, seq_length), dtype=jnp.int32),
-            rngs=next_rng(LLaMAConfigurator.rng_keys()),
+            rngs=JaxRNG(init_rng)(LLaMAConfigurator.rng_keys()),
         )
     )
     base_param_partition = match_partition_rules(
