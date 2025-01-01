@@ -221,13 +221,21 @@ def main(argv):
 
     def combine_params(base_params, lora_params):
         """Combine base_params and lora_params back into a single param tree."""
-        # Combine at the flattened dictionary level
-        base_dict = flatten_dict(base_params)
-        lora_dict = flatten_dict(lora_params)
-        combined_dict = {**base_dict, **lora_dict}
-        print("Combined dict:")
-        pprint.pprint(combined_dict)
-        return unflatten_dict(combined_dict)
+        # Keep nested structure by combining at each level
+        if not isinstance(base_params, dict) or not isinstance(lora_params, dict):
+            return base_params  # Return base params for non-dict nodes
+        
+        combined = {}
+        # First add all base params
+        for k, v in base_params.items():
+            combined[k] = v
+        # Then overlay LoRA params
+        for k, v in lora_params.items():
+            if k in combined:
+                combined[k] = combine_params(combined[k], v)
+            else:
+                combined[k] = v
+        return combined
 
     # Quick test of combine_params
     if jax.process_index() == 0:
