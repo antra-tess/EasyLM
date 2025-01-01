@@ -296,6 +296,16 @@ class LLaMAConfigurator(object):
         )
 
     @staticmethod
+    def get_base_param_rules():
+        """ Super simple partition rules for base model parameters during LoRA training. """
+        return (
+            # Just shard everything across dp and fsdp
+            ("transformer/.*", PS("dp", "fsdp")),
+            ("lm_head/.*", PS("dp", "fsdp")),
+            ('.*', PS(None)),
+        )
+
+    @staticmethod
     def rng_keys():
         return ('params', 'dropout', 'fcm')
 
