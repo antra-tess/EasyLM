@@ -35,12 +35,30 @@ class LoRATrainState(flax.struct.PyTreeNode):
 
     @classmethod
     def create(cls, *, params, tx, **kwargs):
-        """Creates a new instance with parameters and their optimizer states."""
-        opt_state = tx.init(params)
+        """Creates a new instance with parameters and their optimizer states.
+        
+        For LoRA training, we only create optimizer states for LoRA parameters.
+        Base model parameters are kept but won't have associated optimizer state.
+        """
+        # Initialize optimizer state only for LoRA parameters
+        flat_params = flatten_dict(params)
+        lora_params = {}
+        for k, v in flat_params.items():
+            path_str = '/'.join(str(x) for x in k)
+            if 'lora_' in path_str:
+                lora_params[k] = v
+        
+        # Only create optimizer state for LoRA parameters
+        lora_params = unflatten_dict(lora_params)
+        opt_state = tx.init(lora_params)
+
+        if jax.process_index() == 0:
+            logging.info(f"Created optimizer state for LoRA parameters")
+            
         return cls(
             step=0,
-            params=params,
-            opt_state=opt_state,
+            params=params,  # Keep full params
+            opt_state=opt_state,  # But only optimizer state for LoRA
             tx=tx,
             **kwargs
         )
