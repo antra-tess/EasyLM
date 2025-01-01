@@ -583,9 +583,13 @@ def main(argv):
         
         if FLAGS.load_checkpoint != '':
             logginginfo("Loading checkpoint...")
-            # Get base parameter sharding functions
+            # Get base parameter sharding functions using base rules
             base_shard_fns = make_shard_and_gather_fns(
-                base_param_partition, base_param_shapes
+                match_partition_rules(
+                    LLaMAConfigurator.get_base_param_rules(),
+                    base_param_shapes
+                ),
+                base_param_shapes
             )[0]
 
             train_state, restored_params = checkpointer.load_trainstate_checkpoint(
