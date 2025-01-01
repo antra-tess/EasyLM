@@ -644,11 +644,16 @@ def main(argv):
 
             logginginfo("Model parameters after sharding:")
             print_params_tree(train_state.params)
+        logginginfo("Getting start step")
 
         start_step = int(jax.device_get(train_state.step))
 
+
         if FLAGS.save_model_freq > 0:
+            logginginfo("Before saving checkpoint")
             save_checkpoint(train_state)
+            logginginfo("After saving checkpoint")
+
 
         sharded_rng = next_rng()
 
