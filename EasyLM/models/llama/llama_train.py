@@ -219,7 +219,8 @@ def main(argv):
 
     def split_params(params):
         """Split params into base_params and lora_params."""
-        flat_params = flatten_dict(params['params'])
+        # Handle the full parameter tree
+        flat_params = flatten_dict(params)
         base_dict = {}
         lora_dict = {}
     
@@ -231,16 +232,17 @@ def main(argv):
                 base_dict[path] = param
     
         return (
-            {'params': unflatten_dict(base_dict)},
-            {'params': unflatten_dict(lora_dict)}
+            unflatten_dict(base_dict),
+            unflatten_dict(lora_dict)
         )
 
     def combine_params(base_params, lora_params):
         """Combine base_params and lora_params back into a single param tree."""
-        base_dict = flatten_dict(base_params['params'])
-        lora_dict = flatten_dict(lora_params['params'])
+        # Flatten the full parameter trees
+        base_dict = flatten_dict(base_params)
+        lora_dict = flatten_dict(lora_params)
         combined_dict = {**base_dict, **lora_dict}
-        return {'params': unflatten_dict(combined_dict)}
+        return unflatten_dict(combined_dict)
 
     def train_step(train_state, rng, batch):
         rng_generator = JaxRNG(rng)
