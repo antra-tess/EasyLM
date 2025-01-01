@@ -257,6 +257,16 @@ def main(argv):
         combined_dict = {**base_dict, **lora_dict}
         return unflatten_dict(combined_dict)
 
+    def apply_lora_gradients(train_state, grads):
+        """Custom gradient application for LoRA that handles partial gradient trees."""
+        updates, new_opt_state = train_state.tx.update(grads, train_state.opt_state, train_state.params)
+        new_params = optax.apply_updates(train_state.params, updates)
+        return train_state.replace(
+            step=train_state.step + 1,
+            params=new_params,
+            opt_state=new_opt_state
+        )
+
     def train_step(train_state, rng, batch):
         rng_generator = JaxRNG(rng)
         batch = with_sharding_constraint(batch, PS(('dp', 'fsdp')))
@@ -278,7 +288,7 @@ def main(argv):
         # Only compute gradients for lora_params
         grad_fn = jax.value_and_grad(loss_and_accuracy, argnums=1, has_aux=True)
         (loss, accuracy), grads = grad_fn(base_params, lora_params)
-        train_state = train_state.apply_gradients(grads=grads)
+        train_state = apply_lora_gradients(train_state, grads)
         # Separate LoRA and base grads with more detailed path checking
         flat_grads = flatten_dict(grads)
         lora_grads = {}
