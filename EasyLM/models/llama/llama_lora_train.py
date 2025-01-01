@@ -579,7 +579,7 @@ def main(argv):
             init_state = sharded_init_fn(next_rng())
             log_memory_usage("After LoRA init")
             
-            # Extract LoRA params from init_state
+            # Extract LoRA params from init_state, ignore base params
             init_dict = flatten_dict(init_state.params)
             lora_params = {}
             for k, v in init_dict.items():
@@ -590,7 +590,10 @@ def main(argv):
             # Create train state with only LoRA params
             logginginfo("Creating train state from LoRA params")
             train_state = sharded_create_trainstate_from_params({'params': lora_params})
+            
+            # Use restored params directly as base params, no need to extract
             base_params = restored_params
+            logginginfo("Using restored checkpoint as base parameters")
             logginginfo("Train state creation complete")
 
         # Print sharded parameter info on worker 0 only
