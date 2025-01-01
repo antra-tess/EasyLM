@@ -15,6 +15,7 @@ from flax.training.train_state import TrainState
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.traverse_util import flatten_dict, unflatten_dict
 from transformers import AutoTokenizer
+import optax
 
 from EasyLM.data import DatasetFactory
 from EasyLM.checkpoint import StreamingCheckpointer
@@ -54,16 +55,28 @@ FLAGS, FLAGS_DEF = mlxu.define_flags_with_default(
     jax_distributed=JaxDistributedConfig.get_default_config(),
 )
 
+
+def set_in_dict(d, path, value):
+    """Sets a value in a nested dictionary using a path tuple."""
+    try:
+        keys = path if isinstance(path, tuple) else (path,)
+        d_ptr = d
+        for key in keys[:-1]:
+            d_ptr = d_ptr[key]
+        d_ptr[keys[-1]] = value
+        return d
+    except KeyError as e:
+        raise KeyError(f"Key not found: {e}, path: {path}, dict: {d}")
+
 def logginginfo(msg, *args):
     if jax.process_index() == 0:
         logging.info(msg, *args)
-
 
 def main(argv):
     JaxDistributedConfig.initialize(FLAGS.jax_distributed)
     variant = mlxu.get_user_flags(FLAGS, FLAGS_DEF)
     flags_config_dict = mlxu.user_flags_to_config_dict(FLAGS, FLAGS_DEF)
-
+    
     # Log process/worker information
     hostname = os.uname().nodename
     process_index = jax.process_index()
@@ -98,18 +111,97 @@ def main(argv):
     )
     logginginfo(f"Model initialization complete: LLaMA {llama_config.base_model}")
 
+    def trainable_mask(param_name: str, param_value=None) -> bool:
+        """
+        If LoRA is off (lora_rank=0), we return True for all parameters.
+        If LoRA is on (lora_rank>0), we only return True for LoRA param.
+        param_name: a string like: 'transformer/h/0/attention/wq/kernel'
+                    or something JAX derived
+        param_value: actual parameter value (unused but needed for named_tree_map)
+        We'll just check if it has 'lora_A' or 'lora_B' in it.
+        """
+        # if True:
+        #     return False
+
+        if llama_config.lora_rank > 0:
+            # Train only LoRA param
+            is_lora = 'lora_A' in param_name or 'lora_B' in param_name
+            return is_lora
+        else:
+            # Full fine-tune
+            return True
+
+    # Test trainable_mask with some example parameter names
+    if jax.process_index() == 0:
+        test_params = [
+            'transformer/h/0/attention/wq/kernel',
+            'transformer/h/0/attention/wq/lora_A',
+            'transformer/h/0/attention/wq/lora_B',
+            'transformer/h/0/feed_forward/w1/kernel'
+        ]
+        logginginfo("Testing trainable_mask function:")
+        for param in test_params:
+            is_trainable = trainable_mask(param)
+            logginginfo(f"Parameter {param}: {'trainable' if is_trainable else 'frozen'}")
+
+    # Test trainable mask with some example parameters
+    if jax.process_index() == 0:
+        logginginfo("\nTesting trainable_mask before passing to optimizer:")
+        test_params = {
+            'params': {
+                'transformer': {
+                    'h': {
+                        '0': {
+                            'attention': {
+                                'wq': {
+                                    'kernel': jnp.array([1.0]),
+                                    'lora_A': jnp.array([1.0]),
+                                    'lora_B': jnp.array([1.0])
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        mask_result = named_tree_map(trainable_mask, test_params, sep='/')
+        for path, is_trainable in flatten_dict(mask_result).items():
+            logginginfo(f"Parameter {'/'.join(str(x) for x in path)}: {'trainable' if is_trainable else 'frozen'}")
+
     logginginfo("Setting up optimizer...")
     # Use trainable_mask for both weight decay and controlling optimizer state allocation
     optimizer, optimizer_info = OptimizerFactory.get_optimizer(
         FLAGS.optimizer,
-        weight_decay_mask=None,
-        trainable_mask=None,
-        lora_mode=False,
+        weight_decay_mask=trainable_mask,
+        trainable_mask=trainable_mask,
+        lora_mode=llama_config.lora_rank > 0,
     )
     logginginfo(f"Optimizer setup complete: {str(optimizer_info)}, {str(optimizer)}, {str(type(optimizer))}")
 
     def create_trainstate_from_params(params):
-        return TrainState.create(params=params, tx=optimizer, apply_fn=None)
+        train_state = TrainState.create(params=params, tx=optimizer, apply_fn=None)
+        #Debug prints for optimizer state examination
+
+        # if jax.process_index() == 0:
+        #     logginginfo("Examining optimizer state:")
+        #     for state in jax.tree_util.tree_leaves(train_state.opt_state):
+        #         logginginfo(f"Optimizer state type: {type(state)}")
+        #         logginginfo(f"Optimizer state attributes: {dir(state)}")
+        #         logginginfo(f"Optimizer state shape: {getattr(state, 'shape', 'no shape')}")
+        #         # # print all attributes
+        #         # for attr in dir(state):
+        #         #     if attr.startswith('__'):
+        #         #         continue
+        #         #     # if method, skip
+        #         #     try:
+        #         #         if callable(getattr(state, attr)):
+        #         #             continue
+        #         #         logginginfo(f"  {attr}: {getattr(state, attr)}")
+        #         #     except Exception as e:
+        #         #         logginginfo(f"  {attr}: inaccessible")
+        #         # if hasattr(state, 'device_buffers'):
+        #         #     logginginfo(f"Optimizer state device_buffers: {state.device_buffers}")
+        return train_state
 
     def init_fn(rng):
         rng_generator = JaxRNG(rng)
@@ -126,12 +218,66 @@ def main(argv):
         logginginfo("Train state creation complete")
         return train_state
 
+    def split_params(params):
+        """Split params into base_params and lora_params."""
+        if jax.process_index() == 0:
+            logging.info("Original params structure:")
+            for k, v in flatten_dict(params).items():
+                logging.info(f"  {'/'.join(str(x) for x in k)}: shape={getattr(v, 'shape', None)}")
+
+        # Handle the full parameter tree
+        flat_params = flatten_dict(params)
+        base_dict = {}
+        lora_dict = {}
+    
+        for path, param in flat_params.items():
+            path_str = '/'.join(str(x) for x in path)
+            if 'lora_' in path_str:
+                lora_dict[path] = param
+            else:
+                base_dict[path] = param
+    
+        base_params = unflatten_dict(base_dict)
+        lora_params = unflatten_dict(lora_dict)
+
+        if jax.process_index() == 0:
+            logging.info("\nBase params structure:")
+            for k, v in flatten_dict(base_params).items():
+                logging.info(f"  {'/'.join(str(x) for x in k)}: shape={getattr(v, 'shape', None)}")
+            logging.info("\nLoRA params structure:")
+            for k, v in flatten_dict(lora_params).items():
+                logging.info(f"  {'/'.join(str(x) for x in k)}: shape={getattr(v, 'shape', None)}")
+
+        return base_params, lora_params
+
+    def combine_params(base_params, lora_params):
+        """Combine base_params and lora_params back into a single param tree."""
+        # Flatten the full parameter trees
+        base_dict = flatten_dict(base_params)
+        lora_dict = flatten_dict(lora_params)
+        combined_dict = {**base_dict, **lora_dict}
+        return unflatten_dict(combined_dict)
+
+    def apply_lora_gradients(train_state, grads):
+        """Custom gradient application for LoRA that handles partial gradient trees."""
+        updates, new_opt_state = train_state.tx.update(grads, train_state.opt_state, train_state.params)
+        new_params = optax.apply_updates(train_state.params, updates)
+        return train_state.replace(
+            step=train_state.step + 1,
+            params=new_params,
+            opt_state=new_opt_state
+        )
+
     def train_step(train_state, rng, batch):
         rng_generator = JaxRNG(rng)
         batch = with_sharding_constraint(batch, PS(('dp', 'fsdp')))
-
-        def loss_and_accuracy(params):
-
+    
+        # Split params into base and lora
+        base_params, lora_params = split_params(train_state.params)
+    
+        def loss_and_accuracy(base_params, lora_params):
+            # Combine params for forward pass
+            params = combine_params(base_params, lora_params)
             logits = model.apply(
                 params, batch['input_tokens'], deterministic=False,
                 rngs=rng_generator(LLaMAConfigurator.rng_keys()),
@@ -140,15 +286,38 @@ def main(argv):
                 logits, batch['target_tokens'], batch['loss_masks']
             )
 
-        grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
-        (loss, accuracy), grads = grad_fn(train_state.params)
-        train_state = train_state.apply_gradients(grads=grads)
+        # Only compute gradients for lora_params
+        grad_fn = jax.value_and_grad(loss_and_accuracy, argnums=1, has_aux=True)
+        (loss, accuracy), grads = grad_fn(base_params, lora_params)
+        train_state = apply_lora_gradients(train_state, grads)
+        # Separate LoRA and base grads with more detailed path checking
+        flat_grads = flatten_dict(grads)
+        lora_grads = {}
+        base_grads = {}
+        
+        for k, v in flat_grads.items():
+            path_str = '/'.join(str(x) for x in k)
+            if 'lora_A' in path_str or 'lora_B' in path_str:
+                lora_grads[k] = v
+                if jax.process_index() == 0 and len(lora_grads) == 1:  # Log first found
+                    logging.info(f"Found LoRA gradient at {path_str} with shape {v.shape}")
+            else:
+                base_grads[k] = v
+        
+        # Compute norms and add debug info
+        lora_norm = global_norm(unflatten_dict(lora_grads)) if lora_grads else jnp.array(0.0)
+        base_norm = global_norm(unflatten_dict(base_grads)) if base_grads else jnp.array(0.0)
+        
         metrics = dict(
             loss=loss,
             accuracy=accuracy,
             learning_rate=optimizer_info['learning_rate_schedule'](train_state.step),
             gradient_norm=global_norm(grads),
+            lora_grad_norm=lora_norm,
+            base_grad_norm=base_norm,
             param_norm=global_norm(train_state.params),
+            num_lora_grads=len(lora_grads),
+            num_base_grads=len(base_grads)
         )
         rng = rng_generator()
 
@@ -177,6 +346,26 @@ def main(argv):
         LLaMAConfigurator.get_partition_rules(), train_state_shapes
     )
     logginginfo("Train state partitioning complete")
+
+    # # Log partition specs and actual shapes
+    # if jax.process_index() == 0:
+    #     logginginfo("Examining train state partitioning:")
+    #     # Flatten each field of TrainState separately
+    #     for field in ["params", "opt_state", "step"]:
+    #         logginginfo(f"\nExamining {field}:")
+    #         field_partition = getattr(train_state_partition, field)
+    #         field_shapes = getattr(train_state_shapes, field)
+    #         if isinstance(field_partition, (dict, FrozenDict)):
+    #             flat_partition = flatten_dict(field_partition)
+    #             flat_shapes = flatten_dict(field_shapes)
+    #             for name, spec in flat_partition.items():
+    #                 shape = flat_shapes[name].shape if hasattr(flat_shapes[name], 'shape') else None
+    #                 logginginfo(f"Parameter {name}:")
+    #                 logginginfo(f"  Shape: {shape}")
+    #                 logginginfo(f"  Partition spec: {spec}")
+    #         else:
+    #             logginginfo(f"  Shape: {getattr(field_shapes, 'shape', None)}")
+    #             logginginfo(f"  Partition spec: {field_partition}")
 
     shard_fns, gather_fns = make_shard_and_gather_fns(
         train_state_partition, train_state_shapes
@@ -216,25 +405,80 @@ def main(argv):
     )
     logginginfo("Partitioned functions created")
 
+    def remove_frozen_params(tree):
+        """
+        Build a new tree that sets base-weights to None if LoRA is enabled.
+        If lora_rank=0, we return the tree as is (save everything).
+        """
+        if llama_config.lora_rank == 0:
+            return tree  # do nothing
+
+        def maybe_none(param, path):
+            # path is a tuple of keys, e.g. ('transformer','h','0','attention','wq','kernel')
+            #param_name = '/'.join([str(p) for p in path])
+            param_name = str(path)
+            # if jax.process_index() == 0:
+            #     logging.info(f"Checking parameter: {param_name}")
+            is_trainable = trainable_mask(param_name)
+            # if is_trainable and jax.process_index() == 0:
+            #     logging.info(f"Keeping parameter: {param_name}")
+            return param if is_trainable else None
+
+        # We can use named_tree_map for path-based logic:
+        # or replicate that logic manually
+        pruned = named_tree_map(
+            lambda path, leaf: maybe_none(leaf, path),
+            tree, sep='/'
+        )
+        return pruned
+
+    def prune_none(tree):
+        """Recursively remove any `None` leaves to produce a smaller dict."""
+        if isinstance(tree, dict):
+            new_dict = {}
+            for k, v in tree.items():
+                pruned_v = prune_none(v)
+                if pruned_v is not None:
+                    new_dict[k] = pruned_v
+            return new_dict if new_dict else None
+        elif isinstance(tree, (tuple, list)):
+            new_list = []
+            for v in tree:
+                pruned_v = prune_none(v)
+                if pruned_v is not None:
+                    new_list.append(pruned_v)
+            return type(tree)(new_list) if new_list else None
+        else:
+            return tree  # None or actual param
+
 
     def save_checkpoint(train_state, milestone=False):
         step = int(jax.device_get(train_state.step))
         hostname = os.uname().nodename
         process_index = jax.process_index()
         logginginfo(f"Checkpoint save called on host {hostname} (process {process_index}) at step {step}...")
+
+        # 1. If LoRA is active, prune the base weights from saving
+        full_params = train_state.params['params']
+        pruned = remove_frozen_params(full_params)
+        pruned = prune_none(pruned)
+
+        # 2. Rebuild a partial train_state with pruned params
+        partial_state = train_state.replace(params={'params': pruned})
+
         metadata = dict(
             step=step,
             variant=variant,
             flags=flags_config_dict,
             llama_config=llama_config.to_dict(),
         )
-
+        
         checkpoint_dir = os.path.join(logger.output_dir, f"checkpoint_{step}")
         if milestone:
             checkpoint_dir = os.path.join(logger.output_dir, f"milestone_{step}")
         logginginfo(f"Saving checkpoint to: {checkpoint_dir}")
         checkpointer.save_all(
-            train_state=train_state,
+            train_state=partial_state,
             gather_fns=gather_fns,
             metadata=metadata,
             dataset=dataset.get_state_dict(),
@@ -246,21 +490,20 @@ def main(argv):
     logginginfo("Setting up JAX mesh...")
     mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
     logginginfo("JAX mesh initialized")
-
     def log_memory_usage(prefix=""):
         if jax.process_index() == 0:
             logging.info(f"\n{prefix} Memory Report:")
-
+            
             try:
                 live_arrays = jax.live_arrays()
                 total_live = sum(x.nbytes for x in live_arrays) / 1e9
                 logging.info(f"Total live array bytes: {total_live:.2f} GB")
-
+                
                 # Group arrays by device and type
                 arrays_by_device = {}
                 arrays_by_type = {}
                 total_arrays = len(live_arrays)
-
+                
                 for arr in live_arrays:
                     # Get device info safely
                     try:
@@ -281,12 +524,12 @@ def main(argv):
                         if jax.process_index() == 0:
                             logging.info(f"Error getting device info: {str(e)}")
                         device = 'unknown'
-
+                        
                     # Add to device grouping
                     if device not in arrays_by_device:
                         arrays_by_device[device] = []
                     arrays_by_device[device].append(arr)
-
+                    
                     # Add to shape pattern grouping
                     if hasattr(arr, 'shape'):
                         shape_pattern = 'x'.join(str(x) for x in arr.shape)
@@ -298,7 +541,7 @@ def main(argv):
 
                 # Print summary statistics
                 logging.info(f"\nTotal number of arrays: {total_arrays}")
-
+                
                 # Print device statistics
                 logging.info("\nMemory by device:")
                 for device, arrays in sorted(arrays_by_device.items()):
@@ -310,12 +553,12 @@ def main(argv):
                     logging.info("  Top 5 largest arrays:")
                     for arr in sorted(arrays, key=lambda x: x.nbytes, reverse=True)[:5]:
                         logging.info(f"    shape={arr.shape}, dtype={arr.dtype}, size={arr.nbytes / 1e9:.2f} GB")
-
+                
                 # Print shape pattern statistics
                 logging.info("\nArrays grouped by shape pattern:")
-                for shape_pattern, arrays in sorted(arrays_by_type.items(),
-                                                    key=lambda x: sum(a.nbytes for a in x[1]),
-                                                    reverse=True)[:10]:
+                for shape_pattern, arrays in sorted(arrays_by_type.items(), 
+                                                 key=lambda x: sum(a.nbytes for a in x[1]), 
+                                                 reverse=True)[:10]:
                     total_size = sum(x.nbytes for x in arrays) / 1e9
                     array_count = len(arrays)
                     if array_count > 0:  # Only show non-empty groups
@@ -332,7 +575,7 @@ def main(argv):
     with mesh:
         train_state, restored_params = None, None
         log_memory_usage("Before checkpoint load")
-
+        
         if FLAGS.load_checkpoint != '':
             logginginfo("Loading checkpoint...")
             train_state, restored_params = checkpointer.load_trainstate_checkpoint(
@@ -349,8 +592,43 @@ def main(argv):
             log_memory_usage("After initialization")
             logginginfo("Initialization complete")
         elif train_state is None and restored_params is not None:
+            # For LoRA, we need to initialize LoRA params from scratch
+            if llama_config.lora_rank > 0:
+                logginginfo(f"Initializing LoRA parameters with rank {llama_config.lora_rank}")
+                log_memory_usage("Before LoRA init")
+                init_state = sharded_init_fn(next_rng())
+                log_memory_usage("After LoRA init")
+                # Copy non-LoRA params from checkpoint, keep LoRA params from init
+                # restored_params = unfreeze(restored_params)
+                init_params = init_state.params
+                
+                # Debug: print structure before merging
+                restored_dict = flatten_dict(restored_params)
+                init_dict = flatten_dict(init_params)
+                logginginfo(f"Restored params has {len(restored_dict)} parameters")
+                logginginfo(f"Init params has {len(init_dict)} parameters")
+                logginginfo("Sample of init param paths:")
+                for path in list(init_dict.keys())[:5]:
+                    logginginfo(f"  {path}")
+
+                # unwrapped_restored = unfreeze(restored_params)
+
+                for path, param in flatten_dict(restored_params).items():
+
+                    path_str = str(path)
+                    if 'lora_' not in path_str:
+                        init_params = set_in_dict(init_params, path, param)
+                        # if jax.process_index() == 0:
+                        #     logging.info(f"Copied parameter: {path_str}")
+                    # else:
+                    #     if jax.process_index() == 0:
+                    #         logging.info(f"Skipping LoRA parameter: {path_str}")
+            else:
+                init_params = restored_params
+                # restored_params = freeze(init_params)
+            # Create train state with possibly modified params
             logginginfo("Creating train state from restored params")
-            train_state = sharded_create_trainstate_from_params(restored_params)
+            train_state = sharded_create_trainstate_from_params(init_params)
             logginginfo("Train state creation complete2")
             del restored_params
             logginginfo("Deleted restored params")
