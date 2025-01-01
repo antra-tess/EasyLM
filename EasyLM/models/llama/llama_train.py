@@ -244,11 +244,18 @@ def main(argv):
         grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
         (loss, accuracy), grads = grad_fn(train_state.params)
         train_state = train_state.apply_gradients(grads=grads)
+        # Separate LoRA and base grads
+        flat_grads = flatten_dict(grads)
+        lora_grads = {k: v for k, v in flat_grads.items() if 'lora_' in str(k)}
+        base_grads = {k: v for k, v in flat_grads.items() if 'lora_' not in str(k)}
+        
         metrics = dict(
             loss=loss,
             accuracy=accuracy,
             learning_rate=optimizer_info['learning_rate_schedule'](train_state.step),
             gradient_norm=global_norm(grads),
+            lora_grad_norm=global_norm(unflatten_dict(lora_grads)),
+            base_grad_norm=global_norm(unflatten_dict(base_grads)),
             param_norm=global_norm(train_state.params),
         )
         rng = rng_generator()
