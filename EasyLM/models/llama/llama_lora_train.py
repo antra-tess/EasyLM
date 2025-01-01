@@ -258,6 +258,19 @@ def main(argv):
         combined_dict = {**base_dict, **lora_dict}
         return unflatten_dict(combined_dict)
 
+    # Quick test of combine_params
+    if jax.process_index() == 0:
+        logging.info("Testing combine_params...")
+        test_base = {'params': {'transformer': {'h': {'0': {'kernel': jnp.ones((2,2))}}}, 'lm_head': {'kernel': jnp.ones((2,2))}}}
+        test_lora = {'params': {'transformer': {'h': {'0': {'lora_A': jnp.zeros((2,2))}}}, 'lm_head': {'kernel': jnp.zeros((2,2))}}}
+        try:
+            test_combined = combine_params(test_base, test_lora)
+            logging.info("combine_params test passed")
+            logging.info(f"Combined structure: {jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, test_combined)}")
+        except Exception as e:
+            logging.error(f"combine_params test failed: {e}")
+            raise
+
     def apply_lora_gradients(train_state, grads):
         """Custom gradient application for LoRA that handles partial gradient trees."""
         updates, new_opt_state = train_state.tx.update(grads, train_state.opt_state, train_state.params)
