@@ -296,6 +296,30 @@ class LLaMAConfigurator(object):
         )
 
     @staticmethod
+    def get_base_param_rules():
+        """ Partition rules for base model parameters during LoRA training.
+            Similar to regular rules but simpler.
+        """
+        return (
+            # embeddings
+            ("transformer/wte/embedding", PS("mp", "fsdp")),
+            # attention
+            (".*/attention/(wq|wk|wv)/kernel", PS("fsdp", "mp")),
+            (".*/attention/wo/kernel", PS("mp", "fsdp")),
+            # mlp
+            (".*/feed_forward/w1/kernel", PS("fsdp", "mp")),
+            (".*/feed_forward/w2/kernel", PS("mp", "fsdp")),
+            (".*/feed_forward/w3/kernel", PS("fsdp", "mp")),
+            # layer norms
+            (".*/attention_norm/kernel", PS(None)),
+            (".*/ffn_norm/kernel", PS(None)),
+            # output head
+            (".*/transformer/ln_f/kernel", PS(None)),
+            ("lm_head/kernel", PS("fsdp", "mp")),
+            ('.*', PS(None)),
+        )
+
+    @staticmethod
     def rng_keys():
         return ('params', 'dropout', 'fcm')
 
