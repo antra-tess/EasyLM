@@ -259,16 +259,21 @@ def main(argv):
             opt_state=new_opt_state
         )
 
-    def train_step(train_state, rng, batch):
+    def train_step(train_state, base_params, rng, batch):
+        """Training step with separate base and LoRA parameters.
+    
+        Args:
+            train_state: Contains LoRA parameters and optimizer state
+            base_params: Base model parameters (frozen)
+            rng: Random number generator key
+            batch: Training batch
+        """
         rng_generator = JaxRNG(rng)
         batch = with_sharding_constraint(batch, PS(('dp', 'fsdp')))
     
-        # Split params into base and lora
-        base_params, lora_params = split_params(train_state.params)
-    
-        def loss_and_accuracy(base_params, lora_params):
-            # Combine params for forward pass
-            params = combine_params(base_params, lora_params)
+        def loss_and_accuracy(lora_params):
+            # Combine with base params for forward pass
+            params = combine_params(base_params, {'params': lora_params})
             logits = model.apply(
                 params, batch['input_tokens'], deterministic=False,
                 rngs=rng_generator(LLaMAConfigurator.rng_keys()),
@@ -277,10 +282,18 @@ def main(argv):
                 logits, batch['target_tokens'], batch['loss_masks']
             )
 
-        # Only compute gradients for lora_params
-        grad_fn = jax.value_and_grad(loss_and_accuracy, argnums=1, has_aux=True)
-        (loss, accuracy), grads = grad_fn(base_params, lora_params)
-        train_state = apply_lora_gradients(train_state, grads)
+        # Compute gradients only for LoRA params
+        grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
+        (loss, accuracy), grads = grad_fn(train_state.params['params'])
+    
+        # Update LoRA params only
+        updates, new_opt_state = train_state.tx.update(grads, train_state.opt_state, train_state.params['params'])
+        new_params = optax.apply_updates(train_state.params['params'], updates)
+        train_state = train_state.replace(
+            step=train_state.step + 1,
+            params={'params': new_params},
+            opt_state=new_opt_state,
+        )
         # Separate LoRA and base grads with more detailed path checking
         flat_grads = flatten_dict(grads)
         lora_grads = {}
