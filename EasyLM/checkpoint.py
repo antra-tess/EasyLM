@@ -95,6 +95,15 @@ class StreamingCheckpointer(object):
 
     @staticmethod
     def load_checkpoint(path, target=None, shard_fns=None, remove_dict_prefix=None):
+        if jax.process_index() == 0:
+            logging.info(f"Loading checkpoint from {path}")
+            if shard_fns is not None:
+                logging.info("Shard functions provided:")
+                for k, v in flatten_dict(to_state_dict(shard_fns)).items():
+                    logging.info(f"  {'/'.join(str(x) for x in k)}")
+            if remove_dict_prefix is not None:
+                logging.info(f"Removing prefix: {remove_dict_prefix}")
+
         if shard_fns is not None:
             shard_fns = flatten_dict(
                 to_state_dict(shard_fns)
@@ -115,7 +124,15 @@ class StreamingCheckpointer(object):
 
                 tensor = from_bytes(None, value)
                 if shard_fns is not None:
-                    tensor = shard_fns[key](tensor)
+                    if jax.process_index() == 0:
+                        logging.info(f"Applying sharding to {'/'.join(str(x) for x in key)} with shape {tensor.shape}")
+                    try:
+                        tensor = shard_fns[key](tensor)
+                    except KeyError as e:
+                        if jax.process_index() == 0:
+                            logging.info(f"No sharding function found for key {key}")
+                            logging.info(f"Available shard_fns keys: {list(shard_fns.keys())}")
+                        raise
                 flattend_train_state[key] = tensor
 
         if target is not None:
