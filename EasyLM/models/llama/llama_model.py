@@ -297,11 +297,25 @@ class LLaMAConfigurator(object):
 
     @staticmethod
     def get_base_param_rules():
-        """ Super simple partition rules for base model parameters during LoRA training. """
+        """ Partition rules for base model parameters during LoRA training.
+            Similar to regular rules but simpler.
+        """
         return (
-            # Just shard everything across dp and fsdp
-            ("transformer/.*", PS("dp", "fsdp")),
-            ("lm_head/.*", PS("dp", "fsdp")),
+            # embeddings
+            ("transformer/wte/embedding", PS("mp", "fsdp")),
+            # attention
+            (".*/attention/(wq|wk|wv)/kernel", PS("fsdp", "mp")),
+            (".*/attention/wo/kernel", PS("mp", "fsdp")),
+            # mlp
+            (".*/feed_forward/w1/kernel", PS("fsdp", "mp")),
+            (".*/feed_forward/w2/kernel", PS("mp", "fsdp")),
+            (".*/feed_forward/w3/kernel", PS("fsdp", "mp")),
+            # layer norms
+            (".*/attention_norm/kernel", PS(None)),
+            (".*/ffn_norm/kernel", PS(None)),
+            # output head
+            (".*/transformer/ln_f/kernel", PS(None)),
+            ("lm_head/kernel", PS("fsdp", "mp")),
             ('.*', PS(None)),
         )
 
