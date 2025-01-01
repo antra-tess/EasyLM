@@ -347,7 +347,7 @@ def main(argv):
     train_state_shapes = jax.eval_shape(init_fn, next_rng())
     logginginfo("Train state shape calculation complete")
     train_state_partition = match_partition_rules(
-        LLaMAConfigurator.get_partition_rules(), train_state_shapes
+        LLaMAConfigurator.get_lora_partition_rules(), train_state_shapes
     )
     logginginfo("Train state partitioning complete")
 
