@@ -586,9 +586,7 @@ def main(argv):
             base_shard_fns = make_shard_and_gather_fns(
                 base_param_partition, base_param_shapes
             )[0]
-            
-            # Wrap base_shard_fns in the expected structure
-            #wrapped_shard_fns = {'params': {'params': base_shard_fns}}
+
             train_state, restored_params = checkpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint, train_state_shapes, base_shard_fns
             )

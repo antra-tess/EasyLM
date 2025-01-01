@@ -193,7 +193,7 @@ class StreamingCheckpointer(object):
             print("trainstate_shard_fns: ", trainstate_shard_fns)
             # Handle both dictionary and object cases
             if isinstance(trainstate_shard_fns, dict):
-                params_shard_fns = trainstate_shard_fns['params']['params']
+                params_shard_fns = trainstate_shard_fns['params']
             else:
                 params_shard_fns = trainstate_shard_fns.params['params']
         else:
