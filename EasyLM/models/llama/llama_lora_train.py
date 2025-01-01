@@ -573,27 +573,34 @@ def main(argv):
             log_memory_usage("After initialization")
             logginginfo("Initialization complete")
         elif train_state is None and restored_params is not None:
-            # Initialize LoRA params from scratch, use restored params as base
+            # Initialize only LoRA params, use restored params as base
             logginginfo(f"Initializing LoRA parameters with rank {llama_config.lora_rank}")
             log_memory_usage("Before LoRA init")
-            init_state = sharded_init_fn(next_rng())
-            log_memory_usage("After LoRA init")
             
-            # Extract LoRA params from init_state, ignore base params
-            init_dict = flatten_dict(init_state.params)
-            lora_params = {}
-            for k, v in init_dict.items():
-                if 'lora_' in str(k):
-                    lora_params[k] = v
-            lora_params = unflatten_dict(lora_params)
+            # Create empty LoRA parameter structure
+            lora_params = {'params': {}}
+            for layer_idx in range(llama_config.num_hidden_layers):
+                layer_params = {}
+                # Attention LoRA params
+                if llama_config.lora_attn:
+                    for name in ['wq', 'wk', 'wv', 'wo']:
+                        layer_params[f'attention/{name}/lora_A'] = jnp.zeros((llama_config.hidden_size, llama_config.lora_rank))
+                        layer_params[f'attention/{name}/lora_B'] = jnp.zeros((llama_config.lora_rank, llama_config.hidden_size))
+                # MLP LoRA params if enabled
+                if llama_config.lora_mlp:
+                    for name in ['w1', 'w2', 'w3']:
+                        layer_params[f'feed_forward/{name}/lora_A'] = jnp.zeros((llama_config.hidden_size, llama_config.lora_rank))
+                        layer_params[f'feed_forward/{name}/lora_B'] = jnp.zeros((llama_config.lora_rank, llama_config.hidden_size))
+                lora_params['params'][f'transformer/h/{layer_idx}'] = layer_params
             
             # Create train state with only LoRA params
             logginginfo("Creating train state from LoRA params")
-            train_state = sharded_create_trainstate_from_params({'params': lora_params})
+            train_state = sharded_create_trainstate_from_params(lora_params)
             
-            # Use restored params directly as base params, no need to extract
+            # Use restored params as base
             base_params = restored_params
             logginginfo("Using restored checkpoint as base parameters")
+            log_memory_usage("After LoRA init")
             logginginfo("Train state creation complete")
 
         # Print sharded parameter info on worker 0 only
