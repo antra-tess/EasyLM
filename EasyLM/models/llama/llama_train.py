@@ -217,6 +217,31 @@ def main(argv):
         logginginfo("Train state creation complete")
         return train_state
 
+    def split_params(params):
+        """Split params into base_params and lora_params."""
+        flat_params = flatten_dict(params['params'])
+        base_dict = {}
+        lora_dict = {}
+    
+        for path, param in flat_params.items():
+            path_str = '/'.join(str(x) for x in path)
+            if 'lora_' in path_str:
+                lora_dict[path] = param
+            else:
+                base_dict[path] = param
+    
+        return (
+            {'params': unflatten_dict(base_dict)},
+            {'params': unflatten_dict(lora_dict)}
+        )
+
+    def combine_params(base_params, lora_params):
+        """Combine base_params and lora_params back into a single param tree."""
+        base_dict = flatten_dict(base_params['params'])
+        lora_dict = flatten_dict(lora_params['params'])
+        combined_dict = {**base_dict, **lora_dict}
+        return {'params': unflatten_dict(combined_dict)}
+
     def train_step(train_state, rng, batch):
         rng_generator = JaxRNG(rng)
         batch = with_sharding_constraint(batch, PS(('dp', 'fsdp')))
