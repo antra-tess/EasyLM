@@ -582,8 +582,13 @@ def main(argv):
         
         if FLAGS.load_checkpoint != '':
             logginginfo("Loading checkpoint...")
+            # Get base parameter sharding functions
+            base_shard_fns = make_shard_and_gather_fns(
+                base_param_partition, base_param_shapes
+            )[0]
+            
             train_state, restored_params = checkpointer.load_trainstate_checkpoint(
-                FLAGS.load_checkpoint, train_state_shapes, shard_fns
+                FLAGS.load_checkpoint, train_state_shapes, base_shard_fns
             )
             logginginfo("Loaded checkpoint")
             log_memory_usage("After checkpoint load")
