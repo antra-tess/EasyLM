@@ -245,19 +245,13 @@ def main(argv):
     def train_step(train_state, rng, batch):
         rng_generator = JaxRNG(rng)
         batch = with_sharding_constraint(batch, PS(('dp', 'fsdp')))
-        def loss_and_accuracy(params):
-            # Apply stop_gradient to non-LoRA params before forward pass
-            # def maybe_stop_grad(path, p):
-            #     if not trainable_mask(path):
-            #         return jax.lax.stop_gradient(p)
-            #     return p
-            
-            # params_for_forward = named_tree_map(
-            #     maybe_stop_grad,
-            #     params,
-            #     sep='/'
-            # )
-            
+    
+        # Split params into base and lora
+        base_params, lora_params = split_params(train_state.params)
+    
+        def loss_and_accuracy(base_params, lora_params):
+            # Combine params for forward pass
+            params = combine_params(base_params, lora_params)
             logits = model.apply(
                 params, batch['input_tokens'], deterministic=False,
                 rngs=rng_generator(LLaMAConfigurator.rng_keys()),
@@ -266,8 +260,9 @@ def main(argv):
                 logits, batch['target_tokens'], batch['loss_masks']
             )
 
-        grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
-        (loss, accuracy), grads = grad_fn(train_state.params)
+        # Only compute gradients for lora_params
+        grad_fn = jax.value_and_grad(loss_and_accuracy, argnums=1, has_aux=True)
+        (loss, accuracy), grads = grad_fn(base_params, lora_params)
         train_state = train_state.apply_gradients(grads=grads)
         # Separate LoRA and base grads with more detailed path checking
         flat_grads = flatten_dict(grads)
