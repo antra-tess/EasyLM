@@ -662,9 +662,10 @@ def main(argv):
 
         log_memory_usage("Before training loop")
         logginginfo("Starting training loop...")
+        base_params = base_params or train_state.params  # Use full params if no base_params
         for step, (batch, dataset_metrics) in zip(step_counter, dataset):
             train_state, sharded_rng, metrics = sharded_train_step(
-                train_state, sharded_rng, batch
+                train_state, base_params, sharded_rng, batch
             )
 
             if step % FLAGS.log_freq == 0:
