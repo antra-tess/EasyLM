@@ -258,38 +258,40 @@ class LLaMAConfigurator(object):
 
     @staticmethod
     def get_partition_rules():
-        """ Parition rules for GPTJ. Note that these rules are orderd, so that
-            the beginning rules match first. It is important to use
-            PartitionSpec() instead of None here because JAX does not treat
-            None as a pytree leaf.
-        """
+        """ Partition rules for full model training. """
         return (
             # embeddings
             ("transformer/wte/embedding", PS("mp", "fsdp")),
-            # atention
+            # attention
             (".*/attention/(wq|wk|wv)/kernel", PS("fsdp", "mp")),
             (".*/attention/wo/kernel", PS("mp", "fsdp")),
-            # LoRA parameters in attention
-            (".*/attention/(wq|wk|wv)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
-            (".*/attention/(wq|wk|wv)/lora_B", PS(None, "mp")),  # shape [lora_rank, hidden_size]
-            (".*/attention/wo/lora_A", PS("mp", None)),  # shape [hidden_size, lora_rank]
-            (".*/attention/wo/lora_B", PS(None, "fsdp")),  # shape [lora_rank, hidden_size]
             # mlp
             (".*/feed_forward/w1/kernel", PS("fsdp", "mp")),
             (".*/feed_forward/w2/kernel", PS("mp", "fsdp")),
             (".*/feed_forward/w3/kernel", PS("fsdp", "mp")),
-            # mlp lora
-            (".*/feed_forward/(w1|w3)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
-            (".*/feed_forward/(w1|w3)/lora_B", PS(None, "mp")),  # shape [lora_rank, intermediate_size]
-            (".*/feed_forward/w2/lora_A", PS("mp", None)),          # shape [intermediate_size, lora_rank]
-            (".*/feed_forward/w2/lora_B", PS(None, "fsdp")),        # shape [lora_rank, hidden_size]
-
             # layer norms
             (".*/attention_norm/kernel", PS(None)),
             (".*/ffn_norm/kernel", PS(None)),
             # output head
             (".*/transformer/ln_f/kernel", PS(None)),
             ("lm_head/kernel", PS("fsdp", "mp")),
+            ('.*', PS(None)),
+        )
+
+    @staticmethod
+    def get_lora_partition_rules():
+        """ Partition rules specifically for LoRA parameters. """
+        return (
+            # LoRA parameters in attention
+            ("params/transformer/.*/attention/(wq|wk|wv)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
+            ("params/transformer/.*/attention/(wq|wk|wv)/lora_B", PS(None, "mp")),    # shape [lora_rank, hidden_size]
+            ("params/transformer/.*/attention/wo/lora_A", PS("mp", None)),            # shape [hidden_size, lora_rank]
+            ("params/transformer/.*/attention/wo/lora_B", PS(None, "fsdp")),          # shape [lora_rank, hidden_size]
+            # LoRA parameters in mlp (if enabled)
+            ("params/transformer/.*/feed_forward/(w1|w3)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
+            ("params/transformer/.*/feed_forward/(w1|w3)/lora_B", PS(None, "mp")),    # shape [lora_rank, intermediate_size]
+            ("params/transformer/.*/feed_forward/w2/lora_A", PS("mp", None)),         # shape [intermediate_size, lora_rank]
+            ("params/transformer/.*/feed_forward/w2/lora_B", PS(None, "fsdp")),       # shape [lora_rank, hidden_size]
             ('.*', PS(None)),
         )
 
