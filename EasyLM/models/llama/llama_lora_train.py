@@ -136,11 +136,6 @@ def main(argv):
     process_index = jax.process_index()
     process_count = jax.process_count()
     logging.info(f"Starting up on host {hostname} - process index: {process_index}/{process_count}")
-    # Add base model name as a tag
-    if FLAGS.logger.tags is None:
-        FLAGS.logger.tags = []
-    FLAGS.logger.tags.append(f"base_model_{llama_config.base_model}")
-    
     logger = mlxu.WandBLogger(
         config=FLAGS.logger,
         variant=variant,
@@ -161,6 +156,11 @@ def main(argv):
 
     seq_length = dataset.seq_length
     llama_config = LLaMAConfigurator.finalize_config(FLAGS.llama)
+    
+    # Add base model name as a tag
+    if FLAGS.logger.tags is None:
+        FLAGS.logger.tags = []
+    FLAGS.logger.tags.append(f"base_model_{llama_config.base_model}")
 
     logginginfo("Starting model initialization...")
     model = FlaxLLaMAForCausalLMModule(
