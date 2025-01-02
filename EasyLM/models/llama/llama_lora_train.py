@@ -291,9 +291,9 @@ def main(argv):
     
         def loss_and_accuracy(lora_params):
             # Combine with base params for forward pass
-            params = combine_params(base_params, {'params': lora_params})
+            params = combine_params(base_params, lora_params)
             logits = model.apply(
-                params, batch['input_tokens'], deterministic=False,
+                {'params': params}, batch['input_tokens'], deterministic=False,
                 rngs=rng_generator(LLaMAConfigurator.rng_keys()),
             ).logits
             return cross_entropy_loss_and_accuracy(
