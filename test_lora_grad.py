@@ -142,14 +142,26 @@ def main():
     
     def train_step(train_state, base_params, batch):
         def loss_fn(params):
+            # Debug print parameter types
+            jax.debug.print("base_params type: {}", jax.tree_util.tree_map(lambda x: x.dtype if hasattr(x, 'dtype') else type(x), base_params))
+            jax.debug.print("params type: {}", jax.tree_util.tree_map(lambda x: x.dtype if hasattr(x, 'dtype') else type(x), params))
+            
             # Combine parameters before gradient computation
             combined = combine_params_test(base_params['params'], params['params'])
+            jax.debug.print("combined params type: {}", jax.tree_util.tree_map(lambda x: x.dtype if hasattr(x, 'dtype') else type(x), combined))
+            
             output = model.apply({'params': combined}, batch)
+            jax.debug.print("output type: {}", output.dtype)
+            
             # Ensure all inputs to mean are float32
             output = output.astype(jnp.float32)
             target_f32 = target.astype(jnp.float32)
             diff = output - target_f32
-            return jnp.mean(diff * diff)
+            jax.debug.print("diff type: {}", diff.dtype)
+            
+            loss = jnp.mean(diff * diff)
+            jax.debug.print("loss type: {}", loss.dtype)
+            return loss
 
         # Pass params directly to loss_fn
         combined_params = train_state
