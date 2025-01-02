@@ -382,6 +382,12 @@ def main(argv):
             path_str = '/'.join(str(x) for x in k)
             logginginfo(f"  {path_str}: {v.shape if hasattr(v, 'shape') else v}")
             
+        # Specifically check for embedding
+        logginginfo("\nChecking for embedding parameters:")
+        for k, v in base_shapes.items():
+            if 'wte' in str(k):
+                logginginfo(f"Found embedding parameter: {k}")
+            
     base_param_shapes = unflatten_dict(base_shapes)
     
     # Now get partition rules for just base parameters
