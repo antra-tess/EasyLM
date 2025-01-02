@@ -84,19 +84,11 @@ def main():
         lora_b = all_params['params']['params']['attention']['lora_B']
         return jnp.sum(lora_a @ lora_b), 0.0
 
-    # Set up pjit for approach 1
-    sharded_loss_fn_all = pjit(
-        loss_fn_all,
-        in_shardings=(base_param_partition,),
-        out_shardings=(PS(), PS())
-    )
-
+    # Use regular jit since we're testing on CPU
+    print("\nTesting approach 1 - differentiate wrt all parameters:")
+    jitted_loss_fn_all = jax.jit(loss_fn_all)
     grad_fn_all = jax.value_and_grad(loss_fn_all, has_aux=True)
-    sharded_grad_fn_all = pjit(
-        grad_fn_all,
-        in_shardings=(base_param_partition,),
-        out_shardings=((PS(), PS()), base_param_partition)
-    )
+    jitted_grad_fn_all = jax.jit(grad_fn_all)
 
     print("\nTesting approach 2 - differentiate wrt LoRA parameters only:")
     def loss_fn_lora(lora_p):
@@ -107,39 +99,26 @@ def main():
         lora_b = combined['params']['params']['attention']['lora_B']
         return jnp.sum(lora_a @ lora_b), 0.0
 
-    # Set up pjit for approach 2
-    sharded_loss_fn_lora = pjit(
-        loss_fn_lora,
-        in_shardings=(lora_param_partition,),
-        out_shardings=(PS(), PS())
-    )
-
+    jitted_loss_fn_lora = jax.jit(loss_fn_lora)
     grad_fn_lora = jax.value_and_grad(loss_fn_lora, has_aux=True)
-    sharded_grad_fn_lora = pjit(
-        grad_fn_lora,
-        in_shardings=(lora_param_partition,),
-        out_shardings=((PS(), PS()), lora_param_partition)
-    )
+    jitted_grad_fn_lora = jax.jit(grad_fn_lora)
 
-    # Create mesh and run tests
-    mesh = get_jax_mesh((1, 1), ('mp', 'fsdp'))
-    with mesh:
-        # Test approach 1
-        combined_params = {'params': combine_params_test(base_params, lora_params)}
-        result, _ = sharded_loss_fn_all(combined_params)
-        print("Test function result (all params):", float(result))
+    # Test approach 1
+    combined_params = {'params': combine_params_test(base_params, lora_params)}
+    result, _ = jitted_loss_fn_all(combined_params)
+    print("Test function result (all params):", float(result))
 
-        (loss, _), grads_all = sharded_grad_fn_all(combined_params)
-        print("\nGradients when differentiating all parameters:")
-        print(jax.tree_util.tree_map(lambda x: (x.shape, float(jax.device_get(jnp.max(jnp.abs(x))))), grads_all))
+    (loss, _), grads_all = jitted_grad_fn_all(combined_params)
+    print("\nGradients when differentiating all parameters:")
+    print(jax.tree_util.tree_map(lambda x: (x.shape, float(jax.device_get(jnp.max(jnp.abs(x))))), grads_all))
 
-        # Test approach 2
-        result, _ = sharded_loss_fn_lora(lora_params)
-        print("Test function result (LoRA only):", float(result))
+    # Test approach 2
+    result, _ = jitted_loss_fn_lora(lora_params)
+    print("Test function result (LoRA only):", float(result))
 
-        (loss, _), grads_lora = sharded_grad_fn_lora(lora_params)
-        print("\nGradients when differentiating LoRA parameters only:")
-        print(jax.tree_util.tree_map(lambda x: (x.shape, float(jax.device_get(jnp.max(jnp.abs(x))))), grads_lora))
+    (loss, _), grads_lora = jitted_grad_fn_lora(lora_params)
+    print("\nGradients when differentiating LoRA parameters only:")
+    print(jax.tree_util.tree_map(lambda x: (x.shape, float(jax.device_get(jnp.max(jnp.abs(x))))), grads_lora))
 
 if __name__ == "__main__":
     main()
