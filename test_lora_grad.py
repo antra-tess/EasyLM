@@ -34,7 +34,7 @@ def main():
     base_params = {
         'params': {
             'attention': {
-                'kernel': jax.device_put(jnp.ones((4, 4)))
+                'kernel': jnp.ones((4, 4))
             }
         }
     }
@@ -42,11 +42,15 @@ def main():
     lora_params = {
         'params': {
             'attention': {
-                'lora_A': jax.device_put(jnp.ones((4, 2))),
-                'lora_B': jax.device_put(jnp.ones((2, 4)))
+                'lora_A': jnp.ones((4, 2)),
+                'lora_B': jnp.ones((2, 4))
             }
         }
     }
+
+    # Move entire parameter trees to device
+    base_params = jax.device_put(base_params)
+    lora_params = jax.device_put(lora_params)
 
     # Define partition specs
     base_param_partition = {
