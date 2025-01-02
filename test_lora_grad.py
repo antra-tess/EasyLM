@@ -98,9 +98,9 @@ def create_train_state(rng, model, input_shape, learning_rate=1e-3):
 def main():
     print("JAX devices:", jax.devices())
     
-    # Create constant input and target
-    input_data = jnp.ones((1, 16))  # Single constant input
-    target = jnp.ones((1, 8))  # Single constant target
+    # Create constant input and target as float32
+    input_data = jnp.ones((1, 16), dtype=jnp.float32)  # Single constant input
+    target = jnp.ones((1, 8), dtype=jnp.float32)  # Single constant target
     
     # Initialize model and parameters
     model = SimpleModel()
