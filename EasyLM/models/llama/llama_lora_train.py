@@ -286,8 +286,8 @@ def main(argv):
         (loss, accuracy), grads = grad_fn(train_state.params)
     
         # Update LoRA params only
-        updates, new_opt_state = train_state.tx.update(grads, train_state.opt_state, train_state.params['params'])
-        new_params = optax.apply_updates(train_state.params['params'], updates)
+        updates, new_opt_state = train_state.tx.update(grads, train_state.opt_state, train_state.params)
+        new_params = optax.apply_updates(train_state.params, updates)
         train_state = train_state.replace(
             step=train_state.step + 1,
             params={'params': new_params},
