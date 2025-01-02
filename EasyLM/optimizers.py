@@ -143,7 +143,6 @@ class AdamWOptimizerFactory(object):
 
     @classmethod
     def get_optimizer(cls, config):
-        """Simple AdamW optimizer for LoRA parameters"""
         config = cls.get_default_config(config)
 
         learning_rate_schedule = optax.warmup_cosine_decay_schedule(
@@ -170,7 +169,6 @@ class AdamWOptimizerFactory(object):
         )
 
         return optimizer, optimizer_info
-
 
 
 class OptaxScheduledWeightDecayState(NamedTuple):
