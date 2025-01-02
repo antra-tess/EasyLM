@@ -25,15 +25,19 @@ def main():
     
     # Create test parameters with same structure as our model
     base_params = {
-        'attention': {
-            'kernel': jnp.ones((4, 4))
+        'params': {
+            'attention': {
+                'kernel': jnp.ones((4, 4))
+            }
         }
     }
     
     lora_params = {
-        'attention': {
-            'lora_A': jnp.ones((4, 2)),
-            'lora_B': jnp.ones((2, 4))
+        'params': {
+            'attention': {
+                'lora_A': jnp.ones((4, 2)),
+                'lora_B': jnp.ones((2, 4))
+            }
         }
     }
 
@@ -42,8 +46,8 @@ def main():
         combined = combine_params_test(base_params, lora_p)
         print("Combined params:", jax.tree_util.tree_map(lambda x: x.shape, combined))
         # Simple operation that should produce non-zero gradients
-        lora_a = combined['attention']['lora_A'] 
-        lora_b = combined['attention']['lora_B']
+        lora_a = combined['params']['attention']['lora_A'] 
+        lora_b = combined['params']['attention']['lora_B']
         return jnp.sum(lora_a @ lora_b)
 
     # First run function normally
