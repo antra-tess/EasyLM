@@ -42,13 +42,22 @@ def main():
     }
 
     print("\nTest function evaluation:")
-    def test_fn(lora_p):
-        combined = combine_params_test(base_params, lora_p)
+    def loss_and_accuracy(lora_p):
+        # Match real training - combine params then wrap in dict
+        combined = {'params': combine_params_test(base_params, lora_p)}
         print("Combined params:", jax.tree_util.tree_map(lambda x: x.shape, combined))
         # Simple operation that should produce non-zero gradients
-        lora_a = combined['params']['attention']['lora_A'] 
-        lora_b = combined['params']['attention']['lora_B']
-        return jnp.sum(lora_a @ lora_b)
+        lora_a = combined['params']['params']['attention']['lora_A'] 
+        lora_b = combined['params']['params']['attention']['lora_B']
+        return jnp.sum(lora_a @ lora_b), 0.0  # Return dummy accuracy like real code
+
+    # First run function normally
+    result, _ = jax.jit(loss_and_accuracy)(lora_params)
+    print("Test function result:", float(result))  # Safe to convert after jit
+
+    # Then check gradients - match real training grad_fn setup
+    grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
+    (loss, _), grads = jax.jit(grad_fn)(lora_params)
 
     # First run function normally
     result = jax.jit(test_fn)(lora_params)
