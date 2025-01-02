@@ -141,15 +141,8 @@ class StreamingCheckpointer(object):
             )
             for key, value in flattened_target.items():
                 #logging.info(f"Loading target parameter {key} with shape {value.shape}")
+                # Don't auto-initialize LoRA parameters
                 if 'lora_' in str(key):
-                    # Initialize LoRA parameters with zeros
-                    # Handle both actual arrays and ShapeDtypeStruct
-                    if hasattr(value, 'shape') and hasattr(value, 'dtype'):
-                        flattend_train_state[key] = jnp.zeros(value.shape, dtype=value.dtype)
-                        #logging.info(f"Initialized LoRA parameter {key} with shape {value.shape}")
-                    else:
-                        #logging.info(f"Skipping LoRA parameter {key} because it has no shape/dtype: {type(value)}")
-                        pass
                     continue
                 if key not in flattend_train_state and value == empty_node:
                     flattend_train_state[key] = value
