@@ -381,21 +381,10 @@ def main(argv):
         LLaMAConfigurator.get_base_param_rules(), base_param_shapes, debug_print=True,
     )
     
-    # Restructure partition specs to match parameter layout
-    flat_base_partition = flatten_dict(base_param_partition['params'])
-    layer_base_partition = {}
-    for k, v in flat_base_partition.items():
-        # Only keep transformer/h/* keys
-        if k[0] == 'transformer' and k[1] == 'h':
-            layer_num = k[2]
-            if f'transformer/h/{layer_num}' not in layer_base_partition:
-                layer_base_partition[f'transformer/h/{layer_num}'] = {}
-            # Add partition spec under the layer
-            remaining_key = '/'.join(str(x) for x in k[3:])
-            if 'lora_' not in remaining_key:  # Keep base model parameters, exclude LoRA
-                layer_base_partition[f'transformer/h/{layer_num}'][remaining_key] = v
-            
-    base_param_partition = {'params': layer_base_partition}
+    # Keep original nested structure for base parameter partitioning
+    base_param_partition = match_partition_rules(
+        LLaMAConfigurator.get_base_param_rules(), base_param_shapes, debug_print=True,
+    )
     logginginfo("Train state partitioning complete")
 
     if jax.process_index() == 0:
