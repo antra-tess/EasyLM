@@ -94,7 +94,7 @@ class StreamingCheckpointer(object):
             )
 
     @staticmethod
-    def load_checkpoint(path, target=None, shard_fns=None, remove_dict_prefix=None):
+    def load_checkpoint(path, target=None, shard_fns=None, remove_dict_prefix=None, restore_state=True):
         if jax.process_index() == 0:
             logging.info(f"Loading checkpoint from {path}")
             if shard_fns is not None:
@@ -158,7 +158,7 @@ class StreamingCheckpointer(object):
             pass
 
         train_state = unflatten_dict(flattend_train_state)
-        if target is None:
+        if target is None or not restore_state:
             return train_state
 
         return from_state_dict(target, train_state)
@@ -243,6 +243,7 @@ class StreamingCheckpointer(object):
                 path=load_path,
                 target=params_target,
                 shard_fns=params_shard_fns,  # Use params sharding directly
+                restore_state=False
             )
             # Wrap in params dict structure
             if not isinstance(restored_params, dict) or 'params' not in restored_params:
