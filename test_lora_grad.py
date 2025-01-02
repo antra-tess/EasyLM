@@ -60,13 +60,13 @@ def main():
     (loss, _), grads = jax.jit(grad_fn)(lora_params)
 
     # First run function normally
-    result = jax.jit(test_fn)(lora_params)
+    result, _ = jax.jit(loss_and_accuracy)(lora_params)
     print("Test function result:", float(result))  # Safe to convert after jit
 
     # Then check gradients
     print("\nGradient computation:")
-    grad_fn = jax.grad(test_fn)
-    grads = jax.jit(grad_fn)(lora_params)  # Jit the gradient computation
+    grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
+    (loss, _), grads = jax.jit(grad_fn)(lora_params)  # Jit the gradient computation
     
     print("\nInput parameters:")
     print("Base params:", jax.tree_util.tree_map(lambda x: x.shape, base_params))
