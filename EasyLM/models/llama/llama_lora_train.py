@@ -631,6 +631,17 @@ def main(argv):
                 FLAGS.load_checkpoint, train_state_shapes, base_shard_fns
             )
             logginginfo("Loaded checkpoint")
+            
+            # Debug logging for restored parameters
+            if jax.process_index() == 0:
+                flat_params = flatten_dict(restored_params['params'])
+                logginginfo("Restored parameters:")
+                for k, v in flat_params.items():
+                    path_str = '/'.join(str(x) for x in k)
+                    logginginfo(f"  {path_str}: shape={v.shape if hasattr(v, 'shape') else 'no shape'}")
+                    if 'lora_' in path_str:
+                        logginginfo("    WARNING: Found LoRA parameter in restored_params!")
+            
             log_memory_usage("After checkpoint load")
 
         if train_state is None and restored_params is None:
