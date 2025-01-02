@@ -111,6 +111,7 @@ class StreamingCheckpointer(object):
         if remove_dict_prefix is not None:
             remove_dict_prefix = tuple(remove_dict_prefix)
         flattend_train_state = {}
+        counter = 0
         with mlxu.open_file(path) as fin:
             # 83886080 bytes = 80 MB, which is 16 blocks on GCS
             unpacker = msgpack.Unpacker(fin, read_size=83886080, max_buffer_size=0)
@@ -126,6 +127,7 @@ class StreamingCheckpointer(object):
                 if shard_fns is not None:
                     if jax.process_index() == 0:
                         logging.info(f"Applying sharding to {'/'.join(str(x) for x in key)} with shape {tensor.shape}")
+                    counter += 1
                     try:
                         tensor = shard_fns[key](tensor)
                     except KeyError as e:
@@ -134,6 +136,8 @@ class StreamingCheckpointer(object):
                             logging.info(f"Available shard_fns keys: {list(shard_fns.keys())}")
                         raise
                 flattend_train_state[key] = tensor
+        if counter == 0:
+            raise ValueError(f"No tensor sharding was applied {path}")
 
         if target is not None:
             flattened_target = flatten_dict(
