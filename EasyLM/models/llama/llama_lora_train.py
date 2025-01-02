@@ -282,7 +282,6 @@ def main(argv):
         def loss_and_accuracy(lora_params):
             # Combine with base params for forward pass
             params = {'params': combine_params(base_params, lora_params)}
-            logginginfo(f"Combined params: {jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, params)}")
             logits = model.apply(
                 params, batch['input_tokens'], deterministic=False,
                 rngs=rng_generator(LLaMAConfigurator.rng_keys()),
@@ -311,11 +310,6 @@ def main(argv):
         )
         logginginfo("Train state updated")
 
-        # Add gradient structure logging
-        if jax.process_index() == 0:
-            logginginfo("Gradient structure:")
-            for k, v in flat_grads.items():
-                logginginfo(f"  {'/'.join(str(x) for x in k)}: shape={v.shape}, dtype={v.dtype}")
 
         # Compute gradient statistics using JAX ops
         grad_norms = jnp.array([jnp.linalg.norm(v) for v in flat_grads.values()])
@@ -642,13 +636,6 @@ def main(argv):
             )
             logginginfo("Loaded base model parameters")
             
-            # Debug logging for base parameters
-            if jax.process_index() == 0:
-                flat_params = flatten_dict(base_params['params'])
-                logginginfo("Base model parameters:")
-                for k, v in flat_params.items():
-                    path_str = '/'.join(str(x) for x in k)
-                    logginginfo(f"  {path_str}: shape={v.shape if hasattr(v, 'shape') else 'no shape'}")
             
             log_memory_usage("After base parameter load")
 
