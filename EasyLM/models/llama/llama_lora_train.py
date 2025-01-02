@@ -197,6 +197,17 @@ def main(argv):
                 if llama_config.lora_attn:
                     # Get the module path without the final 'kernel'
                     base_path = path[:-1]
+                    # Handle remat by replacing number with remat(number)
+                    if 'transformer/h' in path_str:
+                        layer_idx = None
+                        for i, p in enumerate(base_path):
+                            if isinstance(p, str) and p.isdigit():
+                                layer_idx = i
+                                break
+                        if layer_idx is not None:
+                            base_path = list(base_path)
+                            base_path[layer_idx] = f'remat({base_path[layer_idx]})'
+                            base_path = tuple(base_path)
                     # Add LoRA A and B parameters
                     lora_A_path = base_path + ('lora_A',)
                     lora_B_path = base_path + ('lora_B',)
