@@ -41,7 +41,7 @@ class LoRATrainState(flax.struct.PyTreeNode):
         Base model parameters are kept but won't have associated optimizer state.
         """
         # Initialize optimizer state only for LoRA parameters
-        flat_params = flatten_dict(params)
+        flat_params = flatten_dict(params['params'])
         lora_params = {}
         for k, v in flat_params.items():
             path_str = '/'.join(str(x) for x in k)
@@ -57,7 +57,7 @@ class LoRATrainState(flax.struct.PyTreeNode):
             
         return cls(
             step=0,
-            params=params,  # Keep full params
+            params=params['params'],  # Keep full params
             opt_state=opt_state,  # But only optimizer state for LoRA
             tx=tx,
             **kwargs
