@@ -57,7 +57,7 @@ class LoRATrainState(flax.struct.PyTreeNode):
             
         return cls(
             step=0,
-            params=params['params'],  # Keep full params
+            params=params,  # Keep full params
             opt_state=opt_state,  # But only optimizer state for LoRA
             tx=tx,
             **kwargs
