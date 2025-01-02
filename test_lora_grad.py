@@ -14,8 +14,7 @@ import logging
 
 def get_mesh():
     """Create simple mesh for testing."""
-    devices = jnp.array(jax.devices())
-    mesh = Mesh(devices, ('dp',))  # Single axis mesh for testing
+    mesh = Mesh(np.array(jax.devices()), ('dp',))  # Single axis mesh for testing
     return mesh
 
 def combine_params_test(base_params, lora_params):
