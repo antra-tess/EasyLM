@@ -239,9 +239,8 @@ def main(argv):
     def combine_params(base_params, lora_params):
         """Combine base_params and lora_params back into a single param tree."""
         # Base case: if either input is not a dict, return base params
-        if not isinstance(base_params, dict) or not isinstance(lora_params, dict):
-            return base_params
-            
+        base_params = base_params['params']
+
         combined = {}
         # First add all base params
         for k, v in base_params.items():
@@ -252,7 +251,7 @@ def main(argv):
                 combined[k] = combine_params(combined[k], v)
             else:
                 combined[k] = v
-        return combined
+        return {'params': combined}
 
     # Quick test of combine_params
     if jax.process_index() == 0:
