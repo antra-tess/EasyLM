@@ -39,6 +39,7 @@ def combine_params_test(base_params, lora_params):
 class SimpleLoRALinear(nn.Module):
     features: int
     lora_rank: int = 8
+    dtype: jnp.dtype = jnp.float32
     
     @nn.compact
     def __call__(self, x):
@@ -83,11 +84,14 @@ class SimpleLoRALinear(nn.Module):
         return base_out + delta
 
 class SimpleModel(nn.Module):
+    dtype: jnp.dtype = jnp.float32
+    
     @nn.compact
     def __call__(self, x):
-        x = SimpleLoRALinear(features=8)(x)
+        x = x.astype(self.dtype)
+        x = SimpleLoRALinear(features=8, dtype=self.dtype)(x)
         x = jax.nn.relu(x)
-        x = SimpleLoRALinear(features=8)(x)
+        x = SimpleLoRALinear(features=8, dtype=self.dtype)(x)
         return x
 
 def create_train_state(rng, model, input_shape, learning_rate=1e-3):
