@@ -41,7 +41,7 @@ class LoRATrainState(flax.struct.PyTreeNode):
         Base model parameters are kept but won't have associated optimizer state.
         """
         # Initialize optimizer state only for LoRA parameters
-        flat_params = flatten_dict(params['params'])
+        flat_params = flatten_dict(params)
         lora_params = {}
         for k, v in flat_params.items():
             path_str = '/'.join(str(x) for x in k)
