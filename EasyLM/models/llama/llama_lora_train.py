@@ -287,6 +287,10 @@ def main(argv):
         # Compute gradients only for LoRA params
         grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
         (loss, accuracy), grads = grad_fn(train_state.params)
+        jax.debug.print("Raw gradients shapes: {}", 
+                       jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, grads))
+        jax.debug.print("Raw gradients max: {}", 
+                       jax.tree_util.tree_map(lambda x: jnp.max(jnp.abs(x)) if hasattr(x, 'shape') else x, grads))
         logginginfo("Gradient computation complete")
         # Count total and non-zero gradients
         flat_grads = flatten_dict(grads)
