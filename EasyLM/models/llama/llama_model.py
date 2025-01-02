@@ -1202,6 +1202,16 @@ class LoRALinear(nn.Module):
             lora_alpha = self.config.lora_alpha
             scaling = lora_alpha / lora_rank
 
+            # Handle remat path by replacing number with remat(number)
+            param_path = self.name
+            if 'transformer/h/' in param_path:
+                parts = param_path.split('/')
+                for i, part in enumerate(parts):
+                    if part.isdigit():
+                        parts[i] = f'remat({part})'
+                        break
+                param_path = '/'.join(parts)
+
             # A and B are the low-rank factors
             #   A: (in_features, lora_rank)
             #   B: (lora_rank, out_features)
