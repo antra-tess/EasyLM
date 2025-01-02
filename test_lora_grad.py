@@ -134,11 +134,29 @@ def main():
     # Training loop
     train_state = {'params': lora_params, 'opt_state': opt_state}
     
-    def loss_fn(params):
-        # Combine parameters for forward pass
-        combined = combine_params_test(base_params['params'], params['params'])
+    def loss_fn(lora_params):
+        # Extract just the LoRA parameters we want to differentiate
+        lora_dict = lora_params['params']
+        
+        # Combine with base parameters for forward pass
+        combined = combine_params_test(base_params['params'], lora_dict)
+        
+        # Debug print parameter structures
+        jax.debug.print("Base params structure: {}", jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else type(x), base_params))
+        jax.debug.print("LoRA params structure: {}", jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else type(x), lora_dict))
+        jax.debug.print("Combined params structure: {}", jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else type(x), combined))
+        
+        # Run forward pass
         output = model.apply({'params': combined}, input_data)
-        return jnp.mean((output - target) ** 2)
+        jax.debug.print("Output: {}", output)
+        jax.debug.print("Target: {}", target)
+        
+        # Compute MSE loss
+        diff = output - target
+        loss = jnp.mean(diff * diff)
+        jax.debug.print("Loss: {}", loss)
+        
+        return loss
 
     for step in range(3):
         # Compute loss and gradients
