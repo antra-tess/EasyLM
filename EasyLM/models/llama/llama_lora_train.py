@@ -313,7 +313,7 @@ def main(argv):
             num_nonzero_grads=num_nonzero
         )
         rng = rng_generator()
-
+        logginginfo("Train step complete")
         return train_state, rng, metrics
 
     def eval_step(train_state, rng, batch):
