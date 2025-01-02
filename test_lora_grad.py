@@ -53,7 +53,9 @@ def main():
         'params': {
             'params': {
                 'attention': {
-                    'kernel': PS('mp', 'fsdp')
+                    'kernel': PS('mp', 'fsdp'),
+                    'lora_A': PS('fsdp', None),
+                    'lora_B': PS(None, 'mp')
                 }
             }
         }
