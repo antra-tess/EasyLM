@@ -40,6 +40,7 @@ class SimpleLoRALinear(nn.Module):
     features: int
     lora_rank: int = 8
     dtype: jnp.dtype = jnp.float32
+    param_dtype: jnp.dtype = jnp.float32
     
     @nn.compact
     def __call__(self, x):
@@ -85,13 +86,14 @@ class SimpleLoRALinear(nn.Module):
 
 class SimpleModel(nn.Module):
     dtype: jnp.dtype = jnp.float32
+    param_dtype: jnp.dtype = jnp.float32
     
     @nn.compact
     def __call__(self, x):
         x = x.astype(self.dtype)
-        x = SimpleLoRALinear(features=8, dtype=self.dtype)(x)
+        x = SimpleLoRALinear(features=8, dtype=self.dtype, param_dtype=self.param_dtype)(x)
         x = jax.nn.relu(x)
-        x = SimpleLoRALinear(features=8, dtype=self.dtype)(x)
+        x = SimpleLoRALinear(features=8, dtype=self.dtype, param_dtype=self.param_dtype)(x)
         return x
 
 def create_train_state(rng, model, input_shape, learning_rate=1e-3):
