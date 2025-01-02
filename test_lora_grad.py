@@ -83,9 +83,9 @@ def main():
     
     # Initialize LoRA parameters with zeros
     lora_params = jax.tree_map(
-        lambda x: jnp.zeros_like(x) if 'lora' in k else x,
+        lambda k, x: jnp.zeros_like(x) if 'lora' in str(k) else x,
         base_params,
-        is_leaf=lambda k, x: 'lora' in k
+        is_leaf=lambda k, x: 'lora' in str(k)
     )
     
     # Create optimizer
