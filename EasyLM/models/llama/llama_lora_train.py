@@ -313,8 +313,9 @@ def main(argv):
                 pass
 
         # Compute gradient statistics using JAX ops
-        grad_max = jnp.max(jnp.array([jnp.max(jnp.abs(v)) for v in flat_grads.values()]))
-        grad_mean = jnp.mean(jnp.array([jnp.mean(jnp.abs(v)) for v in flat_grads.values()]))
+        grad_norms = jnp.array([jnp.linalg.norm(v) for v in flat_grads.values()])
+        grad_max = jnp.max(grad_norms)
+        grad_mean = jnp.mean(grad_norms)
         
         metrics = dict(
             loss=loss,
