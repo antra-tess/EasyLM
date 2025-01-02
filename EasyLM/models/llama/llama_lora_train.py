@@ -309,8 +309,6 @@ def main(argv):
             logginginfo("Gradient structure:")
             for k, v in flat_grads.items():
                 logginginfo(f"  {'/'.join(str(x) for x in k)}: shape={v.shape}, dtype={v.dtype}")
-                # Skip printing array stats inside jitted function since they'll be traced
-                pass
 
         # Compute gradient statistics using JAX ops
         grad_norms = jnp.array([jnp.linalg.norm(v) for v in flat_grads.values()])
