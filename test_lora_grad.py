@@ -108,7 +108,10 @@ def main():
     rng, init_rng = jax.random.split(rng)
     
     # Initialize base parameters with random values
-    base_params = model.init(init_rng, input_data)
+    base_params = jax.tree_util.tree_map(
+        lambda x: x.astype(jnp.float32) if isinstance(x, jnp.ndarray) else x,
+        model.init(init_rng, input_data)
+    )
     
     # Initialize LoRA parameters with zeros
     flat_params = flatten_dict(base_params)
