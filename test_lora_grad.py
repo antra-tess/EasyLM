@@ -1,3 +1,6 @@
+import os
+os.environ['JAX_PLATFORMS'] = 'cpu'  # Force CPU
+
 import jax
 import jax.numpy as jnp
 import optax
@@ -18,6 +21,8 @@ def combine_params_test(base_params, lora_params):
     return combined
 
 def main():
+    print("JAX devices:", jax.devices())
+    
     # Create test parameters with same structure as our model
     base_params = {
         'attention': {
@@ -32,15 +37,22 @@ def main():
         }
     }
 
-    # Test function that combines params and does a simple operation
+    print("\nTest function evaluation:")
     def test_fn(lora_p):
         combined = combine_params_test(base_params, lora_p)
+        print("Combined params:", jax.tree_util.tree_map(lambda x: x.shape, combined))
         # Simple operation that should produce non-zero gradients
         lora_a = combined['attention']['lora_A'] 
         lora_b = combined['attention']['lora_B']
-        return jnp.sum(lora_a @ lora_b)
+        result = jnp.sum(lora_a @ lora_b)
+        print("Test function result:", float(result))
+        return result
 
-    # Check gradients
+    # First run function normally
+    test_fn(lora_params)
+
+    # Then check gradients
+    print("\nGradient computation:")
     grad_fn = jax.grad(test_fn)
     grads = grad_fn(lora_params)
     
@@ -49,7 +61,7 @@ def main():
     print("LoRA params:", jax.tree_util.tree_map(lambda x: x.shape, lora_params))
     
     print("\nGradients:")
-    print(jax.tree_util.tree_map(lambda x: (x.shape, jnp.max(jnp.abs(x))), grads))
+    print(jax.tree_util.tree_map(lambda x: (x.shape, float(jnp.max(jnp.abs(x)))), grads))
 
 if __name__ == "__main__":
     main()
