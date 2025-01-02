@@ -228,8 +228,8 @@ def main(argv):
             for path in lora_params.keys():
                 logginginfo(f"  {'/'.join(str(x) for x in path)}")
 
+        # Don't wrap in params dict since model.apply will do that
         lora_params = unflatten_dict(lora_params)
-        lora_params = {'params': lora_params}  # Wrap in params dict
         
         logginginfo("Creating train state from LoRA parameters...")
         train_state = LoRATrainState.create(params=lora_params, tx=optimizer)
@@ -293,7 +293,7 @@ def main(argv):
 
         # Compute gradients only for LoRA params
         grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
-        (loss, accuracy), grads = grad_fn(train_state.params['params'])
+        (loss, accuracy), grads = grad_fn(train_state.params)
     
         # Update LoRA params only
         updates, new_opt_state = train_state.tx.update(grads, train_state.opt_state, train_state.params['params'])
