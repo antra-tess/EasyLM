@@ -4,6 +4,8 @@ os.environ['JAX_PLATFORMS'] = 'cpu'  # Force CPU
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
+from flax.training import train_state
+from flax.traverse_util import flatten_dict
 import optax
 from typing import Any
 import logging
