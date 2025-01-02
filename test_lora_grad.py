@@ -155,8 +155,8 @@ def main():
     # Wrap with pjit
     sharded_train_step = pjit(
         train_step,
-        in_shardings=(param_partition, param_partition, PS(), PS()),  # Empty PS() for scalars
-        out_shardings=(param_partition, PS(), PS())  # Empty PS() for metrics
+        in_shardings=(param_partition, param_partition, PS()),  # Match number of input args
+        out_shardings=(param_partition, PS())  # Match number of output args
     )
 
     # Training loop with mesh context
