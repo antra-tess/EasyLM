@@ -67,10 +67,11 @@ class SimpleLoRALinear(nn.Module):
         intermediate = jnp.matmul(x, lora_A)
         delta = jnp.matmul(intermediate, lora_B) * scaling
         
-        # Debug prints for key values only
-        jax.debug.print("intermediate max: {}", jnp.max(jnp.abs(intermediate)))
-        jax.debug.print("delta max: {}", jnp.max(jnp.abs(delta)))
+        # Debug prints for attention components
         jax.debug.print("base_out max: {}", jnp.max(jnp.abs(base_out)))
+        jax.debug.print("lora intermediate max: {}", jnp.max(jnp.abs(intermediate)))
+        jax.debug.print("lora delta max: {}", jnp.max(jnp.abs(delta)))
+        jax.debug.print("lora contribution ratio: {}", jnp.max(jnp.abs(delta)) / jnp.max(jnp.abs(base_out)))
         
         return base_out + delta
 
