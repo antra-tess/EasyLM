@@ -248,10 +248,6 @@ def main(argv):
 
     def combine_params(base_params, lora_params):
         """Combine base_params and lora_params back into a single param tree."""
-        # Keep nested structure by combining at each level
-        if not isinstance(base_params, dict) or not isinstance(lora_params, dict):
-            return base_params  # Return base params for non-dict nodes
-        
         combined = {}
         # First add all base params
         for k, v in base_params.items():
