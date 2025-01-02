@@ -128,10 +128,7 @@ def main():
     # Create optimizer
     optimizer = optax.adam(1e-3)
     opt_state = optimizer.init(lora_params)
-    
-    # Training loop
-    train_state = {'params': lora_params, 'opt_state': opt_state}
-    
+
     def loss_fn(lora_params):
         # Extract just the LoRA parameters we want to differentiate
         lora_dict = lora_params['params']
