@@ -245,9 +245,6 @@ class StreamingCheckpointer(object):
                 shard_fns=params_shard_fns,  # Use params sharding directly
                 restore_state=False
             )
-            # Wrap in params dict structure
-            if not isinstance(restored_params, dict) or 'params' not in restored_params:
-                restored_params = {'params': restored_params}
             return restored_params  # Return only params, no train state
         elif load_type == 'flax_params':
             if trainstate_target is not None:
