@@ -283,6 +283,7 @@ def main(argv):
         def loss_and_accuracy(lora_params):
             # Combine with base params for forward pass
             params = combine_params(base_params, lora_params)
+            logginginfo(f"Combined params: {jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, params)}")
             logits = model.apply(
                 params, batch['input_tokens'], deterministic=False,
                 rngs=rng_generator(LLaMAConfigurator.rng_keys()),
