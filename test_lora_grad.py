@@ -140,7 +140,7 @@ def main():
         combined = combine_params_test(base_params['params'], lora_dict)
         
         # Run forward pass and compute loss
-        output = model.apply({'params': combined}, input_data)
+        output = model.apply({'params': combined['params']}, input_data)
         diff = output - target
         loss = jnp.mean(diff * diff)
         
