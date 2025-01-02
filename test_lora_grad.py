@@ -3,15 +3,10 @@ os.environ['JAX_PLATFORMS'] = 'cpu'  # Force CPU
 
 import jax
 import jax.numpy as jnp
-from jax.sharding import Mesh, PartitionSpec as PS
-from jax.experimental.pjit import pjit
+import flax.linen as nn
 import optax
+from typing import Any
 import logging
-
-def get_jax_mesh(mesh_shape, axis_names):
-    device_ids = jnp.array(range(jax.device_count())).reshape(mesh_shape)
-    mesh = Mesh(device_ids, axis_names)
-    return mesh
 
 def combine_params_test(base_params, lora_params):
     """Simplified version of our combine_params logic"""
@@ -27,98 +22,97 @@ def combine_params_test(base_params, lora_params):
             combined[k] = v
     return combined
 
+class SimpleLoRALinear(nn.Module):
+    features: int
+    lora_rank: int = 8
+    
+    @nn.compact
+    def __call__(self, x):
+        # Base weight
+        kernel = self.param('kernel', 
+            jax.nn.initializers.normal(0.02),
+            (x.shape[-1], self.features))
+            
+        # LoRA weights
+        lora_A = self.param('lora_A',
+            jax.nn.initializers.zeros,
+            (x.shape[-1], self.lora_rank))
+        lora_B = self.param('lora_B', 
+            jax.nn.initializers.zeros,
+            (self.lora_rank, self.features))
+            
+        # Compute output with LoRA
+        base_out = jnp.matmul(x, kernel)
+        delta = jnp.matmul(jnp.matmul(x, lora_A), lora_B)
+        return base_out + delta
+
+class SimpleModel(nn.Module):
+    @nn.compact
+    def __call__(self, x):
+        x = SimpleLoRALinear(features=8)(x)
+        x = jax.nn.relu(x)
+        x = SimpleLoRALinear(features=8)(x)
+        return x
+
+def create_train_state(rng, model, input_shape, learning_rate=1e-3):
+    """Creates initial `TrainState` for model."""
+    params = model.init(rng, jnp.ones(input_shape))
+    tx = optax.adam(learning_rate)
+    return train_state.TrainState.create(
+        apply_fn=model.apply,
+        params=params,
+        tx=tx,
+    )
+
 def main():
     print("JAX devices:", jax.devices())
     
-    # Create test parameters with same structure as our model
-    base_params = {
-        'params': {
-            'attention': {
-                'kernel': jnp.ones((4, 4))
-            }
-        }
-    }
+    # Create constant input and target
+    input_data = jnp.ones((1, 16))  # Single constant input
+    target = jnp.ones((1, 8))  # Single constant target
     
-    lora_params = {
-        'params': {
-            'attention': {
-                'lora_A': jnp.ones((4, 2)),
-                'lora_B': jnp.ones((2, 4))
-            }
-        }
-    }
-
-    # Move entire parameter trees to device
-    base_params = jax.device_put(base_params)
-    lora_params = jax.device_put(lora_params)
-
-    # Define partition specs
-    base_param_partition = {
-        'params': {
-            'params': {
-                'attention': {
-                    'kernel': PS('mp', 'fsdp'),
-                    'lora_A': PS('fsdp', None),
-                    'lora_B': PS(None, 'mp')
-                }
-            }
-        }
-    }
+    # Initialize model and parameters
+    model = SimpleModel()
+    rng = jax.random.PRNGKey(0)
+    rng, init_rng = jax.random.split(rng)
     
-    lora_param_partition = {
-        'params': {
-            'params': {
-                'attention': {
-                    'lora_A': PS('fsdp', None),
-                    'lora_B': PS(None, 'mp')
-                }
-            }
-        }
-    }
-
-    print("\nTest function evaluation:")
-    print("\nTesting approach 1 - differentiate wrt all parameters:")
-    def loss_fn_all(all_params):
-        # Simple operation that should produce non-zero gradients
-        lora_a = all_params['params']['params']['attention']['lora_A']
-        lora_b = all_params['params']['params']['attention']['lora_B']
-        return jnp.sum(lora_a @ lora_b), 0.0
-
-    # Use regular jit since we're testing on CPU
-    print("\nTesting approach 1 - differentiate wrt all parameters:")
-    jitted_loss_fn_all = jax.jit(loss_fn_all)
-    grad_fn_all = jax.value_and_grad(loss_fn_all, has_aux=True)
-    jitted_grad_fn_all = jax.jit(grad_fn_all)
-
-    print("\nTesting approach 2 - differentiate wrt LoRA parameters only:")
-    def loss_fn_lora(lora_p):
-        # Combine with base params for forward pass
-        combined = {'params': combine_params_test(base_params, lora_p)}
-        # Simple operation that should produce non-zero gradients
-        lora_a = combined['params']['params']['attention']['lora_A']
-        lora_b = combined['params']['params']['attention']['lora_B']
-        return jnp.sum(lora_a @ lora_b), 0.0
-
-    jitted_loss_fn_lora = jax.jit(loss_fn_lora)
-    grad_fn_lora = jax.value_and_grad(loss_fn_lora, has_aux=True)
-    jitted_grad_fn_lora = jax.jit(grad_fn_lora)
-
-    # Test approach 1
-    combined_params = {'params': combine_params_test(base_params, lora_params)}
-    result, _ = jitted_loss_fn_all(combined_params)
-    print("Test function result (all params):", float(result))
-
-    (loss, _), grads_all = jitted_grad_fn_all(combined_params)
-    print("\nGradients when differentiating all parameters:")
-    print(jax.tree_util.tree_map(lambda x: (x.shape, float(jax.device_get(jnp.max(jnp.abs(x))))), grads_all))
-
-    # Test approach 2
-    result, _ = jitted_loss_fn_lora(lora_params)
-    print("Test function result (LoRA only):", float(result))
-
-    (loss, _), grads_lora = jitted_grad_fn_lora(lora_params)
-    print("\nGradients when differentiating LoRA parameters only:")
-    print(jax.tree_util.tree_map(lambda x: (x.shape, float(jax.device_get(jnp.max(jnp.abs(x))))), grads_lora))
+    # Initialize base parameters with random values
+    base_params = model.init(init_rng, input_data)
+    
+    # Initialize LoRA parameters with zeros
+    lora_params = jax.tree_map(
+        lambda x: jnp.zeros_like(x) if 'lora' in k else x,
+        base_params,
+        is_leaf=lambda k, x: 'lora' in k
+    )
+    
+    # Create optimizer
+    optimizer = optax.adam(1e-3)
+    opt_state = optimizer.init(lora_params)
+    
+    # Training loop
+    for step in range(1000):
+        def loss_fn(params):
+            # Combine parameters for forward pass
+            combined = {'params': combine_params_test(base_params, params)}
+            output = model.apply(combined, input_data)
+            return jnp.mean((output - target) ** 2)
+        
+        # Compute loss and gradients
+        loss_val, grads = jax.value_and_grad(loss_fn)(lora_params)
+        
+        # Print progress every 100 steps
+        if step % 100 == 0:
+            print(f"Step {step}, Loss: {loss_val}")
+            print("Gradient norms:")
+            flat_grads = flatten_dict(grads)
+            for k, v in flat_grads.items():
+                if 'lora' in str(k):
+                    print(f"  {k}: {jnp.linalg.norm(v)}")
+        
+        # Update parameters
+        updates, opt_state = optimizer.update(grads, opt_state)
+        lora_params = optax.apply_updates(lora_params, updates)
 
 if __name__ == "__main__":
     main()
