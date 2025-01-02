@@ -125,7 +125,7 @@ def logginginfo(msg, *args):
 
 def main(argv):
     # Set JAX logging to DEBUG to see compilation logs
-    logging.getLogger("jax").setLevel(logging.DEBUG)
+    #logging.getLogger("jax").setLevel(logging.DEBUG)
     
     JaxDistributedConfig.initialize(FLAGS.jax_distributed)
     variant = mlxu.get_user_flags(FLAGS, FLAGS_DEF)
