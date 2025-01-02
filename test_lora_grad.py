@@ -126,7 +126,7 @@ def main():
     opt_state = optimizer.init(lora_params)
     
     # Set up pjit
-    param_partition = PS(None)  # No sharding for testing
+    param_partition = PS()  # Empty partition spec for scalars
     
     def train_step(train_state, base_params, batch):
         def loss_fn(params):
@@ -155,8 +155,8 @@ def main():
     # Wrap with pjit
     sharded_train_step = pjit(
         train_step,
-        in_shardings=(param_partition, param_partition, param_partition),
-        out_shardings=(param_partition, param_partition)
+        in_shardings=(param_partition, param_partition, PS(), PS()),  # Empty PS() for scalars
+        out_shardings=(param_partition, PS(), PS())  # Empty PS() for metrics
     )
 
     # Training loop with mesh context
