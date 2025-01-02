@@ -1,6 +1,7 @@
 import os
 os.environ['JAX_PLATFORMS'] = 'cpu'  # Force CPU
 
+import numpy as np
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
