@@ -1,22 +1,14 @@
 import os
 os.environ['JAX_PLATFORMS'] = 'cpu'  # Force CPU
 
-import numpy as np
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
 from flax.training import train_state
 from flax.traverse_util import flatten_dict, unflatten_dict
-from jax.sharding import Mesh, PartitionSpec as PS
-from jax.experimental.pjit import pjit
 import optax
 from typing import Any
 import logging
-
-def get_mesh():
-    """Create simple mesh for testing."""
-    mesh = Mesh(np.array(jax.devices()), ('dp',))  # Single axis mesh for testing
-    return mesh
 
 def combine_params_test(base_params, lora_params):
     """Simplified version of our combine_params logic"""
@@ -139,82 +131,31 @@ def main():
     optimizer = optax.adam(1e-3)
     opt_state = optimizer.init(lora_params)
     
-    # Set up pjit
-    param_partition = PS()  # Empty partition spec for scalars
+    # Training loop
+    train_state = {'params': lora_params, 'opt_state': opt_state}
     
-    def train_step(train_state, base_params, batch):
-        def loss_fn(params):
-            # Convert all parameters to float32
-            base_params_f32 = jax.tree_util.tree_map(
-                lambda x: x.astype(jnp.float32) if hasattr(x, 'dtype') else x,
-                base_params
-            )
-            params_f32 = jax.tree_util.tree_map(
-                lambda x: x.astype(jnp.float32) if hasattr(x, 'dtype') else x,
-                params
-            )
-            
-            # Debug print parameter types
-            jax.debug.print("base_params type: {}", jax.tree_util.tree_map(lambda x: x.dtype if hasattr(x, 'dtype') else type(x), base_params_f32))
-            jax.debug.print("params type: {}", jax.tree_util.tree_map(lambda x: x.dtype if hasattr(x, 'dtype') else type(x), params_f32))
-            
-            # Combine float32 parameters
-            combined = combine_params_test(base_params_f32['params'], params_f32['params'])
-            jax.debug.print("combined params type: {}", jax.tree_util.tree_map(lambda x: x.dtype if hasattr(x, 'dtype') else type(x), combined))
-            
-            output = model.apply({'params': combined}, batch)
-            jax.debug.print("output type: {}", output.dtype)
-            
-            # Ensure all inputs to mean are float32
-            output = output.astype(jnp.float32)
-            target_f32 = target.astype(jnp.float32)
-            diff = output - target_f32
-            jax.debug.print("diff type: {}", diff.dtype)
-            
-            loss = jnp.mean(diff * diff)
-            jax.debug.print("loss type: {}", loss.dtype)
-            return loss
+    def loss_fn(params):
+        # Combine parameters for forward pass
+        combined = combine_params_test(base_params['params'], params['params'])
+        output = model.apply({'params': combined}, input_data)
+        return jnp.mean((output - target) ** 2)
 
-        # Pass params directly to loss_fn
-        combined_params = train_state
-        
+    for step in range(3):
         # Compute loss and gradients
-        loss_val, grads = jax.value_and_grad(loss_fn)(combined_params)
+        loss_val, grads = jax.value_and_grad(loss_fn)(train_state['params'])
         jax.debug.print("Raw gradients: {}", 
                        jax.tree_util.tree_map(lambda x: jnp.max(jnp.abs(x)), grads))
         
         # Update parameters
         updates, new_opt_state = optimizer.update(grads, train_state['opt_state'])
         new_params = optax.apply_updates(train_state['params'], updates)
+        train_state = {'params': new_params, 'opt_state': new_opt_state}
         
-        metrics = {
-            'loss': loss_val,
-            'grad_norm': jnp.sqrt(sum(jnp.sum(x**2) for x in jax.tree_util.tree_leaves(grads)))
-        }
-        
-        return {'params': new_params, 'opt_state': new_opt_state}, metrics
-
-    # Wrap with pjit
-    sharded_train_step = pjit(
-        train_step,
-        in_shardings=(param_partition, param_partition, PS()),  # Match number of input args
-        out_shardings=(param_partition, PS())  # Match number of output args
-    )
-
-    # Training loop with mesh context
-    mesh = get_mesh()
-    with mesh:
-        train_state = {'params': lora_params, 'opt_state': opt_state}
-        
-        for step in range(3):
-            train_state, metrics = sharded_train_step(
-                train_state, base_params, input_data
-            )
-            
-            # Print metrics
-            print(f"\nStep {step}:")
-            print(f"Loss: {metrics['loss']}")
-            print(f"Gradient norm: {metrics['grad_norm']}")
+        # Print metrics
+        grad_norm = jnp.sqrt(sum(jnp.sum(x**2) for x in jax.tree_util.tree_leaves(grads)))
+        print(f"\nStep {step}:")
+        print(f"Loss: {loss_val}")
+        print(f"Gradient norm: {grad_norm}")
 
 if __name__ == "__main__":
     main()
