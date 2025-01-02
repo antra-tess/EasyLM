@@ -144,12 +144,22 @@ def main():
     
     def train_step(train_state, base_params, batch):
         def loss_fn(params):
-            # Debug print parameter types
-            jax.debug.print("base_params type: {}", jax.tree_util.tree_map(lambda x: x.dtype if hasattr(x, 'dtype') else type(x), base_params))
-            jax.debug.print("params type: {}", jax.tree_util.tree_map(lambda x: x.dtype if hasattr(x, 'dtype') else type(x), params))
+            # Convert all parameters to float32
+            base_params_f32 = jax.tree_util.tree_map(
+                lambda x: x.astype(jnp.float32) if hasattr(x, 'dtype') else x,
+                base_params
+            )
+            params_f32 = jax.tree_util.tree_map(
+                lambda x: x.astype(jnp.float32) if hasattr(x, 'dtype') else x,
+                params
+            )
             
-            # Combine parameters before gradient computation
-            combined = combine_params_test(base_params['params'], params['params'])
+            # Debug print parameter types
+            jax.debug.print("base_params type: {}", jax.tree_util.tree_map(lambda x: x.dtype if hasattr(x, 'dtype') else type(x), base_params_f32))
+            jax.debug.print("params type: {}", jax.tree_util.tree_map(lambda x: x.dtype if hasattr(x, 'dtype') else type(x), params_f32))
+            
+            # Combine float32 parameters
+            combined = combine_params_test(base_params_f32['params'], params_f32['params'])
             jax.debug.print("combined params type: {}", jax.tree_util.tree_map(lambda x: x.dtype if hasattr(x, 'dtype') else type(x), combined))
             
             output = model.apply({'params': combined}, batch)
