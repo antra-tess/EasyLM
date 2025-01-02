@@ -21,7 +21,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --llama.lora_attn=true \
     --llama.lora_mlp=false \
     --tokenizer="meta-llama/Meta-Llama-3.1-8B" \
-    --load_checkpoint='params::/mnt/disk2/llama-3.1-8b' \
+    --load_checkpoint='base_params::/mnt/disk2/llama-3.1-8b' \
     --train_dataset.type='huggingface' \
     --train_dataset.text_processor.fields='[instruction+input],output' \
     --train_dataset.huggingface_dataset.name="" \
