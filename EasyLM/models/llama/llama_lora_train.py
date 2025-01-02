@@ -627,22 +627,22 @@ def main(argv):
                 base_param_shapes
             )[0]
 
-            train_state, restored_params = checkpointer.load_trainstate_checkpoint(
-                FLAGS.load_checkpoint, train_state_shapes, base_shard_fns
+            # Load base model parameters first
+            base_params = checkpointer.load_trainstate_checkpoint(
+                FLAGS.load_checkpoint, base_param_shapes, base_shard_fns,
+                load_type='base_params'
             )
-            logginginfo("Loaded checkpoint")
+            logginginfo("Loaded base model parameters")
             
-            # Debug logging for restored parameters
+            # Debug logging for base parameters
             if jax.process_index() == 0:
-                flat_params = flatten_dict(restored_params['params'])
-                logginginfo("Restored parameters:")
+                flat_params = flatten_dict(base_params['params'])
+                logginginfo("Base model parameters:")
                 for k, v in flat_params.items():
                     path_str = '/'.join(str(x) for x in k)
                     logginginfo(f"  {path_str}: shape={v.shape if hasattr(v, 'shape') else 'no shape'}")
-                    if 'lora_' in path_str:
-                        logginginfo("    WARNING: Found LoRA parameter in restored_params!")
             
-            log_memory_usage("After checkpoint load")
+            log_memory_usage("After base parameter load")
 
         if train_state is None and restored_params is None:
             # Initialize from scratch
