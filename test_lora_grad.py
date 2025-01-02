@@ -51,17 +51,21 @@ def main():
     # Define partition specs
     base_param_partition = {
         'params': {
-            'attention': {
-                'kernel': PS('mp', 'fsdp')
+            'params': {
+                'attention': {
+                    'kernel': PS('mp', 'fsdp')
+                }
             }
         }
     }
     
     lora_param_partition = {
         'params': {
-            'attention': {
-                'lora_A': PS('fsdp', None),
-                'lora_B': PS(None, 'mp')
+            'params': {
+                'attention': {
+                    'lora_A': PS('fsdp', None),
+                    'lora_B': PS(None, 'mp')
+                }
             }
         }
     }
