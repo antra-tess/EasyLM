@@ -241,7 +241,7 @@ def main(argv):
                 combined[k] = combine_params(combined[k], v)
             else:
                 combined[k] = v
-        return {'params': combined}
+        return combined
 
     # Quick test of combine_params
     if jax.process_index() == 0:
@@ -271,7 +271,7 @@ def main(argv):
     
         def loss_and_accuracy(lora_params):
             # Combine with base params for forward pass
-            params = combine_params(base_params, lora_params)
+            params = {'params': combine_params(base_params, lora_params)}
             logginginfo(f"Combined params: {jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, params)}")
             logits = model.apply(
                 params, batch['input_tokens'], deterministic=False,
