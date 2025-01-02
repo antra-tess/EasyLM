@@ -239,7 +239,8 @@ def main(argv):
     def combine_params(base_params, lora_params):
         """Combine base_params and lora_params back into a single param tree."""
         # Base case: if either input is not a dict, return base params
-        base_params = base_params['params']
+        if 'params' in base_params:
+            base_params = base_params['params']
 
         combined = {}
         # First add all base params
