@@ -1204,9 +1204,6 @@ class LoRALinear(nn.Module):
         lora_alpha = self.config.lora_alpha
         scaling = lora_alpha / lora_rank
         
-        # Debug print scaling and config values
-        jax.debug.print("LoRA config - rank: {}, alpha: {}, scaling: {}", 
-                       lora_rank, lora_alpha, scaling)
 
         # A and B are the low-rank factors
         #   A: (in_features, lora_rank)
