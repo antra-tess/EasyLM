@@ -365,7 +365,7 @@ def main(argv):
     
     # Now get partition rules for just base parameters
     base_param_partition = match_partition_rules(
-        LLaMAConfigurator.get_partition_rules(), base_param_shapes
+        LLaMAConfigurator.get_partition_rules(), base_param_shapes, debug_print=True,
     )
     logginginfo("Train state partitioning complete")
 
