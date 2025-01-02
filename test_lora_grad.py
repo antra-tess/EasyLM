@@ -104,8 +104,8 @@ def main():
     for step in range(1000):
         def loss_fn(params):
             # Combine parameters for forward pass
-            combined = {'params': combine_params_test(base_params, params)}
-            output = model.apply(combined, input_data)
+            combined = combine_params_test(base_params, params)
+            output = model.apply({'params': combined}, input_data)
             return jnp.mean((output - target) ** 2)
         
         # Compute loss and gradients
