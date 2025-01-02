@@ -375,7 +375,8 @@ def match_partition_rules(rules, params):
             return PS()
         for rule, ps in rules:
             if re.search(rule, name) is not None:
-                # logging.info(f'Partition rule matched for param: {str(name)}, {str(rule)}')
+                if jax.process_index() == 0:
+                    logging.info(f'Partition rule matched for param: {str(name)}, {str(rule)}')
                 return ps
         raise ValueError(f'Partition rule not found for param: {name}')
     return named_tree_map(get_partition_spec, params, sep='/')
