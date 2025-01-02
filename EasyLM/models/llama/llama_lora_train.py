@@ -157,10 +157,10 @@ def main(argv):
     seq_length = dataset.seq_length
     llama_config = LLaMAConfigurator.finalize_config(FLAGS.llama)
     
-    # Add base model name as a tag
-    if not hasattr(FLAGS.logger, 'tags') or FLAGS.logger.tags is None:
-        FLAGS.logger.tags = []
-    FLAGS.logger.tags.append(f"base_model_{llama_config.base_model}")
+    # # Add base model name as a tag
+    # if not hasattr(FLAGS.logger, 'tags') or FLAGS.logger.tags is None:
+    #     FLAGS.logger.tags = []
+    # FLAGS.logger.tags.append(f"base_model_{llama_config.base_model}")
 
     logginginfo("Starting model initialization...")
     model = FlaxLLaMAForCausalLMModule(
