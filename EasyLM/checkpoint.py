@@ -184,10 +184,6 @@ class StreamingCheckpointer(object):
     def load_trainstate_checkpoint(cls, load_from, trainstate_target=None,
                                    trainstate_shard_fns=None,
                                    disallow_trainstate=False):
-        if trainstate_target is not None:
-            params_target = trainstate_target.params['params']
-        else:
-            params_target = None
 
         if trainstate_shard_fns is not None:
             #print("trainstate_shard_fns: ", trainstate_shard_fns)
@@ -212,6 +208,10 @@ class StreamingCheckpointer(object):
                 shard_fns=trainstate_shard_fns,
             )
         elif load_type == 'trainstate_params':
+            if trainstate_target is not None:
+                params_target = trainstate_target.params['params']
+            else:
+                params_target = None
             # Load the params part of the train state in the streaming format
             restored_params = cls.load_checkpoint(
                 path=load_path,
@@ -221,6 +221,10 @@ class StreamingCheckpointer(object):
             )
             restored_params = {'params': restored_params}
         elif load_type == 'params':
+            if trainstate_target is not None:
+                params_target = trainstate_target.params['params']
+            else:
+                params_target = None
             # Load the params in the streaming format
             restored_params = cls.load_checkpoint(
                 path=load_path,
@@ -237,6 +241,10 @@ class StreamingCheckpointer(object):
             )
             return restored_params  # Return only params, no train state
         elif load_type == 'flax_params':
+            if trainstate_target is not None:
+                params_target = trainstate_target.params['params']
+            else:
+                params_target = None
             # Load the params in the standard flax format (non-streaming)
             # This requires the entire params to fit in memory
             restored_params = cls.load_flax_checkpoint(
