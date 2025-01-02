@@ -304,6 +304,14 @@ def main(argv):
         )
         logginginfo("Train state updated")
 
+        # Add gradient structure logging
+        if jax.process_index() == 0:
+            logginginfo("Gradient structure:")
+            for k, v in flat_grads.items():
+                logginginfo(f"  {'/'.join(str(x) for x in k)}: shape={v.shape}, dtype={v.dtype}")
+                if isinstance(v, jnp.ndarray):
+                    logginginfo(f"    max={jnp.max(jnp.abs(v))}, mean={jnp.mean(jnp.abs(v))}")
+
         metrics = dict(
             loss=loss,
             accuracy=accuracy,
