@@ -36,26 +36,31 @@ class SimpleLoRALinear(nn.Module):
     
     @nn.compact
     def __call__(self, x):
+        # Convert shapes to concrete values to avoid weak typing
+        input_dim = int(x.shape[-1])
+        output_dim = int(self.features)
+        rank = int(self.lora_rank)
+        
         x = x.astype(jnp.float32)  # Ensure input is float32
         
-        # Base weight
+        # Base weight with concrete shapes
         kernel = self.param('kernel', 
             jax.nn.initializers.normal(0.02),
-            (x.shape[-1], self.features),
-            jnp.float32)  # Explicitly float32
+            (input_dim, output_dim),
+            jnp.float32)
             
-        # LoRA weights with scaling
+        # LoRA weights with concrete shapes
         lora_alpha = 8.0  # Like in real LoRA
-        scaling = lora_alpha / self.lora_rank
+        scaling = lora_alpha / rank
         
         lora_A = self.param('lora_A',
             jax.nn.initializers.normal(0.02),
-            (x.shape[-1], self.lora_rank),
-            jnp.float32)  # Explicitly float32
+            (input_dim, rank),
+            jnp.float32)
         lora_B = self.param('lora_B', 
             jax.nn.initializers.normal(0.02),
-            (self.lora_rank, self.features),
-            jnp.float32)  # Explicitly float32
+            (rank, output_dim),
+            jnp.float32)
             
         # Compute output with LoRA
         base_out = jnp.matmul(x, kernel)
