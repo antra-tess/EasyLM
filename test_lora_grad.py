@@ -12,6 +12,10 @@ import logging
 
 def combine_params_test(base_params, lora_params):
     """Simplified version of our combine_params logic"""
+    # Base case: if either input is not a dict, return base params
+    if not isinstance(base_params, dict) or not isinstance(lora_params, dict):
+        return base_params
+
     combined = {}
     # First add all base params
     for k, v in base_params.items():
