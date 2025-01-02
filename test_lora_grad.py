@@ -82,11 +82,15 @@ def main():
     base_params = model.init(init_rng, input_data)
     
     # Initialize LoRA parameters with zeros
-    lora_params = jax.tree_map(
-        lambda k, x: jnp.zeros_like(x) if 'lora' in str(k) else x,
-        base_params,
-        is_leaf=lambda k, x: 'lora' in str(k)
-    )
+    flat_params = flatten_dict(base_params)
+    lora_params = {}
+    for k, v in flat_params.items():
+        path_str = '/'.join(str(x) for x in k)
+        if 'lora' in path_str:
+            lora_params[k] = jnp.zeros_like(v)
+        else:
+            lora_params[k] = v
+    lora_params = unflatten_dict(lora_params)
     
     # Create optimizer
     optimizer = optax.adam(1e-3)
