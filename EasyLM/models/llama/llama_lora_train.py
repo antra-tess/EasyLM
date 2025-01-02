@@ -158,7 +158,7 @@ def main(argv):
     llama_config = LLaMAConfigurator.finalize_config(FLAGS.llama)
     
     # Add base model name as a tag
-    if FLAGS.logger.tags is None:
+    if not hasattr(FLAGS.logger, 'tags') or FLAGS.logger.tags is None:
         FLAGS.logger.tags = []
     FLAGS.logger.tags.append(f"base_model_{llama_config.base_model}")
 
