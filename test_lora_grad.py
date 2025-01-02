@@ -141,7 +141,11 @@ def main():
             # Combine parameters before gradient computation
             combined = combine_params_test(base_params['params'], params['params'])
             output = model.apply({'params': combined}, batch)
-            return jnp.mean((output.astype(jnp.float32) - target) ** 2)
+            # Ensure all inputs to mean are float32
+            output = output.astype(jnp.float32)
+            target_f32 = target.astype(jnp.float32)
+            diff = output - target_f32
+            return jnp.mean(diff * diff)
 
         # Pass params directly to loss_fn
         combined_params = train_state
