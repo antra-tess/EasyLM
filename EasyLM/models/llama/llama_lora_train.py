@@ -287,8 +287,9 @@ def main(argv):
         logginginfo("Gradient computation complete")
         # Count total and non-zero gradients
         flat_grads = flatten_dict(grads)
-        num_nonzero = jax.device_get(sum(jnp.any(jnp.abs(v) > 0) for v in flat_grads.values()))
-        logginginfo("Gradients %d, non-zero gradients %d", len(flat_grads), int(num_nonzero))
+        num_nonzero = sum(jnp.any(jnp.abs(v) > 0) for v in flat_grads.values())
+        num_nonzero = int(jax.device_get(num_nonzero))
+        logginginfo("Gradients %d, non-zero gradients %d", len(flat_grads), num_nonzero)
 
         # Update LoRA params only
         updates, new_opt_state = train_state.tx.update(grads, train_state.opt_state, train_state.params)
