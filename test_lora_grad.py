@@ -34,7 +34,7 @@ def main():
     base_params = {
         'params': {
             'attention': {
-                'kernel': jnp.ones((4, 4))
+                'kernel': jax.device_put(jnp.ones((4, 4)))
             }
         }
     }
@@ -42,8 +42,8 @@ def main():
     lora_params = {
         'params': {
             'attention': {
-                'lora_A': jnp.ones((4, 2)),
-                'lora_B': jnp.ones((2, 4))
+                'lora_A': jax.device_put(jnp.ones((4, 2))),
+                'lora_B': jax.device_put(jnp.ones((2, 4)))
             }
         }
     }
