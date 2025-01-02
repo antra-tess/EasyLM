@@ -372,7 +372,7 @@ def main(argv):
     if jax.process_index() == 0:
         logginginfo("Base state_partition: %s", str(base_param_partition))
         logginginfo("Lora state_partition: %s", str(train_state_partition))
-        logginginfo("Testing if dict is flattened: ", len(base_param_partition.params['transformer']))
+        logginginfo("Testing if dict is flattened: ", len(base_param_partition['params']['transformer']))
 
     # # Log partition specs and actual shapes
     # if jax.process_index() == 0:
