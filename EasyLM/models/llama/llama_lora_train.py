@@ -668,6 +668,14 @@ def main(argv):
             logginginfo(f"Initializing LoRA parameters with rank {llama_config.lora_rank}")
             log_memory_usage("Before LoRA init")
             
+            # Validate LoRA config
+            if llama_config.lora_rank <= 0:
+                raise ValueError(f"LoRA rank must be positive, got {llama_config.lora_rank}")
+            if llama_config.lora_alpha <= 0:
+                raise ValueError(f"LoRA alpha must be positive, got {llama_config.lora_alpha}")
+            if not (llama_config.lora_attn or llama_config.lora_mlp):
+                raise ValueError("At least one of lora_attn or lora_mlp must be True")
+            
             # Create empty LoRA parameter structure
             lora_params = {'params': {}}
             for layer_idx in range(llama_config.num_hidden_layers):
@@ -683,6 +691,18 @@ def main(argv):
                         layer_params[f'feed_forward/{name}/lora_A'] = jnp.zeros((llama_config.hidden_size, llama_config.lora_rank))
                         layer_params[f'feed_forward/{name}/lora_B'] = jnp.zeros((llama_config.lora_rank, llama_config.hidden_size))
                 lora_params['params'][f'transformer/h/{layer_idx}'] = layer_params
+                
+            # Validate created parameter structure
+            flat_params = flatten_dict(lora_params)
+            expected_param_count = llama_config.num_hidden_layers * (
+                (8 if llama_config.lora_attn else 0) +  # 4 attention matrices * 2 (A&B)
+                (6 if llama_config.lora_mlp else 0)     # 3 MLP matrices * 2 (A&B)
+            )
+            actual_param_count = len([k for k in flat_params.keys() if 'lora_' in str(k)])
+            if actual_param_count != expected_param_count:
+                raise ValueError(f"Expected {expected_param_count} LoRA parameters but got {actual_param_count}")
+            
+            logginginfo(f"Created LoRA parameter structure with {actual_param_count} parameters")
             
             # Create train state with only LoRA params
             logginginfo("Creating train state from LoRA params")
