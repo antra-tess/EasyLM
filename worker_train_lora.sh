@@ -14,14 +14,14 @@ echo "HF_TOKEN is${HF_TOKEN:+ set}${HF_TOKEN:-" not set"}"
 cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --mesh_dim='1,-1,1' \
     --dtype='bf16' \
-    --llama.base_model='llama31_8b' \
+    --llama.base_model='llama32_1b' \
     --llama.lora_rank=8 \
     --llama.lora_alpha=16 \
     --llama.lora_dropout=0.1 \
     --llama.lora_attn=true \
     --llama.lora_mlp=false \
-    --tokenizer="meta-llama/Meta-Llama-3.1-8B" \
-    --load_checkpoint='base_params::/mnt/disk2/llama-3.1-8b' \
+    --tokenizer="meta-llama/Meta-Llama-3.2-1B" \
+    --load_checkpoint='base_params::/mnt/disk2/llama-3.2-1b' \
     --train_dataset.type='huggingface' \
     --train_dataset.text_processor.fields='[instruction+input],output' \
     --train_dataset.huggingface_dataset.name="" \

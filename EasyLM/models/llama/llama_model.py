@@ -213,6 +213,18 @@ class LLaMAConfigurator(object):
                 rms_norm_eps=1e-5,
                 rope_theta=5e5,
             ),
+            'llama32_1b': dict(
+                base_model='llama32_1b',
+                vocab_size=128256,
+                hidden_size=2048,
+                intermediate_size=8192,
+                num_hidden_layers=16,
+                num_attention_heads=32,
+                num_key_value_heads=8,
+                max_position_embeddings=4096,  # 16384, #131072,
+                rope_theta=5e5,
+                rms_norm_eps=1e-5,
+            ),
             'llama31_8b': dict(
                 base_model='llama31_8b',
                 vocab_size=128256,
