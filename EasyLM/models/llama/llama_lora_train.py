@@ -379,7 +379,8 @@ def main(argv):
                 layer_base_partition[f'transformer/h/{layer_num}'] = {}
             # Add partition spec under the layer
             remaining_key = '/'.join(str(x) for x in k[3:])
-            layer_base_partition[f'transformer/h/{layer_num}'][remaining_key] = v
+            if 'lora_' in remaining_key:  # Only keep LoRA parameters
+                layer_base_partition[f'transformer/h/{layer_num}'][remaining_key] = v
             
     base_param_partition = {'params': layer_base_partition}
     logginginfo("Train state partitioning complete")
