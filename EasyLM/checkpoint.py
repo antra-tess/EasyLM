@@ -243,7 +243,6 @@ class StreamingCheckpointer(object):
                 path=load_path,
                 target=params_target,
                 shard_fns=params_shard_fns,  # Use params sharding directly
-                remove_dict_prefix='params'
             )
             return restored_params  # Return only params, no train state
         elif load_type == 'flax_params':
