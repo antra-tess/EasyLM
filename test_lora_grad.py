@@ -49,7 +49,21 @@ class SimpleLoRALinear(nn.Module):
             
         # Compute output with LoRA
         base_out = jnp.matmul(x, kernel)
-        delta = jnp.matmul(jnp.matmul(x, lora_A), lora_B)
+        intermediate = jnp.matmul(x, lora_A)
+        delta = jnp.matmul(intermediate, lora_B)
+        
+        # Debug prints
+        jax.debug.print("x shape: {}", x.shape)
+        jax.debug.print("kernel shape: {}", kernel.shape)
+        jax.debug.print("lora_A shape: {}", lora_A.shape)
+        jax.debug.print("lora_B shape: {}", lora_B.shape)
+        jax.debug.print("intermediate shape: {}", intermediate.shape)
+        jax.debug.print("intermediate max: {}", jnp.max(jnp.abs(intermediate)))
+        jax.debug.print("delta shape: {}", delta.shape)
+        jax.debug.print("delta max: {}", jnp.max(jnp.abs(delta)))
+        jax.debug.print("base_out shape: {}", base_out.shape)
+        jax.debug.print("base_out max: {}", jnp.max(jnp.abs(base_out)))
+        
         return base_out + delta
 
 class SimpleModel(nn.Module):
