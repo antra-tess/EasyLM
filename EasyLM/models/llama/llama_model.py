@@ -1258,11 +1258,6 @@ class LoRALinear(nn.Module):
         else:
             base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
             
-        # Debug print contribution details
-        jax.debug.print("base_out max: {}", jnp.max(jnp.abs(base_out)))
-        jax.debug.print("lora delta max: {}", jnp.max(jnp.abs(delta)))
-        jax.debug.print("lora contribution ratio: {}", 
-                       jnp.max(jnp.abs(delta)) / jnp.max(jnp.abs(base_out)))
         
         y = base_out + delta
 
