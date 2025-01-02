@@ -370,7 +370,7 @@ def main(argv):
     logginginfo("Train state partitioning complete")
 
     if jax.process_index() == 0:
-        print("Testing if dict is flattened: ", train_state_partition)
+        print("Train state_partition: ", train_state_partition)
         print("Testing if dict is flattened: ", len(base_param_partition['transformer']))
 
     # # Log partition specs and actual shapes
