@@ -402,7 +402,7 @@ class FlaxLLaMAAttention(nn.Module):
         config = self.config
         head_dim = config.hidden_size // config.num_attention_heads
 
-        if config.lora_attn:
+        if config.lora_rank > 0:
             # Use LoRA for attention layers
             self.wq = LoRALinear(
                 config.num_attention_heads * head_dim,
