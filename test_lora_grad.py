@@ -136,7 +136,7 @@ def main():
             # Combine parameters before gradient computation
             combined = combine_params_test(base_params['params'], params['params'])
             output = model.apply({'params': combined}, batch)
-            return jnp.mean((output - target) ** 2)
+            return jnp.mean((output.astype(jnp.float32) - target) ** 2)
 
         # Pass params directly to loss_fn
         combined_params = train_state
