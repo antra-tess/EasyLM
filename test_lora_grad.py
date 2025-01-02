@@ -120,13 +120,15 @@ def main():
     # Training loop
     for step in range(1000):
         def loss_fn(params):
-            # Combine parameters for forward pass
-            combined = combine_params_test(base_params['params'], params['params'])
-            output = model.apply({'params': combined}, input_data)
+            # Use combined parameters directly
+            output = model.apply(params, input_data)
             return jnp.mean((output - target) ** 2)
+
+        # Combine parameters before gradient computation
+        combined_params = {'params': combine_params_test(base_params['params'], lora_params['params'])}
         
-        # Compute loss and gradients
-        loss_val, grads = jax.value_and_grad(loss_fn)(lora_params)
+        # Compute loss and gradients with respect to combined parameters
+        loss_val, grads = jax.value_and_grad(loss_fn)(combined_params)
         jax.debug.print("Raw gradients: {}", 
                        jax.tree_util.tree_map(lambda x: jnp.max(jnp.abs(x)), grads))
         
