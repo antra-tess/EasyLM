@@ -227,6 +227,10 @@ def main(argv):
 
     def combine_params(base_params, lora_params):
         """Combine base_params and lora_params back into a single param tree."""
+        # Base case: if either input is not a dict, return base params
+        if not isinstance(base_params, dict) or not isinstance(lora_params, dict):
+            return base_params
+            
         combined = {}
         # First add all base params
         for k, v in base_params.items():
