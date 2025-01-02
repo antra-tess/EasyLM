@@ -201,10 +201,17 @@ def main(argv):
                     # Get the module path without the final 'kernel'
                     base_path = path[:-1]
                     # Add LoRA A and B parameters
+                    # Initialize LoRA parameters with small normal values like in test
+                    rng_A = jax.random.split(rng_generator())[0]
+                    rng_B = jax.random.split(rng_generator())[0]
                     lora_A_path = base_path + ('lora_A',)
                     lora_B_path = base_path + ('lora_B',)
-                    lora_params[lora_A_path] = jnp.zeros((shape.shape[0], llama_config.lora_rank))
-                    lora_params[lora_B_path] = jnp.zeros((llama_config.lora_rank, shape.shape[1]))
+                    lora_params[lora_A_path] = jax.random.normal(
+                        rng_A, (shape.shape[0], llama_config.lora_rank)
+                    ) * 0.02
+                    lora_params[lora_B_path] = jax.random.normal(
+                        rng_B, (llama_config.lora_rank, shape.shape[1])
+                    ) * 0.02
             # Check if this is a MLP weight we want to add LoRA to
             elif 'feed_forward' in path_str and any(f'/{w}/' in path_str for w in ['w1', 'w2', 'w3']) and path[-1] == 'kernel':
                 if llama_config.lora_mlp:
