@@ -94,7 +94,16 @@ class StreamingCheckpointer(object):
             )
 
     @staticmethod
-    def load_checkpoint(path, target=None, shard_fns=None, remove_dict_prefix=None):
+    def load_checkpoint(path, target=None, shard_fns=None, remove_dict_prefix=None, restore_state=True):
+        if jax.process_index() == 0:
+            logging.info(f"Loading checkpoint from {path}")
+            if shard_fns is not None:
+                logging.info("Shard functions provided:")
+                for k, v in flatten_dict(to_state_dict(shard_fns)).items():
+                    logging.info(f"  {'/'.join(str(x) for x in k)}")
+            if remove_dict_prefix is not None:
+                logging.info(f"Removing prefix: {remove_dict_prefix}")
+
         if shard_fns is not None:
             shard_fns = flatten_dict(
                 to_state_dict(shard_fns)
@@ -102,6 +111,7 @@ class StreamingCheckpointer(object):
         if remove_dict_prefix is not None:
             remove_dict_prefix = tuple(remove_dict_prefix)
         flattend_train_state = {}
+        counter = 0
         with mlxu.open_file(path) as fin:
             # 83886080 bytes = 80 MB, which is 16 blocks on GCS
             unpacker = msgpack.Unpacker(fin, read_size=83886080, max_buffer_size=0)
@@ -115,8 +125,19 @@ class StreamingCheckpointer(object):
 
                 tensor = from_bytes(None, value)
                 if shard_fns is not None:
-                    tensor = shard_fns[key](tensor)
+                    if jax.process_index() == 0:
+                        logging.info(f"Applying sharding to {'/'.join(str(x) for x in key)} with shape {tensor.shape}")
+                    counter += 1
+                    try:
+                        tensor = shard_fns[key](tensor)
+                    except KeyError as e:
+                        if jax.process_index() == 0:
+                            logging.info(f"No sharding function found for key {key}")
+                            logging.info(f"Available shard_fns keys: {list(shard_fns.keys())}")
+                        raise
                 flattend_train_state[key] = tensor
+        if counter == 0:
+            raise ValueError(f"No tensor sharding was applied {path}")
 
         if target is not None:
             flattened_target = flatten_dict(
@@ -141,7 +162,7 @@ class StreamingCheckpointer(object):
             pass
 
         train_state = unflatten_dict(flattend_train_state)
-        if target is None:
+        if target is None or not restore_state:
             return train_state
 
         return from_state_dict(target, train_state)
@@ -167,13 +188,14 @@ class StreamingCheckpointer(object):
     def load_trainstate_checkpoint(cls, load_from, trainstate_target=None,
                                    trainstate_shard_fns=None,
                                    disallow_trainstate=False):
-        if trainstate_target is not None:
-            params_target = trainstate_target.params['params']
-        else:
-            params_target = None
 
         if trainstate_shard_fns is not None:
-            params_shard_fns = trainstate_shard_fns.params['params']
+            #print("trainstate_shard_fns: ", trainstate_shard_fns)
+            # Handle both dictionary and object cases
+            if isinstance(trainstate_shard_fns, dict):
+                params_shard_fns = trainstate_shard_fns['params']
+            else:
+                params_shard_fns = trainstate_shard_fns.params['params']
         else:
             params_shard_fns = None
 
@@ -190,6 +212,10 @@ class StreamingCheckpointer(object):
                 shard_fns=trainstate_shard_fns,
             )
         elif load_type == 'trainstate_params':
+            if trainstate_target is not None:
+                params_target = trainstate_target.params['params']
+            else:
+                params_target = None
             # Load the params part of the train state in the streaming format
             restored_params = cls.load_checkpoint(
                 path=load_path,
@@ -199,6 +225,10 @@ class StreamingCheckpointer(object):
             )
             restored_params = {'params': restored_params}
         elif load_type == 'params':
+            if trainstate_target is not None:
+                params_target = trainstate_target.params['params']
+            else:
+                params_target = None
             # Load the params in the streaming format
             restored_params = cls.load_checkpoint(
                 path=load_path,
@@ -206,7 +236,28 @@ class StreamingCheckpointer(object):
                 shard_fns=params_shard_fns,
             )
             restored_params = {'params': restored_params}
+        elif load_type == 'base_params':
+            # Load base model parameters only, no train state
+            if trainstate_target is not None:
+                params_target = trainstate_target.get('params', None)
+            else:
+                params_target = None
+
+            restored_params = cls.load_checkpoint(
+                path=load_path,
+                target=params_target,
+                shard_fns=params_shard_fns,  # Use params sharding directly
+                restore_state=False
+            )
+            # Wrap in params dict structure
+            if not isinstance(restored_params, dict) or 'params' not in restored_params:
+                restored_params = {'params': restored_params}
+            return restored_params  # Return only params, no train state
         elif load_type == 'flax_params':
+            if trainstate_target is not None:
+                params_target = trainstate_target.params['params']
+            else:
+                params_target = None
             # Load the params in the standard flax format (non-streaming)
             # This requires the entire params to fit in memory
             restored_params = cls.load_flax_checkpoint(

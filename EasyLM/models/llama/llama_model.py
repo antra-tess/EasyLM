@@ -213,6 +213,18 @@ class LLaMAConfigurator(object):
                 rms_norm_eps=1e-5,
                 rope_theta=5e5,
             ),
+            'llama32_1b': dict(
+                base_model='llama32_1b',
+                vocab_size=128256,
+                hidden_size=2048,
+                intermediate_size=8192,
+                num_hidden_layers=16,
+                num_attention_heads=32,
+                num_key_value_heads=8,
+                max_position_embeddings=4096,  # 16384, #131072,
+                rope_theta=5e5,
+                rms_norm_eps=1e-5,
+            ),
             'llama31_8b': dict(
                 base_model='llama31_8b',
                 vocab_size=128256,
@@ -221,7 +233,7 @@ class LLaMAConfigurator(object):
                 num_hidden_layers=32,
                 num_attention_heads=32,
                 num_key_value_heads=8,
-                max_position_embeddings=16384, #131072,
+                max_position_embeddings=4096, #16384, #131072,
                 rope_theta=5e5,
                 rms_norm_eps=1e-5,
             ),
@@ -258,37 +270,63 @@ class LLaMAConfigurator(object):
 
     @staticmethod
     def get_partition_rules():
-        """ Parition rules for GPTJ. Note that these rules are orderd, so that
-            the beginning rules match first. It is important to use
-            PartitionSpec() instead of None here because JAX does not treat
-            None as a pytree leaf.
-        """
+        """ Partition rules for full model training. """
         return (
             # embeddings
             ("transformer/wte/embedding", PS("mp", "fsdp")),
-            # atention
+            # attention
             (".*/attention/(wq|wk|wv)/kernel", PS("fsdp", "mp")),
             (".*/attention/wo/kernel", PS("mp", "fsdp")),
-            # LoRA parameters in attention
-            (".*/attention/(wq|wk|wv)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
-            (".*/attention/(wq|wk|wv)/lora_B", PS(None, "mp")),  # shape [lora_rank, hidden_size]
-            (".*/attention/wo/lora_A", PS("mp", None)),  # shape [hidden_size, lora_rank]
-            (".*/attention/wo/lora_B", PS(None, "fsdp")),  # shape [lora_rank, hidden_size]
             # mlp
             (".*/feed_forward/w1/kernel", PS("fsdp", "mp")),
             (".*/feed_forward/w2/kernel", PS("mp", "fsdp")),
             (".*/feed_forward/w3/kernel", PS("fsdp", "mp")),
-            # mlp lora
-            (".*/feed_forward/(w1|w3)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
-            (".*/feed_forward/(w1|w3)/lora_B", PS(None, "mp")),  # shape [lora_rank, intermediate_size]
-            (".*/feed_forward/w2/lora_A", PS("mp", None)),          # shape [intermediate_size, lora_rank]
-            (".*/feed_forward/w2/lora_B", PS(None, "fsdp")),        # shape [lora_rank, hidden_size]
-
             # layer norms
             (".*/attention_norm/kernel", PS(None)),
             (".*/ffn_norm/kernel", PS(None)),
             # output head
             (".*/transformer/ln_f/kernel", PS(None)),
+            ("lm_head/kernel", PS("fsdp", "mp")),
+            ('.*', PS(None)),
+        )
+
+    @staticmethod
+    def get_lora_partition_rules():
+        """ Partition rules specifically for LoRA parameters. """
+        return (
+            # LoRA parameters in attention
+            ("transformer/.*/attention/(wq|wk|wv)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
+            ("transformer/.*/attention/(wq|wk|wv)/lora_B", PS(None, "mp")),    # shape [lora_rank, hidden_size]
+            ("transformer/.*/attention/wo/lora_A", PS("mp", None)),            # shape [hidden_size, lora_rank]
+            ("transformer/.*/attention/wo/lora_B", PS(None, "fsdp")),          # shape [lora_rank, hidden_size]
+            # LoRA parameters in mlp (if enabled)
+            ("transformer/.*/feed_forward/(w1|w3)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
+            ("transformer/.*/feed_forward/(w1|w3)/lora_B", PS(None, "mp")),    # shape [lora_rank, intermediate_size]
+            ("transformer/.*/feed_forward/w2/lora_A", PS("mp", None)),         # shape [intermediate_size, lora_rank]
+            ("transformer/.*/feed_forward/w2/lora_B", PS(None, "fsdp")),       # shape [lora_rank, hidden_size]
+            ('.*', PS(None)),
+        )
+
+    @staticmethod
+    def get_base_param_rules():
+        """ Partition rules for base model parameters during LoRA training.
+            Similar to regular rules but simpler.
+        """
+        return (
+            # embeddings
+            ("transformer/wte/embedding", PS("mp", "fsdp")),
+            # attention
+            ("attention/(wq|wk|wv)/kernel", PS("fsdp", "mp")),
+            ("attention/wo/kernel", PS("mp", "fsdp")),
+            # mlp
+            ("feed_forward/w1/kernel", PS("fsdp", "mp")),
+            ("feed_forward/w2/kernel", PS("mp", "fsdp")),
+            ("feed_forward/w3/kernel", PS("fsdp", "mp")),
+            # layer norms
+            ("attention_norm/kernel", PS(None)),
+            ("ffn_norm/kernel", PS(None)),
+            # output head
+            ("transformer/ln_f/kernel", PS(None)),
             ("lm_head/kernel", PS("fsdp", "mp")),
             ('.*', PS(None)),
         )
@@ -494,30 +532,25 @@ class FlaxLLaMAAttention(nn.Module):
         xk = with_sharding_constraint(xk, PS(("dp", "fsdp"), None, "mp"))
         xv = with_sharding_constraint(xv, PS(("dp", "fsdp"), None, "mp"))
 
-        # Add sharding constraint before rearranging/repeating
-        xq = with_sharding_constraint(xq, PS(("dp", "fsdp"), None, "mp"))
-        xk = with_sharding_constraint(xk, PS(("dp", "fsdp"), None, "mp"))
-        xv = with_sharding_constraint(xv, PS(("dp", "fsdp"), None, "mp"))
-
         xq = einops.rearrange(
             xq, 'b s (h d) -> b s h d',
             h=self.config.num_attention_heads,
         )
-        xq = with_sharding_constraint(xq, PS(("dp", "fsdp"), None, "mp", None))
+#        xq = with_sharding_constraint(xq, PS(("dp", "fsdp"), None, "mp", None))
 
         xk = einops.repeat(
             xk, 'b s (h d) -> b s (h g) d',
             h=self.config.num_key_value_heads,
             g=self.config.num_attention_heads // self.config.num_key_value_heads,
         )
-        xk = with_sharding_constraint(xk, PS(("dp", "fsdp"), None, "mp", None))
+#        xk = with_sharding_constraint(xk, PS(("dp", "fsdp"), None, "mp", None))
 
         xv = einops.repeat(
             xv, 'b s (h d) -> b s (h g) d',
             h=self.config.num_key_value_heads,
             g=self.config.num_attention_heads // self.config.num_key_value_heads,
         )
-        xv = with_sharding_constraint(xv, PS(("dp", "fsdp"), None, "mp", None))
+#        xv = with_sharding_constraint(xv, PS(("dp", "fsdp"), None, "mp", None))
 
         xq, xk = apply_rotary_emb(
             xq, xk, position_ids,
@@ -578,9 +611,13 @@ class FlaxLLaMAAttention(nn.Module):
 
             batch_size = hidden_states.shape[0]
             causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
+            #causal_mask = with_sharding_constraint(causal_mask, PS(("dp", "fsdp"), None, None, None))
 
             attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
+            #attention_mask = with_sharding_constraint(attention_mask, PS(("dp", "fsdp"), None, None, None))
             attention_mask = combine_masks(attention_mask, causal_mask, fcm_mask)
+            #attention_mask = with_sharding_constraint(attention_mask, PS(("dp", "fsdp"), None, None, None))
+            #del causal_mask
 
             # During fast autoregressive decoding, we feed one position at a time,
             # and cache the keys and values step by step.
@@ -1177,6 +1214,16 @@ class LoRALinear(nn.Module):
             lora_alpha = self.config.lora_alpha
             scaling = lora_alpha / lora_rank
 
+            # Handle remat path by replacing number with remat(number)
+            param_path = self.name
+            if 'transformer/h/' in param_path:
+                parts = param_path.split('/')
+                for i, part in enumerate(parts):
+                    if part.isdigit():
+                        parts[i] = f'remat({part})'
+                        break
+                param_path = '/'.join(parts)
+
             # A and B are the low-rank factors
             #   A: (in_features, lora_rank)
             #   B: (lora_rank, out_features)
@@ -1218,6 +1265,7 @@ class LoRALinear(nn.Module):
                 base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
             else:
                 base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
+            
             y = base_out + delta
 
         # Add bias if present

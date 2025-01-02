@@ -37,22 +37,16 @@ class OptimizerFactory(object):
         return config
 
     @classmethod
-    def get_optimizer(cls, config, weight_decay_mask=None, trainable_mask=None):
+    def get_optimizer(cls, config):
         config = cls.get_default_config(config)
         if config.type == 'palm':
             optimizer, optimizer_info = PalmOptimizerFactory.get_optimizer(
-                config.palm_optimizer, weight_decay_mask, trainable_mask
+                config.palm_optimizer
             )
         elif config.type == 'adamw':
-            # For LoRA training, use multi_transform instead of masked optimizer
-            if trainable_mask is not None:
-                optimizer, optimizer_info = AdamWOptimizerFactory.get_lora_optimizer(
-                    config.adamw_optimizer
-                )
-            else:
-                optimizer, optimizer_info = AdamWOptimizerFactory.get_optimizer(
-                    config.adamw_optimizer, weight_decay_mask, trainable_mask
-                )
+            optimizer, optimizer_info = AdamWOptimizerFactory.get_optimizer(
+                config.adamw_optimizer
+            )
         else:
             raise ValueError(f'Unknown optimizer type: {config.type}')
 
@@ -148,8 +142,7 @@ class AdamWOptimizerFactory(object):
         return config
 
     @classmethod
-    def get_optimizer(cls, config, weight_decay_mask=None, trainable_mask=None):
-        """Original optimizer for full fine-tuning"""
+    def get_optimizer(cls, config):
         config = cls.get_default_config(config)
 
         learning_rate_schedule = optax.warmup_cosine_decay_schedule(
@@ -164,91 +157,15 @@ class AdamWOptimizerFactory(object):
             learning_rate_schedule=learning_rate_schedule,
         )
 
-        if config.multiply_by_parameter_scale:
-            optimizer = optax.chain(
-                optax.clip_by_global_norm(config.clip_gradient),
-                optax.masked(
-                    optax.adafactor(
-                        learning_rate=learning_rate_schedule,
-                        multiply_by_parameter_scale=True,
-                        momentum=config.b1,
-                        decay_rate=config.b2,
-                        factored=False,
-                        clipping_threshold=None,
-                        dtype_momentum=jnp.bfloat16 if config.bf16_momentum else jnp.float32,
-                    ),
-                    trainable_mask
-                ),
-                optax_add_scheduled_weight_decay(
-                    lambda step: -learning_rate_schedule(step) * config.weight_decay,
-                    weight_decay_mask
-                )
-            )
-        else:
-            optimizer = optax.chain(
-                optax.clip_by_global_norm(config.clip_gradient),
-                optax.adamw(
-                    learning_rate=learning_rate_schedule,
-                    weight_decay=config.weight_decay,
-                    b1=config.b1,
-                    b2=config.b2,
-                    mask=weight_decay_mask,
-                    mu_dtype=jnp.bfloat16 if config.bf16_momentum else jnp.float32,
-                ),
-            )
-
-        return optimizer, optimizer_info
-
-    @classmethod
-    def get_lora_optimizer(cls, config):
-        """Special optimizer for LoRA training using multi_transform"""
-        config = cls.get_default_config(config)
-
-        learning_rate_schedule = optax.warmup_cosine_decay_schedule(
-            init_value=config.init_lr,
-            peak_value=config.lr,
-            warmup_steps=config.lr_warmup_steps,
-            decay_steps=config.lr_decay_steps,
-            end_value=config.end_lr,
-        )
-
-        optimizer_info = dict(
-            learning_rate_schedule=learning_rate_schedule,
-        )
-
-        # Create transform dictionary
-        transforms = {
-            'train': optax.chain(
-                optax.clip_by_global_norm(config.clip_gradient),
-                optax.adamw(
-                    learning_rate=learning_rate_schedule,
-                    weight_decay=config.weight_decay,
-                    b1=config.b1,
-                    b2=config.b2,
-                    mu_dtype=jnp.bfloat16 if config.bf16_momentum else jnp.float32,
-                )
+        optimizer = optax.chain(
+            optax.clip_by_global_norm(config.clip_gradient),
+            optax.adamw(
+                learning_rate=learning_rate_schedule,
+                weight_decay=config.weight_decay,
+                b1=config.b1,
+                b2=config.b2,
+                mu_dtype=jnp.bfloat16 if config.bf16_momentum else jnp.float32,
             ),
-            'freeze': optax.set_to_zero()
-        }
-
-        # Create parameter labels dictionary
-        def param_labels(params):
-            flat_params = flatten_dict(params)
-            labels = {}
-            for path, _ in flat_params.items():
-                path_str = '/'.join(str(x) for x in path)
-                if 'lora_A' in path_str or 'lora_B' in path_str:
-                    labels[path] = 'train'  # LoRA params get full optimizer
-                else:
-                    labels[path] = 'freeze'  # Base params get zero optimizer
-            return unflatten_dict(labels)
-
-        # Create multi-transform optimizer that preserves sharding
-        optimizer = optax.multi_transform(
-            transforms,
-            param_labels,
-            # Pass through sharding from params to optimizer state
-            partition_spec_fn=lambda x: x.sharding
         )
 
         return optimizer, optimizer_info
