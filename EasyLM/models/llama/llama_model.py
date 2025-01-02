@@ -1172,7 +1172,6 @@ class FlaxLLaMAForCausalLM(FlaxLLaMAPreTrainedModel):
 
 
 class LoRALinear(nn.Module):
-    """A linear layer that can optionally include LoRA."""
     features: int
     use_bias: bool = False
     config: Any = None
