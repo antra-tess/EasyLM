@@ -312,8 +312,8 @@ def main(argv):
                 # Skip printing array stats inside jitted function since they'll be traced
                 pass
 
-        # Compute gradient statistics
-        grad_max = max(jnp.max(jnp.abs(v)) for v in flat_grads.values())
+        # Compute gradient statistics using JAX ops
+        grad_max = jnp.maximum.reduce([jnp.max(jnp.abs(v)) for v in flat_grads.values()])
         grad_mean = jnp.mean(jnp.array([jnp.mean(jnp.abs(v)) for v in flat_grads.values()]))
         
         metrics = dict(
