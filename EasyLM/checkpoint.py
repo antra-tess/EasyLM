@@ -234,10 +234,15 @@ class StreamingCheckpointer(object):
             restored_params = {'params': restored_params}
         elif load_type == 'base_params':
             # Load base model parameters only, no train state
+            if trainstate_target is not None:
+                params_target = trainstate_target
+            else:
+                params_target = None
+
             restored_params = cls.load_checkpoint(
                 path=load_path,
-                target=trainstate_target,  # Use full target for base params
-                shard_fns=trainstate_shard_fns,
+                target=params_target,
+                shard_fns=params_shard_fns,  # Use params sharding directly
             )
             return restored_params  # Return only params, no train state
         elif load_type == 'flax_params':
