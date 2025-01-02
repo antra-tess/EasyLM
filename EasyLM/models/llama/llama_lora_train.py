@@ -433,6 +433,13 @@ def main(argv):
         donate_argnums=(0, ),
     )
 
+    # Print full tree structures before pjit
+    if jax.process_index() == 0:
+        logginginfo("Train state partition structure:")
+        logginginfo(str(jax.tree_util.tree_structure(train_state_partition)))
+        logginginfo("Base param partition structure:")
+        logginginfo(str(jax.tree_util.tree_structure(base_param_partition)))
+
     sharded_train_step = pjit(
         train_step,
         in_shardings=(train_state_partition, base_param_partition, PS(), PS()),
