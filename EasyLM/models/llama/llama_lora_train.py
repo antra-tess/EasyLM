@@ -344,7 +344,8 @@ def main(argv):
     
     # Get partition specs for base parameters
     init_rng = next_rng()
-    base_param_shapes = jax.eval_shape(
+    # Get full model shapes first
+    full_param_shapes = jax.eval_shape(
         lambda: model.init(
             input_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
             position_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
@@ -352,6 +353,17 @@ def main(argv):
             rngs=JaxRNG(init_rng)(LLaMAConfigurator.rng_keys()),
         )
     )
+    
+    # Extract just base parameter shapes by removing LoRA parameters
+    flat_shapes = flatten_dict(full_param_shapes)
+    base_shapes = {}
+    for k, v in flat_shapes.items():
+        path_str = '/'.join(str(x) for x in k)
+        if 'lora_' not in path_str:
+            base_shapes[k] = v
+    base_param_shapes = unflatten_dict(base_shapes)
+    
+    # Now get partition rules for just base parameters
     base_param_partition = match_partition_rules(
         LLaMAConfigurator.get_partition_rules(), base_param_shapes
     )
