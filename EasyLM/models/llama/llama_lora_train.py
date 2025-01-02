@@ -357,10 +357,23 @@ def main(argv):
     # Extract just base parameter shapes by removing LoRA parameters
     flat_shapes = flatten_dict(full_param_shapes)
     base_shapes = {}
+    if jax.process_index() == 0:
+        logginginfo("Full parameter shapes:")
+        for k, v in flat_shapes.items():
+            path_str = '/'.join(str(x) for x in k)
+            logginginfo(f"  {path_str}: {v.shape if hasattr(v, 'shape') else v}")
+    
     for k, v in flat_shapes.items():
         path_str = '/'.join(str(x) for x in k)
         if 'lora_' not in path_str:
             base_shapes[k] = v
+            
+    if jax.process_index() == 0:
+        logginginfo("Base parameter shapes after filtering:")
+        for k, v in base_shapes.items():
+            path_str = '/'.join(str(x) for x in k)
+            logginginfo(f"  {path_str}: {v.shape if hasattr(v, 'shape') else v}")
+            
     base_param_shapes = unflatten_dict(base_shapes)
     
     # Now get partition rules for just base parameters
