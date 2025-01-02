@@ -127,6 +127,8 @@ def main():
         
         # Compute loss and gradients
         loss_val, grads = jax.value_and_grad(loss_fn)(lora_params)
+        jax.debug.print("Raw gradients: {}", 
+                       jax.tree_util.tree_map(lambda x: jnp.max(jnp.abs(x)), grads))
         
         # Print progress every 100 steps
         if step % 100 == 0:
