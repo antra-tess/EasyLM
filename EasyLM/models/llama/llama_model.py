@@ -1224,13 +1224,6 @@ class LoRALinear(nn.Module):
             self.param_dtype,
         )
         
-        # Debug print parameter stats and scaling
-        jax.debug.print("LoRA config - rank: {}, alpha: {}, scaling: {}", 
-                       lora_rank, lora_alpha, scaling)
-        jax.debug.print("LoRA A max: {}, min: {}", 
-                       jnp.max(jnp.abs(lora_A)), jnp.min(jnp.abs(lora_A)))
-        jax.debug.print("LoRA B max: {}, min: {}", 
-                       jnp.max(jnp.abs(lora_B)), jnp.min(jnp.abs(lora_B)))
 
         # Possibly apply dropout on the input to LoRA
         if self.config.lora_dropout > 0.0:
