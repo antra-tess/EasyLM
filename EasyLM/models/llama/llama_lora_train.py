@@ -172,27 +172,6 @@ def main(argv):
 
     def create_trainstate_from_params(params):
         train_state = LoRATrainState.create(params=params, tx=optimizer)
-        #Debug prints for optimizer state examination
-
-        # if jax.process_index() == 0:
-        #     logginginfo("Examining optimizer state:")
-        #     for state in jax.tree_util.tree_leaves(train_state.opt_state):
-        #         logginginfo(f"Optimizer state type: {type(state)}")
-        #         logginginfo(f"Optimizer state attributes: {dir(state)}")
-        #         logginginfo(f"Optimizer state shape: {getattr(state, 'shape', 'no shape')}")
-        #         # # print all attributes
-        #         # for attr in dir(state):
-        #         #     if attr.startswith('__'):
-        #         #         continue
-        #         #     # if method, skip
-        #         #     try:
-        #         #         if callable(getattr(state, attr)):
-        #         #             continue
-        #         #         logginginfo(f"  {attr}: {getattr(state, attr)}")
-        #         #     except Exception as e:
-        #         #         logginginfo(f"  {attr}: inaccessible")
-        #         # if hasattr(state, 'device_buffers'):
-        #         #     logginginfo(f"Optimizer state device_buffers: {state.device_buffers}")
         return train_state
 
     def init_fn(rng):
