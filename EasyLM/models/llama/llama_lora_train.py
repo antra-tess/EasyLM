@@ -628,7 +628,7 @@ def main(argv):
             )[0]
 
             train_state, restored_params = checkpointer.load_trainstate_checkpoint(
-                FLAGS.load_checkpoint, train_state_shapes, base_shard_fns
+                FLAGS.load_checkpoint, base_param_shapes, base_shard_fns
             )
             logginginfo("Loaded checkpoint")
             

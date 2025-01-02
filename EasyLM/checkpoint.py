@@ -139,21 +139,23 @@ class StreamingCheckpointer(object):
             flattened_target = flatten_dict(
                 to_state_dict(target), keep_empty_nodes=True
             )
-            # Convert flattened target keys to string paths for comparison
-            target_paths = {'/'.join(str(x) for x in k): v for k, v in flattened_target.items()}
-            
-            # Convert flattened train state keys to match target format
-            train_state_paths = {}
-            for k, v in flattend_train_state.items():
-                path_str = '/'.join(str(x) for x in k)
-                train_state_paths[path_str] = v
-            
-            # Merge while preserving structure
-            for path, value in target_paths.items():
-                if path not in train_state_paths and value == empty_node:
-                    # Convert path back to tuple for unflatten_dict
-                    key = tuple(path.split('/'))
+            for key, value in flattened_target.items():
+                #logging.info(f"Loading target parameter {key} with shape {value.shape}")
+                if 'lora_' in str(key):
+                    # Initialize LoRA parameters with zeros
+                    # Handle both actual arrays and ShapeDtypeStruct
+                    if hasattr(value, 'shape') and hasattr(value, 'dtype'):
+                        flattend_train_state[key] = jnp.zeros(value.shape, dtype=value.dtype)
+                        #logging.info(f"Initialized LoRA parameter {key} with shape {value.shape}")
+                    else:
+                        #logging.info(f"Skipping LoRA parameter {key} because it has no shape/dtype: {type(value)}")
+                        pass
+                    continue
+                if key not in flattend_train_state and value == empty_node:
                     flattend_train_state[key] = value
+        else:
+            #logging.info(f"target is None, not initializing LoRA parameters")
+            pass
 
         train_state = unflatten_dict(flattend_train_state)
         if target is None:
