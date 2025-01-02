@@ -6,9 +6,17 @@ import jax.numpy as jnp
 import flax.linen as nn
 from flax.training import train_state
 from flax.traverse_util import flatten_dict, unflatten_dict
+from jax.sharding import Mesh, PartitionSpec as PS
+from jax.experimental.pjit import pjit
 import optax
 from typing import Any
 import logging
+
+def get_mesh():
+    """Create simple mesh for testing."""
+    devices = jnp.array(jax.devices())
+    mesh = Mesh(devices, ('dp',))  # Single axis mesh for testing
+    return mesh
 
 def combine_params_test(base_params, lora_params):
     """Simplified version of our combine_params logic"""
@@ -117,33 +125,54 @@ def main():
     optimizer = optax.adam(1e-3)
     opt_state = optimizer.init(lora_params)
     
-    # Training loop - just do a few steps for testing
-    for step in range(3):
+    # Set up pjit
+    param_partition = PS(None)  # No sharding for testing
+    
+    def train_step(train_state, base_params, batch):
         def loss_fn(params):
-            # Use combined parameters directly
-            output = model.apply(params, input_data)
+            output = model.apply(params, batch)
             return jnp.mean((output - target) ** 2)
 
         # Combine parameters before gradient computation
-        combined_params = {'params': combine_params_test(base_params['params'], lora_params['params'])}
+        combined_params = {'params': combine_params_test(base_params['params'], train_state['params'])}
         
-        # Compute loss and gradients with respect to combined parameters
+        # Compute loss and gradients
         loss_val, grads = jax.value_and_grad(loss_fn)(combined_params)
         jax.debug.print("Raw gradients: {}", 
                        jax.tree_util.tree_map(lambda x: jnp.max(jnp.abs(x)), grads))
         
-        # Print progress every 100 steps
-        if step % 100 == 0:
-            print(f"Step {step}, Loss: {loss_val}")
-            print("Gradient norms:")
-            flat_grads = flatten_dict(grads)
-            for k, v in flat_grads.items():
-                if 'lora' in str(k):
-                    print(f"  {k}: {jnp.linalg.norm(v)}")
-        
         # Update parameters
-        updates, opt_state = optimizer.update(grads, opt_state)
-        lora_params = optax.apply_updates(lora_params, updates)
+        updates, new_opt_state = optimizer.update(grads, train_state['opt_state'])
+        new_params = optax.apply_updates(train_state['params'], updates)
+        
+        metrics = {
+            'loss': loss_val,
+            'grad_norm': jnp.sqrt(sum(jnp.sum(x**2) for x in jax.tree_util.tree_leaves(grads)))
+        }
+        
+        return {'params': new_params, 'opt_state': new_opt_state}, metrics
+
+    # Wrap with pjit
+    sharded_train_step = pjit(
+        train_step,
+        in_shardings=(param_partition, param_partition, param_partition),
+        out_shardings=(param_partition, param_partition)
+    )
+
+    # Training loop with mesh context
+    mesh = get_mesh()
+    with mesh:
+        train_state = {'params': lora_params, 'opt_state': opt_state}
+        
+        for step in range(3):
+            train_state, metrics = sharded_train_step(
+                train_state, base_params, input_data
+            )
+            
+            # Print metrics
+            print(f"\nStep {step}:")
+            print(f"Loss: {metrics['loss']}")
+            print(f"Gradient norm: {metrics['grad_norm']}")
 
 if __name__ == "__main__":
     main()
