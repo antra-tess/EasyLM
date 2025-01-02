@@ -284,19 +284,24 @@ def main(argv):
         # Compute gradients only for LoRA params
         grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
         (loss, accuracy), grads = grad_fn(train_state.params)
-    
+        logginginfo("Gradient computation complete")
+        # Count total and non-zero gradients
+        flat_grads = flatten_dict(grads)
+        num_nonzero = sum(jnp.any(jnp.abs(v) > 0) for v in flat_grads.values())
+        logginginfo("Gradients %d, non-zero gradients %d", len(flat_grads), num_nonzero)
+
         # Update LoRA params only
         updates, new_opt_state = train_state.tx.update(grads, train_state.opt_state, train_state.params)
+        logginginfo("Optimizer state update complete")
         new_params = optax.apply_updates(train_state.params, updates)
+        logginginfo("LoRA parameter updated from optimizer state")
         train_state = train_state.replace(
             step=train_state.step + 1,
             params=new_params,
             opt_state=new_opt_state,
         )
-        # Count total and non-zero gradients
-        flat_grads = flatten_dict(grads)
-        num_nonzero = sum(jnp.any(jnp.abs(v) > 0) for v in flat_grads.values())
-        
+        logginginfo("Train state updated")
+
         metrics = dict(
             loss=loss,
             accuracy=accuracy,
