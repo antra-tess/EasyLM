@@ -115,25 +115,22 @@ def main():
     rng = jax.random.PRNGKey(0)
     rng, init_rng = jax.random.split(rng)
     
-    # Initialize base parameters with random values, excluding LoRA params
+    # Initialize all parameters first
     params = model.init(init_rng, input_data)
+    
+    # Split into base and LoRA parameters
     flat_params = flatten_dict(params)
     base_dict = {}
-    for k, v in flat_params.items():
-        if not any(x == 'lora_A' or x == 'lora_B' for x in k):
-            base_dict[k] = v.astype(jnp.float32) if isinstance(v, jnp.ndarray) else v
-    base_params = unflatten_dict(base_dict)
+    lora_dict = {}
     
-    # Initialize LoRA parameters with zeros
-    flat_params = flatten_dict(base_params)
-    lora_params = {}
     for k, v in flat_params.items():
-        path_str = '/'.join(str(x) for x in k)
-        if 'lora' in path_str:
-            lora_params[k] = jnp.zeros_like(v)
-        else:
-            lora_params[k] = v
-    lora_params = unflatten_dict(lora_params)
+        if k[-1] == 'kernel':  # Base parameters
+            base_dict[k] = v.astype(jnp.float32)
+        elif k[-1] in ['lora_A', 'lora_B']:  # LoRA parameters
+            lora_dict[k] = v.astype(jnp.float32)
+    
+    base_params = {'params': unflatten_dict(base_dict)}
+    lora_params = {'params': unflatten_dict(lora_dict)}
     
     # Create optimizer
     optimizer = optax.adam(1e-3)
