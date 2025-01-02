@@ -341,19 +341,13 @@ def main(argv):
             logginginfo("Loaded checkpoint")
             log_memory_usage("After checkpoint load")
 
-        if train_state is None and restored_params is None:
-            # Initialize from scratch
-            logginginfo("Initializing from scratch")
+        if train_state is None:
+            # Initialize LoRA parameters from scratch
+            logginginfo("Initializing LoRA parameters from scratch")
             log_memory_usage("Before initialization")
             train_state = sharded_init_fn(next_rng())
             log_memory_usage("After initialization")
             logginginfo("Initialization complete")
-        elif train_state is None and restored_params is not None:
-            logginginfo("Creating train state from restored params")
-            train_state = sharded_create_trainstate_from_params(restored_params)
-            logginginfo("Train state creation complete2")
-            del restored_params
-            logginginfo("Deleted restored params")
 
         # Print sharded parameter info on worker 0 only
         if jax.process_index() == 0:
