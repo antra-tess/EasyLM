@@ -290,7 +290,7 @@ def main(argv):
         new_params = optax.apply_updates(train_state.params, updates)
         train_state = train_state.replace(
             step=train_state.step + 1,
-            params={'params': new_params},
+            params=new_params,
             opt_state=new_opt_state,
         )
         # Separate LoRA and base grads with more detailed path checking
