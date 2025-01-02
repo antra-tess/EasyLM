@@ -309,9 +309,13 @@ def main(argv):
             logginginfo("Gradient structure:")
             for k, v in flat_grads.items():
                 logginginfo(f"  {'/'.join(str(x) for x in k)}: shape={v.shape}, dtype={v.dtype}")
-                if isinstance(v, jnp.ndarray):
-                    logginginfo(f"    max={jnp.max(jnp.abs(v))}, mean={jnp.mean(jnp.abs(v))}")
+                # Skip printing array stats inside jitted function since they'll be traced
+                pass
 
+        # Compute gradient statistics
+        grad_max = max(jnp.max(jnp.abs(v)) for v in flat_grads.values())
+        grad_mean = jnp.mean(jnp.array([jnp.mean(jnp.abs(v)) for v in flat_grads.values()]))
+        
         metrics = dict(
             loss=loss,
             accuracy=accuracy,
@@ -319,7 +323,9 @@ def main(argv):
             gradient_norm=global_norm(grads),
             param_norm=global_norm(train_state.params),
             num_grads=len(flat_grads),
-            num_nonzero_grads=num_nonzero
+            num_nonzero_grads=num_nonzero,
+            grad_max=grad_max,
+            grad_mean=grad_mean
         )
         rng = rng_generator()
         logginginfo("Train step complete")
