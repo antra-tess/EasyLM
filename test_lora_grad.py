@@ -151,8 +151,8 @@ def main():
         jax.debug.print("LoRA params structure: {}", jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else type(x), lora_dict))
         jax.debug.print("Combined params structure: {}", jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else type(x), combined))
         
-        # Run forward pass
-        output = model.apply({'params': combined}, input_data)
+        # Run forward pass - don't wrap combined in params again
+        output = model.apply({'params': combined['params']}, input_data)
         jax.debug.print("Output: {}", output)
         jax.debug.print("Target: {}", target)
         
