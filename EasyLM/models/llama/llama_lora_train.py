@@ -365,12 +365,12 @@ def main(argv):
     
     # Now get partition rules for just base parameters
     base_param_partition = match_partition_rules(
-        LLaMAConfigurator.get_partition_rules(), base_param_shapes, debug_print=True,
+        LLaMAConfigurator.get_base_param_rules(), base_param_shapes, debug_print=True,
     )
     logginginfo("Train state partitioning complete")
 
     if jax.process_index() == 0:
-        logginginfo("Train state_partition: ", str(train_state_partition))
+        logginginfo("Train state_partition: %s", str(train_state_partition))
         logginginfo("Testing if dict is flattened: ", len(base_param_partition['transformer']))
 
     # # Log partition specs and actual shapes
