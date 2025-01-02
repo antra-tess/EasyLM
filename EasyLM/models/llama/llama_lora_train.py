@@ -367,12 +367,16 @@ def main(argv):
     base_param_partition = match_partition_rules(
         LLaMAConfigurator.get_base_param_rules(), base_param_shapes, debug_print=True,
     )
+    # Flatten base param partition to match actual parameter structure
+    base_param_partition = {
+        'params': flatten_dict(base_param_partition['params'], sep='/')
+    }
     logginginfo("Train state partitioning complete")
 
     if jax.process_index() == 0:
         logginginfo("Base state_partition: %s", str(base_param_partition))
         logginginfo("Lora state_partition: %s", str(train_state_partition))
-        logginginfo("Testing if dict is flattened: ", len(base_param_partition['params']['transformer']))
+        logginginfo("Testing if dict is flattened: %s", len(base_param_partition['params']))
 
     # # Log partition specs and actual shapes
     # if jax.process_index() == 0:
