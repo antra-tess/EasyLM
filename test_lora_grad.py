@@ -163,7 +163,7 @@ def main():
         
         return loss
 
-    for step in range(3):
+    for step in range(2):
         # Compute loss and gradients
         loss_val, grads = jax.value_and_grad(loss_fn)(train_state['params'])
         jax.debug.print("Raw gradients: {}", 
