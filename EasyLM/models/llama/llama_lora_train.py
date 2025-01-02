@@ -372,7 +372,7 @@ def main(argv):
     flat_base_partition = flatten_dict(base_param_partition['params'])
     layer_base_partition = {}
     for k, v in flat_base_partition.items():
-        # Extract layer number from key path
+        # Only keep transformer/h/* keys
         if k[0] == 'transformer' and k[1] == 'h':
             layer_num = k[2]
             if f'transformer/h/{layer_num}' not in layer_base_partition:
@@ -380,10 +380,6 @@ def main(argv):
             # Add partition spec under the layer
             remaining_key = '/'.join(str(x) for x in k[3:])
             layer_base_partition[f'transformer/h/{layer_num}'][remaining_key] = v
-        else:
-            # Non-layer parameters like lm_head
-            key_str = '/'.join(str(x) for x in k)
-            layer_base_partition[key_str] = v
             
     base_param_partition = {'params': layer_base_partition}
     logginginfo("Train state partitioning complete")
