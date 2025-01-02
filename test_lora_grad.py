@@ -39,18 +39,21 @@ class SimpleLoRALinear(nn.Module):
             jax.nn.initializers.normal(0.02),
             (x.shape[-1], self.features))
             
-        # LoRA weights
+        # LoRA weights with scaling
+        lora_alpha = 8.0  # Like in real LoRA
+        scaling = lora_alpha / self.lora_rank
+        
         lora_A = self.param('lora_A',
-            jax.nn.initializers.zeros,
+            jax.nn.initializers.normal(0.02),  # Small non-zero init
             (x.shape[-1], self.lora_rank))
         lora_B = self.param('lora_B', 
-            jax.nn.initializers.zeros,
+            jax.nn.initializers.normal(0.02),  # Small non-zero init
             (self.lora_rank, self.features))
             
         # Compute output with LoRA
         base_out = jnp.matmul(x, kernel)
         intermediate = jnp.matmul(x, lora_A)
-        delta = jnp.matmul(intermediate, lora_B)
+        delta = jnp.matmul(intermediate, lora_B) * scaling
         
         # Debug prints
         jax.debug.print("x shape: {}", x.shape)
