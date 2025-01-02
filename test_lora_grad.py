@@ -130,11 +130,13 @@ def main():
     
     def train_step(train_state, base_params, batch):
         def loss_fn(params):
-            output = model.apply(params, batch)
+            # Combine parameters before gradient computation
+            combined = combine_params_test(base_params['params'], params['params'])
+            output = model.apply({'params': combined}, batch)
             return jnp.mean((output - target) ** 2)
 
-        # Combine parameters before gradient computation
-        combined_params = {'params': combine_params_test(base_params['params'], train_state['params'])}
+        # Pass params directly to loss_fn
+        combined_params = train_state
         
         # Compute loss and gradients
         loss_val, grads = jax.value_and_grad(loss_fn)(combined_params)
