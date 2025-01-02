@@ -455,7 +455,7 @@ def main(argv):
         train_step,
         in_shardings=(train_state_partition, base_param_partition, PS(), PS()),
         out_shardings=(train_state_partition, PS(), PS()),
-        donate_argnums=(0, 1),
+        donate_argnums=(0,),  # Only donate train_state memory
     )
 
     sharded_eval_step = pjit(
