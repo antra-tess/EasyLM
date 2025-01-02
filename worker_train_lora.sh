@@ -29,10 +29,10 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --train_dataset.huggingface_dataset.seq_length=512 \
     --train_dataset.huggingface_dataset.batch_size=64 \
     --optimizer.type='adamw' \
-    --optimizer.adamw_optimizer.lr=3e-2 \
-    --optimizer.adamw_optimizer.end_lr=1e-4 \
+    --optimizer.adamw_optimizer.lr=2.5e-3 \
+    --optimizer.adamw_optimizer.end_lr=1e-5 \
     --optimizer.adamw_optimizer.lr_warmup_steps=100 \
-    --optimizer.adamw_optimizer.lr_decay_steps=2000 \
+    --optimizer.adamw_optimizer.lr_decay_steps=3000 \
     --total_steps=5000 \
     --log_freq=50 \
     --save_model_freq=0 \
