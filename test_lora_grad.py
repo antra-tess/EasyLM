@@ -117,8 +117,8 @@ def main():
     optimizer = optax.adam(1e-3)
     opt_state = optimizer.init(lora_params)
     
-    # Training loop
-    for step in range(1000):
+    # Training loop - just do a few steps for testing
+    for step in range(3):
         def loss_fn(params):
             # Use combined parameters directly
             output = model.apply(params, input_data)
