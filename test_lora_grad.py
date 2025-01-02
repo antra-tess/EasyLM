@@ -67,16 +67,9 @@ class SimpleLoRALinear(nn.Module):
         intermediate = jnp.matmul(x, lora_A)
         delta = jnp.matmul(intermediate, lora_B) * scaling
         
-        # Debug prints with dtypes
-        jax.debug.print("x: shape={}, dtype={}", x.shape, x.dtype)
-        jax.debug.print("kernel: shape={}, dtype={}", kernel.shape, kernel.dtype)
-        jax.debug.print("lora_A: shape={}, dtype={}", lora_A.shape, lora_A.dtype)
-        jax.debug.print("lora_B: shape={}, dtype={}", lora_B.shape, lora_B.dtype)
-        jax.debug.print("intermediate: shape={}, dtype={}", intermediate.shape, intermediate.dtype)
+        # Debug prints for key values only
         jax.debug.print("intermediate max: {}", jnp.max(jnp.abs(intermediate)))
-        jax.debug.print("delta: shape={}, dtype={}", delta.shape, delta.dtype)
         jax.debug.print("delta max: {}", jnp.max(jnp.abs(delta)))
-        jax.debug.print("base_out: shape={}, dtype={}", base_out.shape, base_out.dtype)
         jax.debug.print("base_out max: {}", jnp.max(jnp.abs(base_out)))
         
         return base_out + delta
@@ -146,20 +139,10 @@ def main():
         # Combine with base parameters for forward pass
         combined = combine_params_test(base_params['params'], lora_dict)
         
-        # Debug print parameter structures
-        jax.debug.print("Base params structure: {}", jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else type(x), base_params))
-        jax.debug.print("LoRA params structure: {}", jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else type(x), lora_dict))
-        jax.debug.print("Combined params structure: {}", jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else type(x), combined))
-        
-        # Run forward pass - don't wrap combined in params again
+        # Run forward pass and compute loss
         output = model.apply({'params': combined['params']}, input_data)
-        jax.debug.print("Output: {}", output)
-        jax.debug.print("Target: {}", target)
-        
-        # Compute MSE loss
         diff = output - target
         loss = jnp.mean(diff * diff)
-        jax.debug.print("Loss: {}", loss)
         
         return loss
 
