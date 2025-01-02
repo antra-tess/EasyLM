@@ -1224,7 +1224,9 @@ class LoRALinear(nn.Module):
             self.param_dtype,
         )
         
-        # Debug print parameter stats
+        # Debug print parameter stats and scaling
+        jax.debug.print("LoRA config - rank: {}, alpha: {}, scaling: {}", 
+                       lora_rank, lora_alpha, scaling)
         jax.debug.print("LoRA A max: {}, min: {}", 
                        jnp.max(jnp.abs(lora_A)), jnp.min(jnp.abs(lora_A)))
         jax.debug.print("LoRA B max: {}, min: {}", 
@@ -1255,6 +1257,12 @@ class LoRALinear(nn.Module):
             base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
         else:
             base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
+            
+        # Debug print contribution details
+        jax.debug.print("base_out max: {}", jnp.max(jnp.abs(base_out)))
+        jax.debug.print("lora delta max: {}", jnp.max(jnp.abs(delta)))
+        jax.debug.print("lora contribution ratio: {}", 
+                       jnp.max(jnp.abs(delta)) / jnp.max(jnp.abs(base_out)))
         
         y = base_out + delta
 
