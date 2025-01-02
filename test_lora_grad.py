@@ -76,26 +76,5 @@ def main():
     print("\nGradients when differentiating LoRA parameters only:")
     print(jax.tree_util.tree_map(lambda x: (x.shape, float(jax.device_get(jnp.max(jnp.abs(x))))), grads_lora))
 
-    # First run function normally
-    result, _ = jax.jit(loss_and_accuracy)(lora_params)
-    print("Test function result:", float(result))  # Safe to convert after jit
-
-    # Then check gradients
-    print("\nGradient computation:")
-    grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
-    (loss, _), grads = jax.jit(grad_fn)(lora_params)  # Jit the gradient computation
-    
-    print("\nInput parameters:")
-    print("Base params:", jax.tree_util.tree_map(lambda x: x.shape, base_params))
-    print("LoRA params:", jax.tree_util.tree_map(lambda x: x.shape, lora_params))
-    
-    print("\nGradients:")
-    # Convert to concrete values after computation
-    grads_info = jax.tree_util.tree_map(
-        lambda x: (x.shape, float(jax.device_get(jnp.max(jnp.abs(x))))), 
-        grads
-    )
-    print(grads_info)
-
 if __name__ == "__main__":
     main()
