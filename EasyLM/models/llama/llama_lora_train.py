@@ -136,6 +136,11 @@ def main(argv):
     process_index = jax.process_index()
     process_count = jax.process_count()
     logging.info(f"Starting up on host {hostname} - process index: {process_index}/{process_count}")
+    # Add base model name as a tag
+    if FLAGS.logger.tags is None:
+        FLAGS.logger.tags = []
+    FLAGS.logger.tags.append(f"base_model_{llama_config.base_model}")
+    
     logger = mlxu.WandBLogger(
         config=FLAGS.logger,
         variant=variant,
