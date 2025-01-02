@@ -367,10 +367,25 @@ def main(argv):
     base_param_partition = match_partition_rules(
         LLaMAConfigurator.get_base_param_rules(), base_param_shapes, debug_print=True,
     )
-    # Flatten base param partition to match actual parameter structure
-    base_param_partition = {
-        'params': flatten_dict(base_param_partition['params'], sep='/')
-    }
+    
+    # Restructure partition specs to match parameter layout
+    flat_base_partition = flatten_dict(base_param_partition['params'])
+    layer_base_partition = {}
+    for k, v in flat_base_partition.items():
+        # Extract layer number from key path
+        if k[0] == 'transformer' and k[1] == 'h':
+            layer_num = k[2]
+            if f'transformer/h/{layer_num}' not in layer_base_partition:
+                layer_base_partition[f'transformer/h/{layer_num}'] = {}
+            # Add partition spec under the layer
+            remaining_key = '/'.join(str(x) for x in k[3:])
+            layer_base_partition[f'transformer/h/{layer_num}'][remaining_key] = v
+        else:
+            # Non-layer parameters like lm_head
+            key_str = '/'.join(str(x) for x in k)
+            layer_base_partition[key_str] = v
+            
+    base_param_partition = {'params': layer_base_partition}
     logginginfo("Train state partitioning complete")
 
     if jax.process_index() == 0:
