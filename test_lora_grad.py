@@ -62,16 +62,16 @@ class SimpleLoRALinear(nn.Module):
         intermediate = jnp.matmul(x, lora_A)
         delta = jnp.matmul(intermediate, lora_B) * scaling
         
-        # Debug prints
-        jax.debug.print("x shape: {}", x.shape)
-        jax.debug.print("kernel shape: {}", kernel.shape)
-        jax.debug.print("lora_A shape: {}", lora_A.shape)
-        jax.debug.print("lora_B shape: {}", lora_B.shape)
-        jax.debug.print("intermediate shape: {}", intermediate.shape)
+        # Debug prints with dtypes
+        jax.debug.print("x: shape={}, dtype={}", x.shape, x.dtype)
+        jax.debug.print("kernel: shape={}, dtype={}", kernel.shape, kernel.dtype)
+        jax.debug.print("lora_A: shape={}, dtype={}", lora_A.shape, lora_A.dtype)
+        jax.debug.print("lora_B: shape={}, dtype={}", lora_B.shape, lora_B.dtype)
+        jax.debug.print("intermediate: shape={}, dtype={}", intermediate.shape, intermediate.dtype)
         jax.debug.print("intermediate max: {}", jnp.max(jnp.abs(intermediate)))
-        jax.debug.print("delta shape: {}", delta.shape)
+        jax.debug.print("delta: shape={}, dtype={}", delta.shape, delta.dtype)
         jax.debug.print("delta max: {}", jnp.max(jnp.abs(delta)))
-        jax.debug.print("base_out shape: {}", base_out.shape)
+        jax.debug.print("base_out: shape={}, dtype={}", base_out.shape, base_out.dtype)
         jax.debug.print("base_out max: {}", jnp.max(jnp.abs(base_out)))
         
         return base_out + delta
