@@ -197,22 +197,49 @@ def main(argv):
 
     def init_fn(rng):
         rng_generator = JaxRNG(rng)
-        logginginfo("Initializing LoRA parameters...")
-        # Create empty LoRA parameter structure
-        lora_params = {'params': {}}
-        for layer_idx in range(llama_config.num_hidden_layers):
-            layer_params = {}
-            # Attention LoRA params
-            if llama_config.lora_attn:
-                for name in ['wq', 'wk', 'wv', 'wo']:
-                    layer_params[f'attention/{name}/lora_A'] = jnp.zeros((llama_config.hidden_size, llama_config.lora_rank))
-                    layer_params[f'attention/{name}/lora_B'] = jnp.zeros((llama_config.lora_rank, llama_config.hidden_size))
-            # MLP LoRA params if enabled
-            if llama_config.lora_mlp:
-                for name in ['w1', 'w2', 'w3']:
-                    layer_params[f'feed_forward/{name}/lora_A'] = jnp.zeros((llama_config.hidden_size, llama_config.lora_rank))
-                    layer_params[f'feed_forward/{name}/lora_B'] = jnp.zeros((llama_config.lora_rank, llama_config.hidden_size))
-            lora_params['params'][f'transformer/h/{layer_idx}'] = layer_params
+        logginginfo("Getting model parameter structure...")
+        full_param_shapes = jax.eval_shape(
+            lambda: model.init(
+                input_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
+                position_ids=jnp.zeros((4, seq_length), dtype=jnp.int32),
+                attention_mask=jnp.ones((4, seq_length), dtype=jnp.int32),
+                rngs=rng_generator(LLaMAConfigurator.rng_keys()),
+            )
+        )
+        
+        logginginfo("Initializing LoRA parameters from model structure...")
+        # Create empty LoRA parameter structure matching model structure
+        flat_shapes = flatten_dict(full_param_shapes)
+        lora_params = {}
+        for path, shape in flat_shapes.items():
+            path_str = '/'.join(str(x) for x in path)
+            # Check if this is an attention weight we want to add LoRA to
+            if 'attention' in path_str and any(f'/{w}/' in path_str for w in ['wq', 'wk', 'wv', 'wo']) and path[-1] == 'kernel':
+                if llama_config.lora_attn:
+                    # Get the module path without the final 'kernel'
+                    base_path = path[:-1]
+                    # Add LoRA A and B parameters
+                    lora_A_path = base_path + ('lora_A',)
+                    lora_B_path = base_path + ('lora_B',)
+                    lora_params[lora_A_path] = jnp.zeros((shape.shape[0], llama_config.lora_rank))
+                    lora_params[lora_B_path] = jnp.zeros((llama_config.lora_rank, shape.shape[1]))
+            # Check if this is a MLP weight we want to add LoRA to
+            elif 'feed_forward' in path_str and any(f'/{w}/' in path_str for w in ['w1', 'w2', 'w3']) and path[-1] == 'kernel':
+                if llama_config.lora_mlp:
+                    base_path = path[:-1]
+                    lora_A_path = base_path + ('lora_A',)
+                    lora_B_path = base_path + ('lora_B',)
+                    lora_params[lora_A_path] = jnp.zeros((shape.shape[0], llama_config.lora_rank))
+                    lora_params[lora_B_path] = jnp.zeros((llama_config.lora_rank, shape.shape[1]))
+
+        # Add debug logging
+        if jax.process_index() == 0:
+            logginginfo("LoRA parameter paths:")
+            for path in lora_params.keys():
+                logginginfo(f"  {'/'.join(str(x) for x in path)}")
+
+        lora_params = unflatten_dict(lora_params)
+        lora_params = {'params': lora_params}  # Wrap in params dict
         
         logginginfo("Creating train state from LoRA parameters...")
         train_state = LoRATrainState.create(params=lora_params, tx=optimizer)
