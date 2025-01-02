@@ -42,22 +42,39 @@ def main():
     }
 
     print("\nTest function evaluation:")
-    def loss_and_accuracy(lora_p):
-        # Match real training - combine params then wrap in dict
-        combined = {'params': combine_params_test(base_params, lora_p)}
-        print("Combined params:", jax.tree_util.tree_map(lambda x: x.shape, combined))
+    print("\nTesting approach 1 - differentiate wrt all parameters:")
+    def loss_fn_all(all_params):
         # Simple operation that should produce non-zero gradients
-        lora_a = combined['params']['params']['attention']['lora_A'] 
+        lora_a = all_params['params']['params']['attention']['lora_A']
+        lora_b = all_params['params']['params']['attention']['lora_B']
+        return jnp.sum(lora_a @ lora_b), 0.0
+
+    # Combine parameters first
+    combined_params = {'params': combine_params_test(base_params, lora_params)}
+    result, _ = jax.jit(loss_fn_all)(combined_params)
+    print("Test function result (all params):", float(result))
+
+    grad_fn_all = jax.value_and_grad(loss_fn_all, has_aux=True)
+    (loss, _), grads_all = jax.jit(grad_fn_all)(combined_params)
+    print("\nGradients when differentiating all parameters:")
+    print(jax.tree_util.tree_map(lambda x: (x.shape, float(jax.device_get(jnp.max(jnp.abs(x))))), grads_all))
+
+    print("\nTesting approach 2 - differentiate wrt LoRA parameters only:")
+    def loss_fn_lora(lora_p):
+        # Combine with base params for forward pass
+        combined = {'params': combine_params_test(base_params, lora_p)}
+        # Simple operation that should produce non-zero gradients
+        lora_a = combined['params']['params']['attention']['lora_A']
         lora_b = combined['params']['params']['attention']['lora_B']
-        return jnp.sum(lora_a @ lora_b), 0.0  # Return dummy accuracy like real code
+        return jnp.sum(lora_a @ lora_b), 0.0
 
-    # First run function normally
-    result, _ = jax.jit(loss_and_accuracy)(lora_params)
-    print("Test function result:", float(result))  # Safe to convert after jit
+    result, _ = jax.jit(loss_fn_lora)(lora_params)
+    print("Test function result (LoRA only):", float(result))
 
-    # Then check gradients - match real training grad_fn setup
-    grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
-    (loss, _), grads = jax.jit(grad_fn)(lora_params)
+    grad_fn_lora = jax.value_and_grad(loss_fn_lora, has_aux=True)
+    (loss, _), grads_lora = jax.jit(grad_fn_lora)(lora_params)
+    print("\nGradients when differentiating LoRA parameters only:")
+    print(jax.tree_util.tree_map(lambda x: (x.shape, float(jax.device_get(jnp.max(jnp.abs(x))))), grads_lora))
 
     # First run function normally
     result, _ = jax.jit(loss_and_accuracy)(lora_params)
