@@ -293,34 +293,18 @@ def main(argv):
             params=new_params,
             opt_state=new_opt_state,
         )
-        # Separate LoRA and base grads with more detailed path checking
+        # Count total and non-zero gradients
         flat_grads = flatten_dict(grads)
-        lora_grads = {}
-        base_grads = {}
-        
-        for k, v in flat_grads.items():
-            path_str = '/'.join(str(x) for x in k)
-            if 'lora_A' in path_str or 'lora_B' in path_str:
-                lora_grads[k] = v
-                if jax.process_index() == 0 and len(lora_grads) == 1:  # Log first found
-                    logging.info(f"Found LoRA gradient at {path_str} with shape {v.shape}")
-            else:
-                base_grads[k] = v
-        
-        # Compute norms and add debug info
-        lora_norm = global_norm(unflatten_dict(lora_grads)) if lora_grads else jnp.array(0.0)
-        base_norm = global_norm(unflatten_dict(base_grads)) if base_grads else jnp.array(0.0)
+        num_nonzero = sum(jnp.any(jnp.abs(v) > 0) for v in flat_grads.values())
         
         metrics = dict(
             loss=loss,
             accuracy=accuracy,
             learning_rate=optimizer_info['learning_rate_schedule'](train_state.step),
             gradient_norm=global_norm(grads),
-            lora_grad_norm=lora_norm,
-            base_grad_norm=base_norm,
             param_norm=global_norm(train_state.params),
-            num_lora_grads=len(lora_grads),
-            num_base_grads=len(base_grads)
+            num_grads=len(flat_grads),
+            num_nonzero_grads=num_nonzero
         )
         rng = rng_generator()
 
