@@ -150,38 +150,22 @@ def main():
     train_state = {'params': lora_params, 'opt_state': opt_state}
     
     for step in range(2):
-        # Compute loss and gradients with respect to LoRA params only
+        # Compute loss and gradients
         loss_val, grads = jax.value_and_grad(loss_fn)(train_state['params'])
-        jax.debug.print("Raw gradients: {}", 
+        jax.debug.print("Raw gradients: {}",
                        jax.tree_util.tree_map(lambda x: jnp.max(jnp.abs(x)), grads))
-        
+
         # Update parameters
         updates, new_opt_state = optimizer.update(grads, train_state['opt_state'])
         new_params = optax.apply_updates(train_state['params'], updates)
         train_state = {'params': new_params, 'opt_state': new_opt_state}
-        
+
         # Print metrics
         grad_norm = jnp.sqrt(sum(jnp.sum(x**2) for x in jax.tree_util.tree_leaves(grads)))
         print(f"\nStep {step}:")
         print(f"Loss: {loss_val}")
         print(f"Gradient norm: {grad_norm}")
 
-    for step in range(2):
-        # Compute loss and gradients
-        loss_val, grads = jax.value_and_grad(loss_fn)(train_state['params'])
-        jax.debug.print("Raw gradients: {}", 
-                       jax.tree_util.tree_map(lambda x: jnp.max(jnp.abs(x)), grads))
-        
-        # Update parameters
-        updates, new_opt_state = optimizer.update(grads, train_state['opt_state'])
-        new_params = optax.apply_updates(train_state['params'], updates)
-        train_state = {'params': new_params, 'opt_state': new_opt_state}
-        
-        # Print metrics
-        grad_norm = jnp.sqrt(sum(jnp.sum(x**2) for x in jax.tree_util.tree_leaves(grads)))
-        print(f"\nStep {step}:")
-        print(f"Loss: {loss_val}")
-        print(f"Gradient norm: {grad_norm}")
 
 if __name__ == "__main__":
     main()
