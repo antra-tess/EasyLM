@@ -629,8 +629,7 @@ def main(argv):
 
             # Load base model parameters first
             base_params = checkpointer.load_trainstate_checkpoint(
-                FLAGS.load_checkpoint, base_param_shapes, base_shard_fns,
-                load_type='base_params'
+                FLAGS.load_checkpoint, base_param_shapes, base_shard_fns
             )
             logginginfo("Loaded base model parameters")
             
