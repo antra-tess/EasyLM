@@ -188,7 +188,7 @@ def main(argv):
         
         logginginfo("Initializing LoRA parameters from model structure...")
         # Create empty LoRA parameter structure matching model structure
-        flat_shapes = flatten_dict(full_param_shapes)
+        flat_shapes = flatten_dict(full_param_shapes['params'])
         lora_params = {}
         for path, shape in flat_shapes.items():
             path_str = '/'.join(str(x) for x in path)
