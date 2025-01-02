@@ -402,7 +402,7 @@ class FlaxLLaMAAttention(nn.Module):
         config = self.config
         head_dim = config.hidden_size // config.num_attention_heads
 
-        if config.lora_attn:
+        if config.lora_rank > 0:
             # Use LoRA for attention layers
             self.wq = LoRALinear(
                 config.num_attention_heads * head_dim,
@@ -1172,7 +1172,6 @@ class FlaxLLaMAForCausalLM(FlaxLLaMAPreTrainedModel):
 
 
 class LoRALinear(nn.Module):
-    """A linear layer that can optionally include LoRA."""
     features: int
     use_bias: bool = False
     config: Any = None
@@ -1200,73 +1199,60 @@ class LoRALinear(nn.Module):
                 self.param_dtype,
             )
 
-        if self.config.lora_rank == 0:
-            # If LoRA is disabled, just do normal matmul
-            y = jnp.matmul(x, kernel.astype(self.dtype))
-            # Add sharding constraint based on kernel sharding
-            if 'attention/wo/' in self.name:
-                y = with_sharding_constraint(y, PS(("dp", "fsdp"), None, "mp"))
-            else:
-                y = with_sharding_constraint(y, PS(("dp", "fsdp"), None, "mp"))
+        # Get LoRA parameters
+        lora_rank = self.config.lora_rank
+        lora_alpha = self.config.lora_alpha
+        scaling = lora_alpha / lora_rank
+        
+        # Debug print scaling and config values
+        jax.debug.print("LoRA config - rank: {}, alpha: {}, scaling: {}", 
+                       lora_rank, lora_alpha, scaling)
+
+        # A and B are the low-rank factors
+        #   A: (in_features, lora_rank)
+        #   B: (lora_rank, out_features)
+        lora_A = self.param(
+            "lora_A",
+            jax.nn.initializers.zeros,  # or normal with small std
+            (x.shape[-1], lora_rank),
+            self.param_dtype,
+        )
+        lora_B = self.param(
+            "lora_B",
+            jax.nn.initializers.zeros,
+            (lora_rank, self.features),
+            self.param_dtype,
+        )
+        
+
+        # Possibly apply dropout on the input to LoRA
+        if self.config.lora_dropout > 0.0:
+            x_lora = nn.Dropout(rate=self.config.lora_dropout)(
+                x, deterministic=not self.is_mutable_collection("dropout")
+            )
         else:
-            # LoRA is enabled - compute LoRA contribution first
-            lora_rank = self.config.lora_rank
-            lora_alpha = self.config.lora_alpha
-            scaling = lora_alpha / lora_rank
+            x_lora = x
 
-            # Handle remat path by replacing number with remat(number)
-            param_path = self.name
-            if 'transformer/h/' in param_path:
-                parts = param_path.split('/')
-                for i, part in enumerate(parts):
-                    if part.isdigit():
-                        parts[i] = f'remat({part})'
-                        break
-                param_path = '/'.join(parts)
+        # First LoRA matmul - keep batch sharding but don't shard small lora_rank dim
+        delta = jnp.matmul(x_lora, lora_A.astype(self.dtype))
+        delta = with_sharding_constraint(delta, PS(("dp", "fsdp"), None, None))
 
-            # A and B are the low-rank factors
-            #   A: (in_features, lora_rank)
-            #   B: (lora_rank, out_features)
-            lora_A = self.param(
-                "lora_A",
-                jax.nn.initializers.zeros,  # or normal with small std
-                (x.shape[-1], lora_rank),
-                self.param_dtype,
-            )
-            lora_B = self.param(
-                "lora_B",
-                jax.nn.initializers.zeros,
-                (lora_rank, self.features),
-                self.param_dtype,
-            )
+        # Second LoRA matmul - output must match final sharding
+        delta = jnp.matmul(delta, lora_B.astype(self.dtype)) * scaling
+        if 'attention/wo/' in self.name:
+            delta = with_sharding_constraint(delta, PS(("dp", "fsdp"), None, "mp"))
+        else:
+            delta = with_sharding_constraint(delta, PS(("dp", "fsdp"), None, "mp"))
 
-            # Possibly apply dropout on the input to LoRA
-            if self.config.lora_dropout > 0.0:
-                x_lora = nn.Dropout(rate=self.config.lora_dropout)(
-                    x, deterministic=not self.is_mutable_collection("dropout")
-                )
-            else:
-                x_lora = x
-
-            # First LoRA matmul - keep batch sharding but don't shard small lora_rank dim
-            delta = jnp.matmul(x_lora, lora_A.astype(self.dtype))
-            delta = with_sharding_constraint(delta, PS(("dp", "fsdp"), None, None))
-
-            # Second LoRA matmul - output must match final sharding
-            delta = jnp.matmul(delta, lora_B.astype(self.dtype)) * scaling
-            if 'attention/wo/' in self.name:
-                delta = with_sharding_constraint(delta, PS(("dp", "fsdp"), None, "mp"))
-            else:
-                delta = with_sharding_constraint(delta, PS(("dp", "fsdp"), None, "mp"))
-
-            # Compute base output with stop_gradient and add LoRA contribution
-            base_out = jax.lax.stop_gradient(jnp.matmul(x, kernel.astype(self.dtype)))
-            if 'attention/wo/' in self.name:
-                base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
-            else:
-                base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
+        # Compute base output and add LoRA contribution
+        base_out = jnp.matmul(x, kernel.astype(self.dtype))
+        if 'attention/wo/' in self.name:
+            base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
+        else:
+            base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
             
-            y = base_out + delta
+        
+        y = base_out + delta
 
         # Add bias if present
         if bias is not None:

@@ -201,10 +201,17 @@ def main(argv):
                     # Get the module path without the final 'kernel'
                     base_path = path[:-1]
                     # Add LoRA A and B parameters
+                    # Initialize LoRA parameters with small normal values like in test
+                    # Use a single RNG split for both A and B to avoid tracer issues
+                    rng_split = jax.random.split(rng, 2)
                     lora_A_path = base_path + ('lora_A',)
                     lora_B_path = base_path + ('lora_B',)
-                    lora_params[lora_A_path] = jnp.zeros((shape.shape[0], llama_config.lora_rank))
-                    lora_params[lora_B_path] = jnp.zeros((llama_config.lora_rank, shape.shape[1]))
+                    lora_params[lora_A_path] = jax.random.normal(
+                        rng_split[0], (shape.shape[0], llama_config.lora_rank)
+                    ) * 0.02
+                    lora_params[lora_B_path] = jax.random.normal(
+                        rng_split[1], (llama_config.lora_rank, shape.shape[1])
+                    ) * 0.02
             # Check if this is a MLP weight we want to add LoRA to
             elif 'feed_forward' in path_str and any(f'/{w}/' in path_str for w in ['w1', 'w2', 'w3']) and path[-1] == 'kernel':
                 if llama_config.lora_mlp:
@@ -275,7 +282,6 @@ def main(argv):
         def loss_and_accuracy(lora_params):
             # Combine with base params for forward pass
             params = {'params': combine_params(base_params, lora_params)}
-            logginginfo(f"Combined params: {jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, params)}")
             logits = model.apply(
                 params, batch['input_tokens'], deterministic=False,
                 rngs=rng_generator(LLaMAConfigurator.rng_keys()),
@@ -287,10 +293,6 @@ def main(argv):
         # Compute gradients only for LoRA params
         grad_fn = jax.value_and_grad(loss_and_accuracy, has_aux=True)
         (loss, accuracy), grads = grad_fn(train_state.params)
-        jax.debug.print("Raw gradients shapes: {}", 
-                       jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, grads))
-        jax.debug.print("Raw gradients max: {}", 
-                       jax.tree_util.tree_map(lambda x: jnp.max(jnp.abs(x)) if hasattr(x, 'shape') else x, grads))
         logginginfo("Gradient computation complete")
         # Count total and non-zero gradients
         flat_grads = flatten_dict(grads)
@@ -308,11 +310,6 @@ def main(argv):
         )
         logginginfo("Train state updated")
 
-        # Add gradient structure logging
-        if jax.process_index() == 0:
-            logginginfo("Gradient structure:")
-            for k, v in flat_grads.items():
-                logginginfo(f"  {'/'.join(str(x) for x in k)}: shape={v.shape}, dtype={v.dtype}")
 
         # Compute gradient statistics using JAX ops
         grad_norms = jnp.array([jnp.linalg.norm(v) for v in flat_grads.values()])
@@ -639,13 +636,6 @@ def main(argv):
             )
             logginginfo("Loaded base model parameters")
             
-            # Debug logging for base parameters
-            if jax.process_index() == 0:
-                flat_params = flatten_dict(base_params['params'])
-                logginginfo("Base model parameters:")
-                for k, v in flat_params.items():
-                    path_str = '/'.join(str(x) for x in k)
-                    logginginfo(f"  {path_str}: shape={v.shape if hasattr(v, 'shape') else 'no shape'}")
             
             log_memory_usage("After base parameter load")
 
@@ -660,6 +650,14 @@ def main(argv):
             # Initialize only LoRA params, use restored params as base
             logginginfo(f"Initializing LoRA parameters with rank {llama_config.lora_rank}")
             log_memory_usage("Before LoRA init")
+            
+            # Validate LoRA config
+            if llama_config.lora_rank <= 0:
+                raise ValueError(f"LoRA rank must be positive, got {llama_config.lora_rank}")
+            if llama_config.lora_alpha <= 0:
+                raise ValueError(f"LoRA alpha must be positive, got {llama_config.lora_alpha}")
+            if not (llama_config.lora_attn or llama_config.lora_mlp):
+                raise ValueError("At least one of lora_attn or lora_mlp must be True")
             
             # Create empty LoRA parameter structure
             lora_params = {'params': {}}
@@ -676,6 +674,18 @@ def main(argv):
                         layer_params[f'feed_forward/{name}/lora_A'] = jnp.zeros((llama_config.hidden_size, llama_config.lora_rank))
                         layer_params[f'feed_forward/{name}/lora_B'] = jnp.zeros((llama_config.lora_rank, llama_config.hidden_size))
                 lora_params['params'][f'transformer/h/{layer_idx}'] = layer_params
+                
+            # Validate created parameter structure
+            flat_params = flatten_dict(lora_params)
+            expected_param_count = llama_config.num_hidden_layers * (
+                (8 if llama_config.lora_attn else 0) +  # 4 attention matrices * 2 (A&B)
+                (6 if llama_config.lora_mlp else 0)     # 3 MLP matrices * 2 (A&B)
+            )
+            actual_param_count = len([k for k in flat_params.keys() if 'lora_' in str(k)])
+            if actual_param_count != expected_param_count:
+                raise ValueError(f"Expected {expected_param_count} LoRA parameters but got {actual_param_count}")
+            
+            logginginfo(f"Created LoRA parameter structure with {actual_param_count} parameters")
             
             # Create train state with only LoRA params
             logginginfo("Creating train state from LoRA params")
