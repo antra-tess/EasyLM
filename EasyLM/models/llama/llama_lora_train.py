@@ -559,7 +559,7 @@ def main(argv):
                 logginginfo(f"Removing old checkpoint: {old_checkpoint}")
                 os.system(f"rm -rf {old_checkpoint}")
         # For LoRA training, we need to adjust gather_fns structure
-        lora_gather_fns = {'params': gather_fns.params}  # Add params wrapper to match structure
+        lora_gather_fns = gather_fns  # Keep original structure since we already wrapped params
         checkpointer.save_all(
             train_state=partial_state,
             gather_fns=lora_gather_fns,
