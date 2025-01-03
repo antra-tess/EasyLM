@@ -107,6 +107,7 @@ FLAGS, FLAGS_DEF = mlxu.define_flags_with_default(
     checkpointing=mlxu.config_dict(
         save_min_step=1000,
         save_loss_threshold=2.0,
+        keep_recent=5,  # Number of recent checkpoints to keep
     ),
 )
 
@@ -539,6 +540,25 @@ def main(argv):
         if milestone:
             checkpoint_dir = os.path.join(logger.output_dir, f"milestone_{step}")
         logginginfo(f"Saving checkpoint to: {checkpoint_dir}")
+
+        # Cleanup old checkpoints if needed
+        if not milestone and FLAGS.checkpointing.keep_recent > 0:
+            # List all regular checkpoints
+            checkpoints = []
+            for fname in os.listdir(logger.output_dir):
+                if fname.startswith('checkpoint_'):
+                    try:
+                        step_num = int(fname.split('_')[1])
+                        checkpoints.append((step_num, fname))
+                    except (IndexError, ValueError):
+                        continue
+            
+            # Sort by step number and remove old ones
+            checkpoints.sort(reverse=True)  # Newest first
+            for _, fname in checkpoints[FLAGS.checkpointing.keep_recent:]:
+                old_checkpoint = os.path.join(logger.output_dir, fname)
+                logginginfo(f"Removing old checkpoint: {old_checkpoint}")
+                os.system(f"rm -rf {old_checkpoint}")
         checkpointer.save_all(
             train_state=partial_state,
             gather_fns=gather_fns,
