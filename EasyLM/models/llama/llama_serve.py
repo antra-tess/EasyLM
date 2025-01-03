@@ -71,10 +71,7 @@ def main(argv):
     model_start = time.time()
     with jax.default_device(jax.devices("cpu")[0]):
         logging.info(f"Loading checkpoint from {FLAGS.load_checkpoint}")
-        _, params = StreamingCheckpointer.load_trainstate_checkpoint(
-            FLAGS.load_checkpoint, disallow_trainstate=True
-        )
-        logging.info("Checkpoint loaded, initializing model...")
+        # Create model to get parameter shapes
         hf_model = FlaxLLaMAForCausalLM(
             llama_config,
             input_shape=(1, FLAGS.seq_length),
@@ -82,6 +79,21 @@ def main(argv):
             _do_init=False,
             dtype=get_float_dtype_by_name(FLAGS.dtype),
             param_dtype=get_float_dtype_by_name(FLAGS.param_dtype),
+        )
+        
+        # Get base parameter partition rules
+        model_ps = match_partition_rules(
+            LLaMAConfigurator.get_base_param_rules(), hf_model.params_shape_tree
+        )
+        shard_fns, gather_fns = make_shard_and_gather_fns(
+            model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+        )
+        
+        # Load checkpoint with sharding functions
+        _, params = StreamingCheckpointer.load_trainstate_checkpoint(
+            FLAGS.load_checkpoint, 
+            disallow_trainstate=True,
+            trainstate_shard_fns=shard_fns
         )
 
     model_ps = match_partition_rules(
