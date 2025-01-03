@@ -14,7 +14,8 @@ def main():
 sequence:
   - no_loss: "<|begin_of_text|><|start_header_id|>system<|end_header_id|>You are a helpful AI assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>"
   - no_loss: "{instruction} {input}<|eot_id|>"
-  - with_loss: "<|start_header_id|>assistant<|end_header_id|>{output}<|eot_id|>"
+  - no_loss: "<|start_header_id|>assistant<|end_header_id|>"
+  - with_loss: "{output}<|eot_id|>"
 """
     
     # Create processor
