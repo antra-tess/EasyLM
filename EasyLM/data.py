@@ -219,12 +219,19 @@ class HuggingfaceDataset(object):
             
             # Process all examples
             processed_examples = []
-            for example in tqdm(raw_dataset, desc="Processing dataset"):
+            total_examples = len(raw_dataset)
+            if jax.process_index() == 0:
+                logging.info(f"Starting dataset pre-tokenization of {total_examples} examples...")
+            for i, example in enumerate(tqdm(raw_dataset, desc="Processing dataset")):
+                if i % 1000 == 0 and jax.process_index() == 0:
+                    logging.info(f"Pre-tokenized {i}/{total_examples} examples...")
                 tokens, loss_masks = text_processor(example)
                 processed_examples.append({
                     'tokens': np.array(tokens, dtype=np.int32),
                     'loss_masks': np.array(loss_masks, dtype=np.float32)
                 })
+            if jax.process_index() == 0:
+                logging.info(f"Dataset pre-tokenization complete. Processed {total_examples} examples.")
             self._dataset = processed_examples
             
             # Save to cache
