@@ -18,7 +18,13 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --tokenizer="meta-llama/Meta-Llama-3.1-8B" \
     --load_checkpoint='params::/mnt/disk2/llama-3.1-8b' \
     --train_dataset.type='huggingface' \
-    --train_dataset.text_processor.fields='[instruction+input],output' \
+    --train_dataset.text_processor.template="""
+sequence:
+  - no_loss: "<|begin_of_text|><|start_header_id|>system<|end_header_id|>You are a helpful AI assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>"
+  - no_loss: "{instruction} {input}<|eot_id|>"
+  - no_loss: "<|start_header_id|>assistant<|end_header_id|>"
+  - with_loss: "{output}<|eot_id|>"
+""" \
     --train_dataset.huggingface_dataset.name="" \
     --train_dataset.huggingface_dataset.path='tatsu-lab/alpaca' \
     --train_dataset.huggingface_dataset.seq_length=2048 \
