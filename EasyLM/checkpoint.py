@@ -76,6 +76,8 @@ class StreamingCheckpointer(object):
         else:
             checkpoint_state = train_state.params['params']
             checkpoint_name = 'streaming_params'
+            if jax.process_index() == 0:
+                logging.info(f"Saving checkpoint at step {step}", gather_fns, type(gather_fns))
             checkpoint_gather_fns = gather_fns.params['params']
 
         if milestone:
