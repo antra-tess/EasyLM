@@ -11,12 +11,12 @@ echo "WANDB_API_KEY is${WANDB_API_KEY:+ set}${WANDB_API_KEY:-" not set"}"
 echo "HF_TOKEN is${HF_TOKEN:+ set}${HF_TOKEN:-" not set"}"
 
 ## Run training
-cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
+cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --mesh_dim='1,-1,32' \
     --dtype='bf16' \
     --llama.base_model='llama31_70b' \
     --tokenizer="meta-llama/Meta-Llama-3.1-70B" \
-    --load_checkpoint='params::gs://finetune70b/llama-3.1-70b' \
+    --load_checkpoint='base_params::gs://finetune70b/llama-3.1-70b' \
     --train_dataset.type='huggingface' \
     --train_dataset.text_processor.fields='[instruction+input],output' \
     --train_dataset.huggingface_dataset.name="" \
