@@ -24,7 +24,6 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --load_checkpoint='base_params::/mnt/disk2/llama-3.2-1b.easylm' \
     --train_dataset.type='huggingface' \
     --train_dataset.text_processor.fields='[instruction+input],output' \
-    --train_dataset.text_processor.prepend_text='<|begin_of_text|><|start_header_id|>system<|end_header_id|>You are a helpful AI assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>' \
     --train_dataset.huggingface_dataset.name="" \
     --train_dataset.huggingface_dataset.path='tatsu-lab/alpaca' \
     --train_dataset.huggingface_dataset.seq_length=512 \
