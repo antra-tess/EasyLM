@@ -64,6 +64,8 @@ sequence:
         # Pre-tokenize template if provided
         self.cached_segments = None
         if self.config.template:
+            if jax.process_index() == 0:
+                logging.info("Starting template pre-tokenization...")
             import yaml
             template = yaml.safe_load(self.config.template)
             self.cached_segments = []
@@ -120,6 +122,8 @@ sequence:
                             cached_parts.append(('field', part))
                             
                     self.cached_segments.append((mask, cached_parts))
+            if jax.process_index() == 0:
+                logging.info("Template pre-tokenization complete")
 
     def __call__(self, example, has_aux=False):
         if has_aux:
