@@ -566,6 +566,7 @@ def main(argv):
             metadata=metadata,
             dataset=dataset.get_state_dict(),
             milestone=milestone,
+            params_wrapped=False,
         )
         logginginfo("Checkpoint save complete")
 
