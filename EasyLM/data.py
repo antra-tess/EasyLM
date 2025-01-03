@@ -45,12 +45,13 @@ class TextProcessor(object):
     @staticmethod
     def get_default_config(updates=None):
         config = mlxu.config_dict()
-        config.fields_from_example = ''
-        config.fields = ''
-        config.subfield_separator = ' '
+        config.template = """
+sequence:
+  - no_loss: "{instruction} {input}"
+  - with_loss: "{output}"
+"""
         config.add_bos_token = True
         config.add_eos_token = True
-        config.prepend_text = ''
         config.base64_token_dtype = 'i4'
         return mlxu.update_config_dict(config, updates)
 
