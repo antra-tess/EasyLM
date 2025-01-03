@@ -195,11 +195,40 @@ class HuggingfaceDataset(object):
         split = self.config.split if self.config.split != '' else None
         self._tokenizer = tokenizer
         self._text_processor = text_processor
-        logging.info(f"Loading dataset from {self.config.path}")
-        self._dataset = load_dataset(
-            self.config.path, name, split=split, streaming=self.config.streaming
-        )
-        logging.info(f"Dataset loaded successfully: {len(self._dataset)} examples")
+        
+        # Create cache directory if needed
+        cache_dir = os.path.expanduser("~/.cache/easylm/datasets")
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # Generate cache key from dataset config and tokenizer
+        cache_key = f"{self.config.path}_{name}_{split}_{tokenizer.name_or_path}"
+        cache_path = os.path.join(cache_dir, f"{cache_key}.npz")
+        
+        if os.path.exists(cache_path):
+            logging.info(f"Loading preprocessed dataset from cache: {cache_path}")
+            cached_data = np.load(cache_path, allow_pickle=True)
+            self._dataset = cached_data['dataset'].item()
+            logging.info(f"Loaded {len(self._dataset)} examples from cache")
+        else:
+            logging.info(f"Loading dataset from {self.config.path}")
+            raw_dataset = load_dataset(
+                self.config.path, name, split=split, streaming=self.config.streaming
+            )
+            
+            # Process all examples
+            processed_examples = []
+            for example in tqdm(raw_dataset, desc="Processing dataset"):
+                tokens, loss_masks = text_processor(example)
+                processed_examples.append({
+                    'tokens': np.array(tokens, dtype=np.int32),
+                    'loss_masks': np.array(loss_masks, dtype=np.float32)
+                })
+            self._dataset = processed_examples
+            
+            # Save to cache
+            logging.info(f"Saving processed dataset to cache: {cache_path}")
+            np.savez(cache_path, dataset=self._dataset)
+            logging.info(f"Processed and cached {len(self._dataset)} examples")
 
     def __iter__(self):
         chunk_size = self.config.batch_size * self.config.seq_length
