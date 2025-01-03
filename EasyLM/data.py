@@ -74,49 +74,51 @@ sequence:
             token_buffer.append(self.tokenizer.bos_token_id)
             loss_mask_buffer.append(0.0)
 
-        if self.config.fields_from_example != '':
-            fields = example[self.config.fields_from_example].split(',')
-        else:
-            fields = self.config.fields.split(',')
-
-        for i, field in enumerate(fields):
-            if field.startswith('[') and field.endswith(']'):
-                # No loss for this field.
-                field = field[1:-1]
-                mask = 0.0
-            else:
-                mask = 1.0
-
-            if field.startswith('<|') and field.endswith('|>'):
-                # Special tokens.
-                field = field[2:-2]
-                if field == 'bos':
-                    token_buffer.append(self.tokenizer.bos_token_id)
-                elif field == 'eos':
-                    token_buffer.append(self.tokenizer.eos_token_id)
-                else:
-                    # Token ID specified directly.
-                    token_buffer.append(int(field))
-                loss_mask_buffer.append(mask)
-            elif field.startswith('{') and field.endswith('}'):
-                field = field[1:-1]
-                # Base64 encoded raw tokens.
-                tokens = np.frombuffer(
-                    base64.b64decode(example[field]),
-                    dtype=self.config.base64_token_dtype
-                ).tolist()
-                token_buffer.extend(tokens)
-                loss_mask_buffer.extend([mask for _ in range(len(tokens))])
-            else:
-                subfields = field.split('+')
-                text = self.config.subfield_separator.join(
-                    [example[subfield] for subfield in subfields]
-                )
-                if i == 0:
-                    text = self.config.prepend_text + text
-                tokens = self.tokenizer.encode(text, add_special_tokens=False)
-                token_buffer.extend(tokens)
-                loss_mask_buffer.extend([mask for _ in range(len(tokens))])
+        # Parse the template
+        import yaml
+        template = yaml.safe_load(self.config.template)
+        
+        # Process each segment in the sequence
+        for segment in template['sequence']:
+            # Each segment is a dict with one key-value pair
+            for loss_key, content in segment.items():
+                # Set loss mask based on key
+                mask = 0.0 if loss_key == 'no_loss' else 1.0
+                
+                # Format content with example values
+                text = content.format(**example)
+                
+                # Handle special tokens
+                while '<|' in text and '|>' in text:
+                    start = text.index('<|')
+                    end = text.index('|>') + 2
+                    token_name = text[start+2:end-2]
+                    
+                    # Add text before special token
+                    if start > 0:
+                        prefix_tokens = self.tokenizer.encode(text[:start], add_special_tokens=False)
+                        token_buffer.extend(prefix_tokens)
+                        loss_mask_buffer.extend([mask] * len(prefix_tokens))
+                    
+                    # Add special token
+                    if token_name == 'bos':
+                        token_buffer.append(self.tokenizer.bos_token_id)
+                    elif token_name == 'eos':
+                        token_buffer.append(self.tokenizer.eos_token_id)
+                    else:
+                        # Convert special token to ID
+                        special_token = f"<|{token_name}|>"
+                        token_id = self.tokenizer.convert_tokens_to_ids(special_token)
+                        token_buffer.append(token_id)
+                    loss_mask_buffer.append(mask)
+                    
+                    text = text[end:]
+                
+                # Add remaining text
+                if text:
+                    tokens = self.tokenizer.encode(text, add_special_tokens=False)
+                    token_buffer.extend(tokens)
+                    loss_mask_buffer.extend([mask] * len(tokens))
 
         if self.config.add_eos_token:
             token_buffer.append(self.tokenizer.eos_token_id)
