@@ -59,9 +59,6 @@ sequence:
 
     def __init__(self, config, tokenizer):
         self.config = self.get_default_config(config)
-        assert self.config.fields != '' or self.config.fields_from_example != '', (
-            'Either fields or fields_from_example must be specified.'
-        )
         self.tokenizer = tokenizer
 
     def __call__(self, example, has_aux=False):
