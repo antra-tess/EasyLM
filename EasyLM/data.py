@@ -239,9 +239,9 @@ class HuggingfaceDataset(object):
             token_buffer = []
             loss_mask_buffer = []
             for index, example in enumerate(self._dataset):
-                tokens, loss_masks = self.text_processor(example)
-                token_buffer.extend(tokens)
-                loss_mask_buffer.extend(loss_masks)
+                # Use pre-tokenized data directly
+                token_buffer.extend(example['tokens'])
+                loss_mask_buffer.extend(example['loss_masks'])
                 while len(token_buffer) > chunk_size + 1:
                     total_tokens += chunk_size
                     metrics = {
