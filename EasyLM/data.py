@@ -4,6 +4,7 @@ import json
 import base64
 from multiprocessing import Pool
 import logging
+import jax
 
 import mlxu
 import numpy as np
