@@ -103,7 +103,7 @@ class StreamingCheckpointer(object):
             )
 
     @staticmethod
-    def load_checkpoint(path, target=None, shard_fns=None, remove_dict_prefix=None, restore_state=True):
+    def load_checkpoint(path, target=None, shard_fns=None, remove_dict_prefix=None, restore_state=True, require_sharding=True):
         if jax.process_index() == 0:
             logging.info(f"Loading checkpoint from {path}")
             if shard_fns is not None:
@@ -145,7 +145,7 @@ class StreamingCheckpointer(object):
                             logging.info(f"Available shard_fns keys: {list(shard_fns.keys())}")
                         raise
                 flattend_train_state[key] = tensor
-        if counter == 0:
+        if require_sharding and counter == 0:
             raise ValueError(f"No tensor sharding was applied {path}")
 
         if target is not None:
@@ -257,6 +257,24 @@ class StreamingCheckpointer(object):
                 target=params_target,
                 shard_fns=params_shard_fns,  # Use params sharding directly
                 restore_state=False
+            )
+            # Wrap in params dict structure
+            if not isinstance(restored_params, dict) or 'params' not in restored_params:
+                restored_params = {'params': restored_params}
+            return restored_params  # Return only params, no train state
+        elif load_type == 'base_params_unsharded':
+            # Load base model parameters without requiring sharding functions
+            if trainstate_target is not None:
+                params_target = trainstate_target.get('params', None)
+            else:
+                params_target = None
+
+            restored_params = cls.load_checkpoint(
+                path=load_path,
+                target=params_target,
+                shard_fns=None,  # No sharding required
+                restore_state=False,
+                require_sharding=False  # Skip sharding requirement check
             )
             # Wrap in params dict structure
             if not isinstance(restored_params, dict) or 'params' not in restored_params:
