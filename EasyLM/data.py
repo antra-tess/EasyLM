@@ -209,7 +209,7 @@ class HuggingfaceDataset(object):
         if os.path.exists(cache_path):
             logging.info(f"Loading preprocessed dataset from cache: {cache_path}")
             cached_data = np.load(cache_path, allow_pickle=True)
-            self._dataset = cached_data['dataset'].item()
+            self._dataset = list(cached_data['dataset'])  # Convert to list directly
             logging.info(f"Loaded {len(self._dataset)} examples from cache")
         else:
             logging.info(f"Loading dataset from {self.config.path}")
