@@ -518,7 +518,7 @@ def main(argv):
         logginginfo(f"Checkpoint save called on host {hostname} (process {process_index}) at step {step}...")
 
         # Extract only LoRA parameters for saving
-        full_params = train_state.params['params']
+        full_params = train_state.params
         flat_params = flatten_dict(full_params)
         lora_params = {}
         for k, v in flat_params.items():
