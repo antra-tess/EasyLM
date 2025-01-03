@@ -60,6 +60,66 @@ sequence:
     def __init__(self, config, tokenizer):
         self.config = self.get_default_config(config)
         self.tokenizer = tokenizer
+        
+        # Pre-tokenize template if provided
+        self.cached_segments = None
+        if self.config.template:
+            import yaml
+            template = yaml.safe_load(self.config.template)
+            self.cached_segments = []
+            
+            # Process each segment in the sequence
+            for segment in template['sequence']:
+                # Each segment is a dict with one key-value pair
+                for loss_key, content in segment.items():
+                    # Set loss mask based on key
+                    mask = 0.0 if loss_key == 'no_loss' else 1.0
+                    
+                    # Find all dynamic field references
+                    import re
+                    field_pattern = r'\{([^}]+)\}'
+                    parts = re.split(field_pattern, content)
+                    
+                    # Pre-tokenize static parts
+                    cached_parts = []
+                    for i, part in enumerate(parts):
+                        if i % 2 == 0:  # Static content
+                            tokens = []
+                            text = part
+                            # Handle special tokens
+                            while '<|' in text and '|>' in text:
+                                start = text.index('<|')
+                                end = text.index('|>') + 2
+                                
+                                # Add text before special token
+                                if start > 0:
+                                    prefix_tokens = self.tokenizer.encode(
+                                        text[:start], add_special_tokens=False
+                                    )
+                                    tokens.extend(prefix_tokens)
+                                
+                                # Add special token
+                                token_name = text[start+2:end-2]
+                                if token_name == 'bos':
+                                    tokens.append(self.tokenizer.bos_token_id)
+                                elif token_name == 'eos':
+                                    tokens.append(self.tokenizer.eos_token_id)
+                                else:
+                                    special_token = f"<|{token_name}|>"
+                                    token_id = self.tokenizer.convert_tokens_to_ids(special_token)
+                                    tokens.append(token_id)
+                                
+                                text = text[end:]
+                            
+                            # Add remaining text
+                            if text:
+                                tokens.extend(self.tokenizer.encode(text, add_special_tokens=False))
+                            
+                            cached_parts.append(('static', tokens))
+                        else:  # Dynamic field name
+                            cached_parts.append(('field', part))
+                            
+                    self.cached_segments.append((mask, cached_parts))
 
     def __call__(self, example, has_aux=False):
         if has_aux:
@@ -73,48 +133,28 @@ sequence:
             token_buffer.append(self.tokenizer.bos_token_id)
             loss_mask_buffer.append(0.0)
 
-        # Parse the template
-        import yaml
-        template = yaml.safe_load(self.config.template)
-        
-        # Process each segment in the sequence
-        for segment in template['sequence']:
-            # Each segment is a dict with one key-value pair
-            for loss_key, content in segment.items():
-                # Set loss mask based on key
-                mask = 0.0 if loss_key == 'no_loss' else 1.0
-                
-                # Format content with example values
-                text = content.format(**example)
-                
-                # Handle special tokens
-                while '<|' in text and '|>' in text:
-                    start = text.index('<|')
-                    end = text.index('|>') + 2
-                    token_name = text[start+2:end-2]
-                    
-                    # Add text before special token
-                    if start > 0:
-                        prefix_tokens = self.tokenizer.encode(text[:start], add_special_tokens=False)
-                        token_buffer.extend(prefix_tokens)
-                        loss_mask_buffer.extend([mask] * len(prefix_tokens))
-                    
-                    # Add special token
-                    if token_name == 'bos':
-                        token_buffer.append(self.tokenizer.bos_token_id)
-                    elif token_name == 'eos':
-                        token_buffer.append(self.tokenizer.eos_token_id)
-                    else:
-                        # Convert special token to ID
-                        special_token = f"<|{token_name}|>"
-                        token_id = self.tokenizer.convert_tokens_to_ids(special_token)
-                        token_buffer.append(token_id)
-                    loss_mask_buffer.append(mask)
-                    
-                    text = text[end:]
-                
-                # Add remaining text
-                if text:
+        if self.cached_segments is not None:
+            # Use pre-tokenized segments
+            for mask, parts in self.cached_segments:
+                for part_type, part in parts:
+                    if part_type == 'static':
+                        # Add pre-tokenized static content
+                        token_buffer.extend(part)
+                        loss_mask_buffer.extend([mask] * len(part))
+                    else:  # Dynamic field
+                        # Tokenize and add dynamic content
+                        field_content = str(example.get(part, ''))
+                        tokens = self.tokenizer.encode(field_content, add_special_tokens=False)
+                        token_buffer.extend(tokens)
+                        loss_mask_buffer.extend([mask] * len(tokens))
+        else:
+            # Fallback to old template processing
+            import yaml
+            template = yaml.safe_load(self.config.template)
+            for segment in template['sequence']:
+                for loss_key, content in segment.items():
+                    mask = 0.0 if loss_key == 'no_loss' else 1.0
+                    text = content.format(**example)
                     tokens = self.tokenizer.encode(text, add_special_tokens=False)
                     token_buffer.extend(tokens)
                     loss_mask_buffer.extend([mask] * len(tokens))
