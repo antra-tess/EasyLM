@@ -93,7 +93,7 @@ def main(argv):
         _, params = StreamingCheckpointer.load_trainstate_checkpoint(
             FLAGS.load_checkpoint, 
             disallow_trainstate=True,
-            trainstate_shard_fns=shard_fns
+            trainstate_shard_fns={'params': {'params': shard_fns}}  # Double wrap for params structure
         )
 
     model_ps = match_partition_rules(
