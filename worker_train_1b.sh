@@ -33,7 +33,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --optimizer.adamw_optimizer.end_lr=5e-5 \
     --optimizer.adamw_optimizer.lr_warmup_steps=100 \
     --optimizer.adamw_optimizer.lr_decay_steps=3000 \
-    --total_steps=5000 \
+    --total_steps=15000 \
     --log_freq=50 \
     --save_model_freq=500 \
     --logger.online=true \

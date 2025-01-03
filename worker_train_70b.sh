@@ -18,13 +18,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --tokenizer="meta-llama/Meta-Llama-3.1-70B" \
     --load_checkpoint='base_params::gs://finetune70b/llama-3.1-70b' \
     --train_dataset.type='huggingface' \
-    --train_dataset.text_processor.template="""
-sequence:
-  - no_loss: "<|begin_of_text|><|start_header_id|>system<|end_header_id|>You are a helpful AI assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>"
-  - no_loss: "{instruction} {input}<|eot_id|>"
-  - no_loss: "<|start_header_id|>assistant<|end_header_id|>"
-  - with_loss: "{output}<|eot_id|>"
-""" \
+    --train_dataset.text_processor.template="$(cat templates/llama_chat.yaml)" \
     --train_dataset.huggingface_dataset.name="" \
     --train_dataset.huggingface_dataset.path='tatsu-lab/alpaca' \
     --train_dataset.huggingface_dataset.seq_length=1024 \
@@ -44,7 +38,7 @@ sequence:
     --optimizer.adamw_optimizer.lr_decay_steps=5000 \
     --total_steps=60000 \
     --log_freq=50 \
-    --save_model_freq=0 \
+    --save_model_freq=5000 \
     --logger.online=true \
     --logger.project='levanter-sft' \
     --logger.entity='antra-cyborgism' \
