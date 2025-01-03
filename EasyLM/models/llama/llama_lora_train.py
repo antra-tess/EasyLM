@@ -497,8 +497,17 @@ def main(argv):
             return tree  # None or actual param
 
 
-    def save_checkpoint(train_state, milestone=False):
+    def save_checkpoint(train_state, milestone=False, min_step=1000, loss_threshold=2.0):
         step = int(jax.device_get(train_state.step))
+        # Skip early checkpoints unless it's a milestone
+        if not milestone and step < min_step:
+            return
+            
+        # Get current loss - skip if above threshold
+        metrics = jax.device_get(train_state.metrics) if hasattr(train_state, 'metrics') else None
+        if not milestone and metrics and metrics.get('loss', 0) > loss_threshold:
+            return
+            
         hostname = os.uname().nodename
         process_index = jax.process_index()
         logginginfo(f"Checkpoint save called on host {hostname} (process {process_index}) at step {step}...")
