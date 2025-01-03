@@ -15,8 +15,8 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --mesh_dim='1,-1,1' \
     --dtype='bf16' \
     --llama.base_model='llama32_1b' \
-    --llama.lora_rank=8 \
-    --llama.lora_alpha=16 \
+    --llama.lora_rank=16 \
+    --llama.lora_alpha=32 \
     --llama.lora_dropout=0.1 \
     --llama.lora_attn=true \
     --llama.lora_mlp=false \
