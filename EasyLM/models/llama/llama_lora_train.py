@@ -104,8 +104,10 @@ FLAGS, FLAGS_DEF = mlxu.define_flags_with_default(
     logger=mlxu.WandBLogger.get_default_config(),
     log_all_worker=False,
     jax_distributed=JaxDistributedConfig.get_default_config(),
-    save_min_step=1000,
-    save_loss_threshold=2.0,
+    checkpointing=mlxu.config_dict(
+        save_min_step=1000,
+        save_loss_threshold=2.0,
+    ),
 )
 
 
@@ -502,12 +504,12 @@ def main(argv):
     def save_checkpoint(train_state, milestone=False):
         step = int(jax.device_get(train_state.step))
         # Skip early checkpoints unless it's a milestone
-        if not milestone and step < FLAGS.save_min_step:
+        if not milestone and step < FLAGS.checkpointing.save_min_step:
             return
             
         # Get current loss - skip if above threshold
         metrics = jax.device_get(train_state.metrics) if hasattr(train_state, 'metrics') else None
-        if not milestone and metrics and metrics.get('loss', 0) > FLAGS.save_loss_threshold:
+        if not milestone and metrics and metrics.get('loss', 0) > FLAGS.checkpointing.save_loss_threshold:
             return
             
         hostname = os.uname().nodename
