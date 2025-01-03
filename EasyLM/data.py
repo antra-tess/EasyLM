@@ -4,6 +4,8 @@ import json
 import base64
 from multiprocessing import Pool
 import logging
+import os
+from tqdm import tqdm
 import jax
 
 import mlxu
