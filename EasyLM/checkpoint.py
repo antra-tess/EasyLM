@@ -85,17 +85,21 @@ class StreamingCheckpointer(object):
 
         if milestone:
             # Save a milestone checkpoint that will not be overwritten
-            self.save_pickle(metadata, f'metadata_{step}.pkl')
-            self.save_pickle(dataset, f'dataset_{step}.pkl')
+            checkpoint_dir = os.path.join(self.checkpoint_dir, f"milestone_{step}")
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            self.save_pickle(metadata, os.path.join(checkpoint_dir, 'metadata.pkl'))
+            self.save_pickle(dataset, os.path.join(checkpoint_dir, 'dataset.pkl'))
             self.save_checkpoint(
-                checkpoint_state, f'{checkpoint_name}_{step}', checkpoint_gather_fns
+                checkpoint_state, os.path.join(checkpoint_dir, checkpoint_name), checkpoint_gather_fns
             )
         else:
             # Save a normal checkpoint that can be overwritten
-            self.save_pickle(metadata, 'metadata.pkl')
-            self.save_pickle(dataset, 'dataset.pkl')
+            checkpoint_dir = os.path.join(self.checkpoint_dir, f"checkpoint_{step}")
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            self.save_pickle(metadata, os.path.join(checkpoint_dir, 'metadata.pkl'))
+            self.save_pickle(dataset, os.path.join(checkpoint_dir, 'dataset.pkl'))
             self.save_checkpoint(
-                checkpoint_state, f'{checkpoint_name}', checkpoint_gather_fns
+                checkpoint_state, os.path.join(checkpoint_dir, checkpoint_name), checkpoint_gather_fns
             )
 
     @staticmethod
