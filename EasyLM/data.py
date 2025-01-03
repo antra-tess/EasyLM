@@ -200,11 +200,11 @@ class HuggingfaceDataset(object):
         
         # Create cache directory if needed
         cache_dir = os.path.expanduser("~/.cache/easylm/datasets")
-        os.makedirs(cache_dir, exist_ok=True)
+        # Create full path including dataset-specific subdirectories
+        cache_path = os.path.join(cache_dir, f"{self.config.path}_{name}_{split}_{tokenizer.name_or_path}.npz")
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
         
-        # Generate cache key from dataset config and tokenizer
-        cache_key = f"{self.config.path}_{name}_{split}_{tokenizer.name_or_path}"
-        cache_path = os.path.join(cache_dir, f"{cache_key}.npz")
+        # Cache path was already created above
         
         if os.path.exists(cache_path):
             logging.info(f"Loading preprocessed dataset from cache: {cache_path}")
