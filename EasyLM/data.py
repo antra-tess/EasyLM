@@ -53,6 +53,8 @@ sequence:
         config.add_bos_token = True
         config.add_eos_token = True
         config.base64_token_dtype = 'i4'
+        config.fields = ''  # Keep for backwards compatibility
+        config.fields_from_example = ''  # Keep for backwards compatibility
         return mlxu.update_config_dict(config, updates)
 
     def __init__(self, config, tokenizer):
