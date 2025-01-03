@@ -14,11 +14,11 @@ cd ~/EasyLM
 
 # Run serving
 python -m EasyLM.models.llama.llama_serve \
-    --mesh_dim='1,1,1' \
+    --mesh_dim='1,-1,1' \
     --dtype='bf16' \
-    --llama.base_model='llama3_8b' \
-    --tokenizer="meta-llama/Meta-Llama-3-8B" \
-    --load_checkpoint='params::gs://finetune70b/easylm_checkpoints/streaming_params' \
+    --llama.base_model='llama32_1b' \
+    --tokenizer="meta-llama/Llama-3.2-1B" \
+    --load_checkpoint='params::/mnt/disk2/llama-3.2-1b.easylm' \
     --input_length=1024 \
     --seq_length=2048 \
     --do_sample=True \

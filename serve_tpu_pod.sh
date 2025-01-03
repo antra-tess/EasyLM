@@ -9,15 +9,11 @@ echo "Starting TPU pod serving deployment..."
 echo "Pushing local changes to repository..."
 git push antra
 
-# Deploy to all workers
-# Get HF token from environment or ask for it
-if [ -z "${HF_TOKEN}" ]; then
-    echo "HF_TOKEN not found in environment"
-    read -p "Please enter your HuggingFace token: " token
-    export HF_TOKEN="${token}"
-fi
+export SCRIPT=worker_serve.sh
 
-echo "Deploying to TPU workers..."
-gcloud compute tpus tpu-vm ssh finetune-70b --zone=us-central2-b --worker=all --command="export HF_TOKEN='${HF_TOKEN}' && cd ~ && (if [ -d 'EasyLM' ]; then cd EasyLM && git reset --hard HEAD && git pull; else git clone https://github.com/antra-tess/EasyLM.git && cd EasyLM; fi) && cd ~/EasyLM && chmod +x worker_serve.sh && ./worker_serve.sh"
+# Copy worker script and start serving on all workers
+echo "Starting serving on all workers..."
+gcloud compute tpus tpu-vm scp $SCRIPT finetune-70b:~/$SCRIPT --zone=us-central2-b --worker=all
+gcloud compute tpus tpu-vm ssh finetune-70b --zone=us-central2-b --worker=all --command="cd ~/EasyLM && git fetch && git reset --hard HEAD && git checkout main && git pull && chmod +x ~/$SCRIPT && export WANDB_API_KEY='${WANDB_API_KEY}'  && export HF_TOKEN='${HF_TOKEN}' && ~/$SCRIPT"
 
 echo "TPU pod serving deployment complete!"
