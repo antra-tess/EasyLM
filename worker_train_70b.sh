@@ -12,7 +12,7 @@ echo "HF_TOKEN is${HF_TOKEN:+ set}${HF_TOKEN:-" not set"}"
 
 ## Run training
 cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
-    --mesh_dim='1,-1,32' \
+    --mesh_dim='1,-1,8' \
     --dtype='bf16' \
     --llama.base_model='llama31_70b' \
     --tokenizer="meta-llama/Meta-Llama-3.1-70B" \
@@ -22,20 +22,20 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --train_dataset.huggingface_dataset.name="" \
     --train_dataset.huggingface_dataset.path='tatsu-lab/alpaca' \
     --train_dataset.huggingface_dataset.seq_length=1024 \
-    --train_dataset.huggingface_dataset.batch_size=6 \
+    --train_dataset.huggingface_dataset.batch_size=16 \
     --optimizer.type='adamw' \
-    --optimizer.adamw_optimizer.lr=3e-5 \
+    --optimizer.adamw_optimizer.lr=1e-4 \
     --llama.scan_attention=true \
     --llama.scan_query_chunk_size=1024 \
     --llama.scan_key_chunk_size=1024 \
-    --llama.lora_rank=16 \
-    --llama.lora_alpha=32 \
+    --llama.lora_rank=32 \
+    --llama.lora_alpha=64 \
     --llama.lora_dropout=0.1 \
     --llama.lora_attn=true \
     --llama.lora_mlp=false \
-    --optimizer.adamw_optimizer.end_lr=1e-6 \
-    --optimizer.adamw_optimizer.lr_warmup_steps=100 \
-    --optimizer.adamw_optimizer.lr_decay_steps=1000 \
+    --optimizer.adamw_optimizer.end_lr=1e-5 \
+    --optimizer.adamw_optimizer.lr_warmup_steps=500 \
+    --optimizer.adamw_optimizer.lr_decay_steps=5000 \
     --total_steps=60000 \
     --log_freq=50 \
     --save_model_freq=0 \
