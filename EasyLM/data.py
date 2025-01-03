@@ -79,70 +79,43 @@ class TextProcessor(object):
             fields = self.config.fields.split(',')
 
         for i, field in enumerate(fields):
-            # Check for loss masking
             if field.startswith('[') and field.endswith(']'):
-                field = field[1:-1]  # Remove brackets
-                mask = 0.0  # No loss for this field
+                # No loss for this field.
+                field = field[1:-1]
+                mask = 0.0
             else:
-                mask = 1.0  # Apply loss to this field
-            
-            # Split field into components (text and special tokens)
-            components = []
-            current = ""
-            i = 0
-            while i < len(field):
-                if field[i:i+2] == '<|' and '|>' in field[i:]:
-                    # Found a special token
-                    if current:
-                        components.append(('text', current))
-                        current = ""
-                    end = field.index('|>', i)
-                    token = field[i:end+2]
-                    components.append(('special', token))
-                    i = end + 2
+                mask = 1.0
+
+            if field.startswith('<|') and field.endswith('|>'):
+                # Special tokens.
+                field = field[2:-2]
+                if field == 'bos':
+                    token_buffer.append(self.tokenizer.bos_token_id)
+                elif field == 'eos':
+                    token_buffer.append(self.tokenizer.eos_token_id)
                 else:
-                    current += field[i]
-                    i += 1
-            if current:
-                components.append(('text', current))
-            
-            # Process each component
-            for comp_type, content in components:
-                if comp_type == 'special':
-                    # Handle special tokens
-                    token_name = content[2:-2]  # Remove <| and |>
-                    if token_name == 'bos':
-                        token_buffer.append(self.tokenizer.bos_token_id)
-                    elif token_name == 'eos':
-                        token_buffer.append(self.tokenizer.eos_token_id)
-                    elif token_name in ['begin_of_text', 'start_header_id', 'end_header_id', 'eot_id']:
-                        # Handle Llama chat special tokens
-                        token_buffer.append(self.tokenizer.convert_tokens_to_ids(f'<|{token_name}|>'))
-                    else:
-                        # Token ID specified directly
-                        token_buffer.append(int(token_name))
-                    loss_mask_buffer.append(mask)
-                else:
-                    # Handle text content
-                    if content.startswith('{') and content.endswith('}'):
-                        # Base64 encoded raw tokens
-                        content = content[1:-1]
-                        tokens = np.frombuffer(
-                            base64.b64decode(example[content]),
-                            dtype=self.config.base64_token_dtype
-                        ).tolist()
-                    else:
-                        # Regular text field(s)
-                        subfields = content.split('+')
-                        text = self.config.subfield_separator.join(
-                            [example[subfield] for subfield in subfields]
-                        )
-                        if len(token_buffer) == 0:  # Only prepend to very first component
-                            text = self.config.prepend_text + text
-                        tokens = self.tokenizer.encode(text, add_special_tokens=False)
-                    
-                    token_buffer.extend(tokens)
-                    loss_mask_buffer.extend([mask for _ in range(len(tokens))])
+                    # Token ID specified directly.
+                    token_buffer.append(int(field))
+                loss_mask_buffer.append(mask)
+            elif field.startswith('{') and field.endswith('}'):
+                field = field[1:-1]
+                # Base64 encoded raw tokens.
+                tokens = np.frombuffer(
+                    base64.b64decode(example[field]),
+                    dtype=self.config.base64_token_dtype
+                ).tolist()
+                token_buffer.extend(tokens)
+                loss_mask_buffer.extend([mask for _ in range(len(tokens))])
+            else:
+                subfields = field.split('+')
+                text = self.config.subfield_separator.join(
+                    [example[subfield] for subfield in subfields]
+                )
+                if i == 0:
+                    text = self.config.prepend_text + text
+                tokens = self.tokenizer.encode(text, add_special_tokens=False)
+                token_buffer.extend(tokens)
+                loss_mask_buffer.extend([mask for _ in range(len(tokens))])
 
         if self.config.add_eos_token:
             token_buffer.append(self.tokenizer.eos_token_id)
