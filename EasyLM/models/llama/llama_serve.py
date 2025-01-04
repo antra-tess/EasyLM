@@ -394,20 +394,6 @@ class ModelServer(LMServer):
 
         return all_outputs
 
-    @classmethod
-    def create_flags(cls, updates=None):
-        """Create standard LLaMA flags with optional updates."""
-        flags, flags_def = mlxu.define_flags_with_default(
-            coordinator_url="localhost",
-            coordinator_port=5010,
-            **FLAGS_DEF
-        )
-
-        return flags, flags_def
-
-FLAGS, FLAGS_DEF = ModelServer.create_flags(FLAGS_DEF)
-
-
 def main(argv):
     logging.info("Starting LLaMA serving initialization...")
     start_time = time.time()
