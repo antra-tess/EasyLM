@@ -2,6 +2,7 @@ import logging
 from typing import Dict, List, Optional
 import asyncio
 import json
+import requests
 
 import socketio
 import gradio as gr
