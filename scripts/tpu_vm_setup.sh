@@ -32,8 +32,8 @@ pydantic
 fastapi
 uvicorn
 gradio
-EndOfFile
 python-socketio
+EndOfFile
 
 pip install --upgrade -r $HOME/tpu_requirements.txt
 
