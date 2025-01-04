@@ -37,4 +37,5 @@ python -m EasyLM.test_inference \
     --seq_length=2048 \
     --do_sample=True \
     --top_k=50 \
-    --top_p=0.95
+    --top_p=0.95 \
+    --lm_server.port=5009
