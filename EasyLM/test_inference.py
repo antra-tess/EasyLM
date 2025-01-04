@@ -9,12 +9,12 @@ from EasyLM.models.llama.llama_config import create_llama_flags
 
 def main(argv):
 
-    FLAGS, FLAGS_DEF = create_llama_flags()
+    create_llama_flags()
 
     logging.basicConfig(level=logging.INFO)
     
     # Initialize model server
-    server = ModelServer(FLAGS)
+    server = ModelServer()
     
     # Run inference on fixed text
     test_text = ["Tell me a short story about a cat."]
