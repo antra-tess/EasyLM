@@ -216,7 +216,7 @@ class ModelServer(LMServer):
 
         @partial(
             pjit,
-            in_shardings=(model_ps, PS(), PS()),
+            in_shardings=(combined_ps, PS(), PS()),
             out_shardings=(PS(), PS(), PS())
         )
         def forward_loglikelihood(params, rng, batch):
@@ -247,7 +247,7 @@ class ModelServer(LMServer):
 
         @partial(
             pjit,
-            in_shardings=(model_ps, PS(), PS(), PS()),
+            in_shardings=(combined_ps, PS(), PS(), PS()),
             out_shardings=(PS(), PS())
         )
         def forward_generate(params, rng, batch, temperature):
@@ -278,7 +278,7 @@ class ModelServer(LMServer):
 
         @partial(
             pjit,
-            in_shardings=(model_ps, PS(), PS()),
+            in_shardings=(combined_ps, PS(), PS()),
             out_shardings=(PS(), PS())
         )
         def forward_greedy_generate(params, rng, batch):
