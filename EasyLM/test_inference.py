@@ -29,4 +29,4 @@ if __name__ == '__main__':
 
     print(FLAGS is None)
     print(FLAGS2 is None)
-
+    mxlu.run(main)
