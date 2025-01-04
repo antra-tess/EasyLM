@@ -275,15 +275,28 @@ class LMServer(object):
         return output
 
     def process_chat(self, prompt, context, temperature):
+        if jax.process_index() == 0:
+            logging.info(f"Processing chat with prompt: {prompt}")
+            logging.info(f"Context: {context}")
+            logging.info(f"Temperature: {temperature}")
+            
         context = (
             context + self.config.chat_user_prefix
             + prompt + self.config.chat_user_suffix
             + self.config.chat_lm_prefix
         )
+        
+        if jax.process_index() == 0:
+            logging.info(f"Full context for generation: {context}")
+            
         response = self.generate(
             [self.config.chat_prepend_text + context],
             temperature=float(temperature),
         )[0]
+        
+        if jax.process_index() == 0:
+            logging.info(f"Generated response: {response}")
+            
         context = context + response + self.config.chat_lm_suffix
         return response, context
 

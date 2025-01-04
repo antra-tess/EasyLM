@@ -315,6 +315,10 @@ def main(argv):
         @staticmethod
         def generate(text, temperature):
             nonlocal sharded_rng
+            if jax.process_index() == 0:
+                logging.info(f"Generating with text: {text}")
+                logging.info(f"Temperature: {temperature}")
+                
             inputs = prefix_tokenizer(
                 text,
                 padding='max_length',
@@ -322,6 +326,9 @@ def main(argv):
                 max_length=FLAGS.input_length,
                 return_tensors='np',
             )
+            
+            if jax.process_index() == 0:
+                logging.info(f"Input tokens shape: {inputs.input_ids.shape}")
             input_tokens = inputs.input_ids
             input_mask = inputs.attention_mask
             if FLAGS.add_bos_token:
