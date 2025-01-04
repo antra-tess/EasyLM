@@ -263,9 +263,18 @@ class ModelServer(LMServer):
                 if jax.process_index() == 0:
                     logging.info(f"Sharding rules for LoRA model: {str(lora_model_ps)}")
 
-                # Merge the partition specs, LoRA rules take precedence
-                combined_ps = base_model_ps.copy()
-                combined_ps.update(lora_model_ps)
+                def deep_merge_dicts(dict1, dict2):
+                    """Recursively merge two dictionaries, preserving values from both."""
+                    result = dict1.copy()
+                    for key, value in dict2.items():
+                        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                            result[key] = deep_merge_dicts(result[key], value)
+                        else:
+                            result[key] = value
+                    return result
+
+                # Merge the partition specs, preserving both base and LoRA rules
+                combined_ps = deep_merge_dicts(base_model_ps, lora_model_ps)
 
                 if jax.process_index() == 0:
                     logging.info(f"Sharding rules for combined model: {str(combined_ps)}")
