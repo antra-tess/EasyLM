@@ -252,10 +252,10 @@ class ModelServer(LMServer):
             if FLAGS.lora_mode:
                 # Get base and LoRA parameter shapes
                 base_model_ps = match_partition_rules(
-                    LLaMAConfigurator.get_base_param_rules(), params
+                    LLaMAConfigurator.get_base_param_rules(), base_params
                 )
                 lora_model_ps = match_partition_rules(
-                    LLaMAConfigurator.get_lora_partition_rules(), params
+                    LLaMAConfigurator.get_lora_partition_rules(), lora_params
                 )
                 # Merge the partition specs, LoRA rules take precedence
                 combined_ps = base_model_ps.copy()
@@ -267,7 +267,7 @@ class ModelServer(LMServer):
             else:
                 # For base model only, use base sharding functions
                 base_model_ps = match_partition_rules(
-                    LLaMAConfigurator.get_base_param_rules(), params
+                    LLaMAConfigurator.get_base_param_rules(), base_params
                 )
                 combined_shard_fns, _ = make_shard_and_gather_fns(
                     base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
