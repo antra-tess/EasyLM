@@ -72,6 +72,9 @@ class ModelServer(LMServer):
             model_lora_ps = match_partition_rules(
                 LLaMAConfigurator.get_lora_partition_rules(), hf_model.params_shape_tree
             )
+            if jax.process_index() == 0:
+                logging.info(f"Sharding rules for lora: {str(model_lora_ps)}")
+
             base_shard_fns, base_gather_fns = make_shard_and_gather_fns(
                 model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
             )
