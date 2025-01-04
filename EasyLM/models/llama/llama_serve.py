@@ -373,8 +373,8 @@ class ModelServer(LMServer):
                 batch = dict(input_tokens=input_tokens, attention_mask=attention_mask)
 
                 with self.mesh:
-                    output, sharded_rng = self.forward_greedy_generate(
-                        self.params, sharded_rng, batch
+                    output, self.sharded_rng = self.forward_greedy_generate(
+                        self.params, self.sharded_rng, batch
                     )
                     output = jax.device_get(output)
 
