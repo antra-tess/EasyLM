@@ -16,6 +16,7 @@ from transformers import (
 )
 
 from EasyLM.checkpoint import StreamingCheckpointer
+from EasyLM.models.llama.llama_config import FLAGS
 from EasyLM.serving import LMServer
 from EasyLM.jax_utils import (
     JaxRNG, JaxDistributedConfig, next_rng, match_partition_rules, tree_apply,
@@ -29,8 +30,7 @@ from EasyLM.models.llama.llama_model import (
 
 class ModelServer(LMServer):
 
-    def __init__(self, FLAGS):
-        self.FLAGS = FLAGS
+    def __init__(self):
         config = FLAGS.lm_server
 
         super().__init__(config)
@@ -187,14 +187,14 @@ class ModelServer(LMServer):
             prefix_text,
             padding='max_length',
             truncation=True,
-            max_length=self.FLAGS.input_length,
+            max_length=FLAGS.input_length,
             return_tensors='np',
         )
         inputs = self.tokenizer(
             text,
             padding='max_length',
             truncation=True,
-            max_length=self.FLAGS.seq_length - self.FLAGS.input_length,
+            max_length=FLAGS.seq_length - FLAGS.input_length,
             return_tensors='np',
         )
         output_tokens = np.concatenate([prefix.input_ids, inputs.input_ids], axis=1)
@@ -205,7 +205,7 @@ class ModelServer(LMServer):
         input_mask = np.concatenate(
             [prefix.attention_mask, inputs.attention_mask], axis=1
         )
-        if self.FLAGS.add_bos_token:
+        if FLAGS.add_bos_token:
             bos_mask = np.ones_like(input_mask[:, :1])
         else:
             bos_mask = np.zeros_like(input_mask[:, :1])
@@ -239,8 +239,8 @@ class ModelServer(LMServer):
         output_tokens = inputs.input_ids
         attention_mask = inputs.attention_mask
 
-        if output_tokens.shape[1] < self.FLAGS.seq_length:
-            padding_length = self.FLAGS.seq_length - output_tokens.shape[1]
+        if output_tokens.shape[1] < FLAGS.seq_length:
+            padding_length = FLAGS.seq_length - output_tokens.shape[1]
             pad_tokens = np.full(
                 (batch_size, padding_length), self.tokenizer.pad_token_id, dtype=np.int32
             )
@@ -260,26 +260,26 @@ class ModelServer(LMServer):
         total_loglikelihood = 0.0
         total_is_greedy = True
         # Sliding window
-        for i in range(0, total_seq_length, self.FLAGS.seq_length):
+        for i in range(0, total_seq_length, FLAGS.seq_length):
             # Last window
-            if i + self.FLAGS.seq_length > total_seq_length:
-                last_output_mask = np.copy(attention_mask[:, -self.FLAGS.seq_length:])
+            if i + FLAGS.seq_length > total_seq_length:
+                last_output_mask = np.copy(attention_mask[:, -FLAGS.seq_length:])
                 last_output_mask[:, :i - total_seq_length] = 0.0
 
                 batch = dict(
-                    input_tokens=input_tokens[:, -self.FLAGS.seq_length:],
-                    output_tokens=output_tokens[:, -self.FLAGS.seq_length:],
-                    input_mask=attention_mask[:, -self.FLAGS.seq_length:],
+                    input_tokens=input_tokens[:, -FLAGS.seq_length:],
+                    output_tokens=output_tokens[:, -FLAGS.seq_length:],
+                    input_mask=attention_mask[:, -FLAGS.seq_length:],
                     output_mask=last_output_mask,
                 )
 
             # Normal window
             else:
                 batch = dict(
-                    input_tokens=input_tokens[:, i:i + self.FLAGS.seq_length],
-                    output_tokens=output_tokens[:, i:i + self.FLAGS.seq_length],
-                    input_mask=attention_mask[:, i:i + self.FLAGS.seq_length],
-                    output_mask=attention_mask[:, i:i + self.FLAGS.seq_length],
+                    input_tokens=input_tokens[:, i:i + FLAGS.seq_length],
+                    output_tokens=output_tokens[:, i:i + FLAGS.seq_length],
+                    input_mask=attention_mask[:, i:i + FLAGS.seq_length],
+                    output_mask=attention_mask[:, i:i + FLAGS.seq_length],
                 )
 
             with self.mesh:
@@ -301,14 +301,14 @@ class ModelServer(LMServer):
             text,
             padding='max_length',
             truncation=True,
-            max_length=self.FLAGS.input_length,
+            max_length=FLAGS.input_length,
             return_tensors='np',
         )
         if jax.process_index() == 0:
             logging.info(f"Input tokens shape: {inputs.input_ids.shape}")
         input_tokens = inputs.input_ids
         input_mask = inputs.attention_mask
-        if self.FLAGS.add_bos_token:
+        if FLAGS.add_bos_token:
             input_tokens[:, 0] = self.tokenizer.bos_token_id
             input_mask[:, 0] = 1
         batch = dict(
@@ -347,8 +347,8 @@ class ModelServer(LMServer):
                 input_tokens = pf_tokens.input_ids
                 attention_mask = pf_tokens.attention_mask
 
-                if input_tokens.shape[1] < self.FLAGS.input_length:
-                    extra = self.FLAGS.input_length - input_tokens.shape[1]
+                if input_tokens.shape[1] < FLAGS.input_length:
+                    extra = FLAGS.input_length - input_tokens.shape[1]
                     pad_tokens = np.full(
                         (1, extra), self.tokenizer.pad_token_id, dtype=np.int32
                     )
@@ -359,11 +359,11 @@ class ModelServer(LMServer):
                     attention_mask = np.concatenate(
                         [pad_attention, attention_mask], axis=1
                     )
-                elif input_tokens.shape[1] > self.FLAGS.input_length:
-                    input_tokens = input_tokens[:, -self.FLAGS.input_length:]
-                    attention_mask = attention_mask[:, -self.FLAGS.input_length:]
+                elif input_tokens.shape[1] > FLAGS.input_length:
+                    input_tokens = input_tokens[:, -FLAGS.input_length:]
+                    attention_mask = attention_mask[:, -FLAGS.input_length:]
 
-                if self.FLAGS.add_bos_token:
+                if FLAGS.add_bos_token:
                     input_tokens[:, 0] = self.tokenizer.bos_token_id
                     attention_mask[:, 0] = 1
 
