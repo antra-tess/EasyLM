@@ -109,11 +109,11 @@ class ModelServer(LMServer):
                     params = base_params
                 logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
-        model_ps = match_partition_rules(
-            LLaMAConfigurator.get_partition_rules(), params
+        base_model_ps = match_partition_rules(
+            LLaMAConfigurator.get_base_param_rules(), params
         )
-        shard_fns, _ = make_shard_and_gather_fns(
-            model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+        base_shard_fns, _ = make_shard_and_gather_fns(
+            base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
         )
 
         @partial(
@@ -208,7 +208,7 @@ class ModelServer(LMServer):
         self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
         with self.mesh:
             logging.info("Sharding parameters across mesh...")
-            self.params = tree_apply(shard_fns, params)
+            self.params = tree_apply(combined_shard_fns, params)
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
