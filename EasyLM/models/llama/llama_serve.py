@@ -405,5 +405,5 @@ class ModelServer(LMServer):
 #     server.run()
 
 
-if __name__ == "__main__":
-    mlxu.run(main)
+# if __name__ == "__main__":
+#     mlxu.run(main)
