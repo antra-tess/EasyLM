@@ -264,6 +264,9 @@ class ModelServer(LMServer):
                 combined_shard_fns, _ = make_shard_and_gather_fns(
                     combined_ps, get_float_dtype_by_name(FLAGS.param_dtype)
                 )
+                test1 = combined_shard_fns['params']['transformer']['wte']['embedding']
+                test2 = combined_shard_fns['params']['transformer']['h']['0']['attention']['wq']['kernel']
+                test3 = combined_shard_fns['params']['transformer']['h']['0']['attention']['wq']['lora_A']
             else:
                 # For base model only, use base sharding functions
                 base_model_ps = match_partition_rules(
