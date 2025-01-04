@@ -86,19 +86,25 @@ class ModelServer(LMServer):
                 trainstate_shard_fns={'params': base_shard_fns}  # Single wrap for base_params mode
             )
 
-            # Load and combine LoRA parameters if enabled
-            if FLAGS.lora_mode and FLAGS.load_lora:
-                _, lora_params = StreamingCheckpointer.load_trainstate_checkpoint(
-                    FLAGS.load_lora,
-                    disallow_trainstate=True,
-                    trainstate_shard_fns={'params': lora_shard_fns}
-                )
-                # Combine base and LoRA parameters
-                params = base_params
-                for k, v in lora_params['params'].items():
-                    params['params'][k] = v
-            else:
-                params = base_params
+            # Create mesh before loading parameters
+            logging.info("Setting up JAX mesh...")
+            mesh_start = time.time()
+            self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
+            with self.mesh:
+                # Load and combine LoRA parameters if enabled
+                if FLAGS.lora_mode and FLAGS.load_lora:
+                    _, lora_params = StreamingCheckpointer.load_trainstate_checkpoint(
+                        FLAGS.load_lora,
+                        disallow_trainstate=True,
+                        trainstate_shard_fns={'params': lora_shard_fns}
+                    )
+                    # Combine base and LoRA parameters
+                    params = base_params
+                    for k, v in lora_params['params'].items():
+                        params['params'][k] = v
+                else:
+                    params = base_params
+                logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
         model_ps = match_partition_rules(
             LLaMAConfigurator.get_partition_rules(), params
