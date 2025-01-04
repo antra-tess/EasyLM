@@ -84,7 +84,7 @@ class ModelServer(LMServer):
             lora_shape = unflatten_dict(lora_shape)
 
             # Get partition rules for filtered shapes
-            model_ps = match_partition_rules(
+            base_model_ps = match_partition_rules(
                 LLaMAConfigurator.get_base_param_rules(), base_shape
             )
 
@@ -99,7 +99,7 @@ class ModelServer(LMServer):
                 logging.info(f"Sharding rules for lora: {str(model_lora_ps)}")
 
             base_shard_fns, base_gather_fns = make_shard_and_gather_fns(
-                model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+                base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
             )
             lora_shard_fns, lora_gather_fns = make_shard_and_gather_fns(
                 model_lora_ps, get_float_dtype_by_name(FLAGS.param_dtype)
@@ -153,17 +153,6 @@ class ModelServer(LMServer):
             # Get combined sharding functions for both base and LoRA parameters
             if FLAGS.lora_mode:
                 # Get base and LoRA parameter shapes
-                base_model_ps = match_partition_rules(
-                    LLaMAConfigurator.get_base_param_rules(), base_params
-                )
-                if jax.process_index() == 0:
-                    logging.info(f"Sharding rules for base model: {str(base_model_ps)}")
-
-                lora_model_ps = match_partition_rules(
-                    LLaMAConfigurator.get_lora_partition_rules(), lora_params
-                )
-                if jax.process_index() == 0:
-                    logging.info(f"Sharding rules for LoRA model: {str(lora_model_ps)}")
 
                 def deep_merge_dicts(dict1, dict2):
                     """Recursively merge two dictionaries, preserving values from both."""
@@ -176,7 +165,7 @@ class ModelServer(LMServer):
                     return result
 
                 # Merge the partition specs, preserving both base and LoRA rules
-                combined_ps = deep_merge_dicts(base_model_ps, lora_model_ps)
+                combined_ps = deep_merge_dicts(base_model_ps, model_lora_ps)
 
                 if jax.process_index() == 0:
                     logging.info(f"Sharding rules for combined model: {str(combined_ps)}")
