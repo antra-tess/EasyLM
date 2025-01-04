@@ -36,7 +36,7 @@ git clone https://github.com/antra-tess/EasyLM.git
 cd EasyLM
 
 # Run TPU setup script if packages not installed
-if ! check_package "jax.interpreters.xla"; then
+if ! check_package "python-socketio"; then
     echo "Installing required packages..."
     ./scripts/tpu_vm_setup.sh
 else

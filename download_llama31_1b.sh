@@ -10,8 +10,8 @@ if [ -z "${HF_TOKEN:-}" ]; then
     exit 1
 fi
 
-MODEL_NAME="meta-llama/Llama-3-1b"
-OUTPUT_DIR="/mnt/disk2/llama-3.1-1b"
+MODEL_NAME="meta-llama/Llama-3.2-1b"
+OUTPUT_DIR="/mnt/disk2/llama-3.2-1b"
 
 # Create output directory if it doesn't exist
 mkdir -p "$OUTPUT_DIR"

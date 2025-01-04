@@ -312,6 +312,9 @@ class ModelServer(LMServer):
         return total_loglikelihood, total_is_greedy
 
     def generate(self, text, temperature):
+        if jax.process_index() == 0:
+            logging.info(f"Generating with text: {text}")
+            logging.info(f"Temperature: {temperature}")
         inputs = self.prefix_tokenizer(
             text,
             padding='max_length',
@@ -319,6 +322,8 @@ class ModelServer(LMServer):
             max_length=FLAGS.input_length,
             return_tensors='np',
         )
+        if jax.process_index() == 0:
+            logging.info(f"Input tokens shape: {inputs.input_ids.shape}")
         input_tokens = inputs.input_ids
         input_mask = inputs.attention_mask
         if FLAGS.add_bos_token:

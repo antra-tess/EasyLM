@@ -12,19 +12,16 @@ echo "HF_TOKEN is${HF_TOKEN:+ set}${HF_TOKEN:-" not set"}"
 
 cd ~/EasyLM
 
-# Run serving
-python -m EasyLM.models.llama.llama_serve \
+# Run worker client
+python -m EasyLM.worker_client \
     --mesh_dim='1,-1,1' \
     --dtype='bf16' \
     --llama.base_model='llama32_1b' \
     --tokenizer="meta-llama/Llama-3.2-1B" \
-    --load_checkpoint='params::/mnt/disk2/llama-3.2-1b.easylm' \
+    --load_checkpoint='base_params_unsharded::/mnt/disk2/llama-3.2-1b.easylm' \
     --input_length=1024 \
     --seq_length=2048 \
     --do_sample=True \
     --top_k=50 \
     --top_p=0.95 \
-    --lm_server.port=5009 \
-    --lm_server.batch_size=1 \
-    --jax_distributed.initialize_jax_distributed=false \
-    --jax_distributed.coordinator_address=''
+    --coordinator-url='http://localhost:5010'
