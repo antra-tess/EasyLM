@@ -104,6 +104,7 @@ class ModelServer(LMServer):
                     injected = 0
                     # Combine base and LoRA parameters by merging trees
                     def merge_param_trees(base, lora):
+                        nonlocal injected
                         """Recursively merge two parameter trees."""
                         if not isinstance(base, dict) or not isinstance(lora, dict):
                             return lora  # At leaf node, take LoRA value
