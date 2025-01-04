@@ -106,7 +106,7 @@ class ModelServer(LMServer):
                     for k, v in lora_params['params'].items():
                         params['params'][k] = v
                         if jax.process_index() == 0:
-                            logging.info(f"Injected LoRA parameter {k} with shape {v.shape}")
+                            logging.info(f"Injected LoRA parameter {k}")
                 else:
                     params = base_params
                 logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
