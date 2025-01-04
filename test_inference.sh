@@ -32,7 +32,8 @@ python -m EasyLM.test_inference \
     --dtype='bf16' \
     --llama.base_model='llama32_1b' \
     --tokenizer='meta-llama/Llama-3.2-1B' \
-    --load_checkpoint='params::/mnt/disk2/checkpoint_1100/streaming_params' \
+    --load_checkpoint='base_params_unsharded::/mnt/disk2/llama-3.2-1b.easylm' \
+    --load_lora='params::/mnt/disk2/checkpoint_1100/streaming_params' \
     --input_length=1024 \
     --seq_length=2048 \
     --do_sample=True \
