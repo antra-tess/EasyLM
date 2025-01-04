@@ -227,16 +227,29 @@ class ModelServer(LMServer):
             logging.info("Sharding parameters across mesh...")
             # Get combined sharding functions for both base and LoRA parameters
             if FLAGS.lora_mode:
-                # For LoRA mode, combine base and LoRA sharding functions
+                # Get base and LoRA parameter shapes
                 base_model_ps = match_partition_rules(
                     LLaMAConfigurator.get_base_param_rules(), params
                 )
                 lora_model_ps = match_partition_rules(
                     LLaMAConfigurator.get_lora_partition_rules(), params
                 )
-                # Merge the partition specs, LoRA rules take precedence
-                combined_ps = base_model_ps.copy()
-                combined_ps.update(lora_model_ps)
+
+                # Filter base_model_ps to only include non-LoRA parameters
+                filtered_base_ps = {}
+                for k, v in base_model_ps.items():
+                    if 'lora_' not in k:
+                        filtered_base_ps[k] = v
+
+                # Filter lora_model_ps to only include LoRA parameters
+                filtered_lora_ps = {}
+                for k, v in lora_model_ps.items():
+                    if 'lora_' in k:
+                        filtered_lora_ps[k] = v
+
+                # Combine filtered partition specs
+                combined_ps = filtered_base_ps.copy()
+                combined_ps.update(filtered_lora_ps)
 
                 combined_shard_fns, _ = make_shard_and_gather_fns(
                     combined_ps, get_float_dtype_by_name(FLAGS.param_dtype)
