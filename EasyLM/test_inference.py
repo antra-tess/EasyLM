@@ -12,7 +12,7 @@ FLAGS2 = create_llama_flags()
 
 def main(argv):
 
-
+    print("Test Inference Script starts.")
     logging.basicConfig(level=logging.INFO)
     
     # Initialize model server
