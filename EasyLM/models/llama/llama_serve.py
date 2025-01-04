@@ -149,6 +149,55 @@ class ModelServer(LMServer):
                     params = base_params
                 logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
+        with self.mesh:
+            # Get combined sharding functions for both base and LoRA parameters
+            if FLAGS.lora_mode:
+                # Get base and LoRA parameter shapes
+                base_model_ps = match_partition_rules(
+                    LLaMAConfigurator.get_base_param_rules(), base_params
+                )
+                if jax.process_index() == 0:
+                    logging.info(f"Sharding rules for base model: {str(base_model_ps)}")
+
+                lora_model_ps = match_partition_rules(
+                    LLaMAConfigurator.get_lora_partition_rules(), lora_params
+                )
+                if jax.process_index() == 0:
+                    logging.info(f"Sharding rules for LoRA model: {str(lora_model_ps)}")
+
+                # Merge the partition specs, LoRA rules take precedence
+                combined_ps = base_model_ps.copy()
+                combined_ps.update(lora_model_ps)
+
+                if jax.process_index() == 0:
+                    logging.info(f"Sharding rules for combined model: {str(combined_ps)}")
+
+                combined_shard_fns, _ = make_shard_and_gather_fns(
+                    combined_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+                )
+            else:
+                # For base model only, use base sharding functions
+                base_model_ps = match_partition_rules(
+                    LLaMAConfigurator.get_base_param_rules(), base_params
+                )
+                combined_shard_fns, _ = make_shard_and_gather_fns(
+                    base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+                )
+            if jax.process_index() == 0:
+                logging.info(f"combined_shard_fns {combined_shard_fns}")
+
+                # Print full parameter tree with shapes
+                def print_tree_with_shapes(tree, prefix=''):
+                    if isinstance(tree, dict):
+                        for k, v in tree.items():
+                            logging.info(f"{prefix}{k}:")
+                            print_tree_with_shapes(v, prefix + '  ')
+                    else:
+                        logging.info(f"{prefix}shape: {tree.shape}, dtype: {tree.dtype}")
+
+                logging.info("Parameter tree structure:")
+                print_tree_with_shapes(params)
+
         # base_model_ps = match_partition_rules(
         #     LLaMAConfigurator.get_base_param_rules(), params
         # )
@@ -249,55 +298,7 @@ class ModelServer(LMServer):
         with self.mesh:
             logging.info("Sharding parameters across mesh...")
             # Get combined sharding functions for both base and LoRA parameters
-            if FLAGS.lora_mode:
-                # Get base and LoRA parameter shapes
-                base_model_ps = match_partition_rules(
-                    LLaMAConfigurator.get_base_param_rules(), base_params
-                )
-                if jax.process_index() == 0:
-                    logging.info(f"Sharding rules for base model: {str(base_model_ps)}")
 
-                lora_model_ps = match_partition_rules(
-                    LLaMAConfigurator.get_lora_partition_rules(), lora_params
-                )
-                if jax.process_index() == 0:
-                    logging.info(f"Sharding rules for LoRA model: {str(lora_model_ps)}")
-
-                # Merge the partition specs, LoRA rules take precedence
-                combined_ps = base_model_ps.copy()
-                combined_ps.update(lora_model_ps)
-
-                if jax.process_index() == 0:
-                    logging.info(f"Sharding rules for combined model: {str(combined_ps)}")
-
-                combined_shard_fns, _ = make_shard_and_gather_fns(
-                    combined_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-                )
-                test1 = combined_shard_fns['params']['transformer']['wte']['embedding']
-                test2 = combined_shard_fns['params']['transformer']['h']['0']['attention']['wq']['kernel']
-                test3 = combined_shard_fns['params']['transformer']['h']['0']['attention']['wq']['lora_A']
-            else:
-                # For base model only, use base sharding functions
-                base_model_ps = match_partition_rules(
-                    LLaMAConfigurator.get_base_param_rules(), base_params
-                )
-                combined_shard_fns, _ = make_shard_and_gather_fns(
-                    base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-                )
-
-            if jax.process_index() == 0:
-                logging.info(f"combined_shard_fns {combined_shard_fns}")
-                # Print full parameter tree with shapes
-                def print_tree_with_shapes(tree, prefix=''):
-                    if isinstance(tree, dict):
-                        for k, v in tree.items():
-                            logging.info(f"{prefix}{k}:")
-                            print_tree_with_shapes(v, prefix + '  ')
-                    else:
-                        logging.info(f"{prefix}shape: {tree.shape}, dtype: {tree.dtype}")
-                
-                logging.info("Parameter tree structure:")
-                print_tree_with_shapes(params)
 
             self.params = tree_apply(combined_shard_fns, params)
             self.sharded_rng = next_rng()
