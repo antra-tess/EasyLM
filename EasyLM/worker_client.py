@@ -76,19 +76,19 @@ if __name__ == '__main__':
     import mlxu
     
     # Define flags with defaults from command line args
-    FLAGS = mlxu.define_flags_with_default(
-        mesh_dim=args.mesh_dim,
-        dtype=args.dtype,
-        llama=mlxu.config_dict(base_model=getattr(args, 'llama.base_model')),
-        tokenizer=args.tokenizer,
-        load_checkpoint=args.load_checkpoint,
-        input_length=args.input_length,
-        seq_length=args.seq_length,
-        do_sample=args.do_sample,
-        top_k=args.top_k,
-        top_p=args.top_p,
-        **FLAGS_DEF
-    )[0]
+    updates = {
+        'mesh_dim': args.mesh_dim,
+        'dtype': args.dtype,
+        'llama': mlxu.config_dict(base_model=getattr(args, 'llama.base_model')),
+        'tokenizer': args.tokenizer,
+        'load_checkpoint': args.load_checkpoint,
+        'input_length': args.input_length,
+        'seq_length': args.seq_length,
+        'do_sample': args.do_sample,
+        'top_k': args.top_k,
+        'top_p': args.top_p,
+    }
+    FLAGS = mlxu.define_flags_with_default(**updates, **FLAGS_DEF)[0]
     
     server = ModelServer(FLAGS.lm_server)
     
