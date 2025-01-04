@@ -26,4 +26,4 @@ def main(argv):
 
 if __name__ == '__main__':
 
-    mxlu.run(main)
+    mlxu.run(main)
