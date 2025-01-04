@@ -113,6 +113,8 @@ class ModelServer(LMServer):
                                 merged[k] = merge_param_trees(merged[k], v)
                             else:
                                 merged[k] = v
+                                if jax.process_index() == 0:
+                                    logging.warning(f"LoRA parameter {k} added to base model")
                         return merged
                     
                     params = base_params.copy()
