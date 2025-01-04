@@ -173,6 +173,7 @@ class ModelServer(LMServer):
                 combined_shard_fns, _ = make_shard_and_gather_fns(
                     combined_ps, get_float_dtype_by_name(FLAGS.param_dtype)
                 )
+                combined_shard_fns = {'params': combined_shard_fns}
             else:
                 # For base model only, use base sharding functions
                 base_model_ps = match_partition_rules(
@@ -298,7 +299,7 @@ class ModelServer(LMServer):
             # Get combined sharding functions for both base and LoRA parameters
 
 
-            self.params = tree_apply({'params': combined_shard_fns}, params)
+            self.params = tree_apply(combined_shard_fns, params)
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
