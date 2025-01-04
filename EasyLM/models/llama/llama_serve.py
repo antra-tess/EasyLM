@@ -31,7 +31,6 @@ from EasyLM.models.llama.llama_config import create_llama_flags
 
 FLAGS, FLAGS_DEF = create_llama_flags()
 
-
 class ModelServer(LMServer):
 
     def __init__(self, config):
@@ -394,6 +393,24 @@ class ModelServer(LMServer):
             all_outputs.append(total_generated)
 
         return all_outputs
+
+    @classmethod
+    def create_flags(cls, updates=None):
+        """Create standard LLaMA flags with optional updates."""
+        flags, flags_def = mlxu.define_flags_with_default(
+            coordinator_url=None,
+            coordinator_port=5010,
+        )
+
+        if updates is not None:
+            for key, value in updates.items():
+                if hasattr(flags, key):
+                    setattr(flags, key, value)
+
+        return flags, flags_def
+
+
+FLAGS, _ = ModelServer.create_flags(FLAGS)
 
 
 def main(argv):
