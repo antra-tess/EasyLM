@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import mlxu
 from transformers import AutoTokenizer
 
-from EasyLM.models.llama.llama_serve import ModelServer, FLAGS
+from EasyLM.models.llama.llama_serve import ModelServer
 from EasyLM.models.llama.llama_config import create_llama_flags
 
 def main(argv):
