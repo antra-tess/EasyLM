@@ -6,6 +6,7 @@ import json
 import socketio
 import jax
 import jax.numpy as jnp
+import mlxu
 
 from EasyLM.serving import LMServer
 
