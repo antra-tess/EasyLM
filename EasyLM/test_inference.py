@@ -5,7 +5,6 @@ import mlxu
 from transformers import AutoTokenizer
 
 from EasyLM.models.llama.llama_config import create_llama_flags
-FLAGS2 = create_llama_flags()
 
 def main(argv):
 
@@ -25,5 +24,9 @@ def main(argv):
     print("\nOutput:", response[0])
 
 if __name__ == '__main__':
+    # print all command line arguments
+    import sys
+    print('Number of arguments:', len(sys.argv), 'arguments.')
+    print('Argument List:', str(sys.argv))
 
     mlxu.run(main)
