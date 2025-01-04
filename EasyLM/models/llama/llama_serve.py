@@ -69,15 +69,21 @@ class ModelServer(LMServer):
             model_ps = match_partition_rules(
                 LLaMAConfigurator.get_base_param_rules(), hf_model.params_shape_tree
             )
-            shard_fns, gather_fns = make_shard_and_gather_fns(
+            model_lora_ps = match_partition_rules(
+                LLaMAConfigurator.get_lora_partition_rules(), hf_model.params_shape_tree
+            )
+            base_shard_fns, base_gather_fns = make_shard_and_gather_fns(
                 model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+            )
+            lora_shard_fns, lora_gather_fns = make_shard_and_gather_fns(
+                model_lora_ps, get_float_dtype_by_name(FLAGS.param_dtype)
             )
 
             # Load base model parameters
             _, base_params = StreamingCheckpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint,
                 disallow_trainstate=True,
-                trainstate_shard_fns={'params': shard_fns}  # Single wrap for base_params mode
+                trainstate_shard_fns={'params': base_shard_fns}  # Single wrap for base_params mode
             )
 
             # Load and combine LoRA parameters if enabled
@@ -85,7 +91,7 @@ class ModelServer(LMServer):
                 _, lora_params = StreamingCheckpointer.load_trainstate_checkpoint(
                     FLAGS.load_lora,
                     disallow_trainstate=True,
-                    trainstate_shard_fns={'params': shard_fns}
+                    trainstate_shard_fns={'params': lora_shard_fns}
                 )
                 # Combine base and LoRA parameters
                 params = base_params

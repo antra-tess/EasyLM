@@ -35,7 +35,5 @@ def main(argv):
 if __name__ == '__main__':
     # print all command line arguments
     import sys
-    print('Number of arguments:', len(sys.argv), 'arguments.')
-    print('Argument List:', str(sys.argv))
 
     mlxu.run(main)
