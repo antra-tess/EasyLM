@@ -59,10 +59,8 @@ if __name__ == '__main__':
     from EasyLM.models.llama.llama_serve import ModelServer, FLAGS
     from EasyLM.models.llama.llama_config import create_llama_flags
     
-    # Create flags with coordinator URL
-    FLAGS, _ = create_llama_flags({
-        'coordinator_url': 'http://51.81.181.136:5010'
-    })
+    # Import existing flags and add coordinator URL
+    from EasyLM.models.llama.llama_serve import FLAGS
     
     def main(argv):
         logging.basicConfig(level=logging.INFO)
@@ -70,7 +68,7 @@ if __name__ == '__main__':
         server = ModelServer(FLAGS.lm_server)
         
         # Start worker client
-        client = WorkerClient(FLAGS.coordinator_url, server)
+        client = WorkerClient(args.coordinator_url, server)
         client.start()
 
     mlxu.run(main)
