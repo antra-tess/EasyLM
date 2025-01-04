@@ -295,15 +295,15 @@ class LLaMAConfigurator(object):
         """ Partition rules specifically for LoRA parameters. """
         return (
             # LoRA parameters in attention
-            ("transformer/.*/attention/(wq|wk|wv)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
-            ("transformer/.*/attention/(wq|wk|wv)/lora_B", PS(None, "mp")),    # shape [lora_rank, hidden_size]
-            ("transformer/.*/attention/wo/lora_A", PS("mp", None)),            # shape [hidden_size, lora_rank]
-            ("transformer/.*/attention/wo/lora_B", PS(None, "fsdp")),          # shape [lora_rank, hidden_size]
+            (".*/attention/(wq|wk|wv)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
+            (".*/attention/(wq|wk|wv)/lora_B", PS(None, "mp")),    # shape [lora_rank, hidden_size]
+            (".*/attention/wo/lora_A", PS("mp", None)),            # shape [hidden_size, lora_rank]
+            (".*/attention/wo/lora_B", PS(None, "fsdp")),          # shape [lora_rank, hidden_size]
             # LoRA parameters in mlp (if enabled)
-            ("transformer/.*/feed_forward/(w1|w3)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
-            ("transformer/.*/feed_forward/(w1|w3)/lora_B", PS(None, "mp")),    # shape [lora_rank, intermediate_size]
-            ("transformer/.*/feed_forward/w2/lora_A", PS("mp", None)),         # shape [intermediate_size, lora_rank]
-            ("transformer/.*/feed_forward/w2/lora_B", PS(None, "fsdp")),       # shape [lora_rank, hidden_size]
+            (".*/feed_forward/(w1|w3)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
+            (".*/feed_forward/(w1|w3)/lora_B", PS(None, "mp")),    # shape [lora_rank, intermediate_size]
+            (".*/feed_forward/w2/lora_A", PS("mp", None)),         # shape [intermediate_size, lora_rank]
+            (".*/feed_forward/w2/lora_B", PS(None, "fsdp")),       # shape [lora_rank, hidden_size]
             ('.*', PS(None)),
         )
 
