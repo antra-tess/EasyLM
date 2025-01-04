@@ -101,6 +101,7 @@ class ModelServer(LMServer):
                         disallow_trainstate=True,
                         trainstate_shard_fns={'params': lora_shard_fns}
                     )
+                    injected = 0
                     # Combine base and LoRA parameters by merging trees
                     def merge_param_trees(base, lora):
                         """Recursively merge two parameter trees."""
@@ -113,14 +114,13 @@ class ModelServer(LMServer):
                                 merged[k] = merge_param_trees(merged[k], v)
                             else:
                                 merged[k] = v
-                                if jax.process_index() == 0:
-                                    logging.warning(f"LoRA parameter {k} added to base model")
+                                injected += 1
                         return merged
                     
                     params = base_params.copy()
                     params['params'] = merge_param_trees(base_params['params'], lora_params['params'])
                     if jax.process_index() == 0:
-                        logging.info("Merged LoRA parameters into base model")
+                        logging.info("Merged LoRA parameters into base model, injected {} new parameters".format(injected))
                 else:
                     params = base_params
                 logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
