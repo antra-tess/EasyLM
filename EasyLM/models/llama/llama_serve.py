@@ -264,7 +264,6 @@ class ModelServer(LMServer):
                 combined_shard_fns, _ = make_shard_and_gather_fns(
                     combined_ps, get_float_dtype_by_name(FLAGS.param_dtype)
                 )
-                combined_shard_fns = combined_shard_fns['params']
             else:
                 # For base model only, use base sharding functions
                 base_model_ps = match_partition_rules(
@@ -287,7 +286,10 @@ class ModelServer(LMServer):
                 
                 logging.info("Parameter tree structure:")
                 print_tree_with_shapes(params)
-            self.params = tree_apply(combined_shard_fns, params['params'])
+            test1 = combined_shard_fns['params']['transformer']
+            test2 = params['params']['transformer']
+
+            self.params = tree_apply(combined_shard_fns, params)
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
