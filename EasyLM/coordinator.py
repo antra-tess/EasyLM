@@ -103,11 +103,17 @@ class CoordinatorServer:
                 
             def bot(history):
                 user_message = history[-1][0]
-                response = requests.post(
-                    f"http://localhost:{self.port}/chat",
-                    json={"prompt": user_message}
-                ).json()
-                history[-1][1] = response['response']
+                try:
+                    response = requests.post(
+                        f"http://localhost:{self.port}/chat",
+                        json={"prompt": user_message}
+                    ).json()
+                    if 'error' in response:
+                        history[-1][1] = f"Error: {response['error']}"
+                    else:
+                        history[-1][1] = response['response']
+                except Exception as e:
+                    history[-1][1] = f"Error: {str(e)}"
                 return history
             
             msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(
