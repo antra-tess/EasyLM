@@ -24,4 +24,4 @@ python -m EasyLM.worker_client \
     --do_sample=True \
     --top_k=50 \
     --top_p=0.95 \
-    --coordinator-url="${COORDINATOR_URL:-http://localhost:5010}"
+    --coordinator_url="${COORDINATOR_URL:-http://localhost:5010}"
