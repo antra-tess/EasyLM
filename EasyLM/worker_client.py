@@ -68,7 +68,7 @@ if __name__ == '__main__':
         server = ModelServer(FLAGS.lm_server)
         
         # Start worker client
-        client = WorkerClient(args.coordinator_url, server)
+        client = WorkerClient(FLAGS.coordinator_url, server)
         client.start()
 
     mlxu.run(main)
