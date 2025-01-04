@@ -289,7 +289,7 @@ class ModelServer(LMServer):
             test1 = combined_shard_fns['params']['transformer']
             test2 = params['params']['transformer']
 
-            self.params = tree_apply(combined_shard_fns, params)
+            self.params = tree_apply(test1, test2)
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
