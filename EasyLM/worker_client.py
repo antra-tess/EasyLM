@@ -78,7 +78,7 @@ if __name__ == '__main__':
     updates = {
         'mesh_dim': args.mesh_dim,
         'dtype': args.dtype,
-        'llama': {'base_model': args.llama.base_model},
+        'llama': {'base_model': getattr(args, 'llama.base_model')},
         'tokenizer': args.tokenizer,
         'load_checkpoint': args.load_checkpoint,
         'input_length': args.input_length,
