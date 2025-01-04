@@ -272,6 +272,7 @@ class ModelServer(LMServer):
                 combined_shard_fns, _ = make_shard_and_gather_fns(
                     base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
                 )
+                combined_shard_fns = combined_shard_fns['params']
 
             if jax.process_index() == 0:
                 logging.info(f"combined_shard_fns {combined_shard_fns}")
