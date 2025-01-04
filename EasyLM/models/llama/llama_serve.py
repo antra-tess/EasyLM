@@ -87,6 +87,11 @@ class ModelServer(LMServer):
             model_ps = match_partition_rules(
                 LLaMAConfigurator.get_base_param_rules(), base_shape
             )
+
+            if jax.process_index() == 0:
+                logging.info(f"lora_shape: {lora_shape}")
+
+
             model_lora_ps = match_partition_rules(
                 LLaMAConfigurator.get_lora_partition_rules(), lora_shape
             )
