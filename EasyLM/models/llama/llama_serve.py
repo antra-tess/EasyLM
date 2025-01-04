@@ -252,7 +252,17 @@ class ModelServer(LMServer):
 
             if jax.process_index() == 0:
                 logging.info(f"combined_shard_fns {combined_shard_fns}")
-                logging.info(f"params {params}")
+                # Print full parameter tree with shapes
+                def print_tree_with_shapes(tree, prefix=''):
+                    if isinstance(tree, dict):
+                        for k, v in tree.items():
+                            logging.info(f"{prefix}{k}:")
+                            print_tree_with_shapes(v, prefix + '  ')
+                    else:
+                        logging.info(f"{prefix}shape: {tree.shape}, dtype: {tree.dtype}")
+                
+                logging.info("Parameter tree structure:")
+                print_tree_with_shapes(params)
             self.params = tree_apply(combined_shard_fns, params)
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
