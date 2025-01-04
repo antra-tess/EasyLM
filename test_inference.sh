@@ -34,7 +34,7 @@ python -m EasyLM.test_inference \
     --tokenizer='meta-llama/Llama-3.2-1B' \
     --load_checkpoint='base_params_unsharded::/mnt/disk2/llama-3.2-1b.easylm' \
     --load_lora='params::/mnt/disk2/easylm_chkp/1febd23a8f154d748cbc59896981b9aa/checkpoint_15000/streaming_params' \
-    --lora_mode=True \
+    --lora_mode=False \
     --llama.lora_rank=16 \
     --llama.lora_alpha=32 \
     --llama.lora_dropout=0.1 \
