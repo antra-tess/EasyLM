@@ -27,6 +27,6 @@ def main(argv):
 
 if __name__ == '__main__':
 
-    print(FLAGS)
-    print(FLAGS2)
+    print(FLAGS is None)
+    print(FLAGS2 is None)
 
