@@ -1,6 +1,7 @@
 import logging
 import jax
 import jax.numpy as jnp
+import mlxu
 from transformers import AutoTokenizer
 
 from EasyLM.models.llama.llama_serve import ModelServer, FLAGS
