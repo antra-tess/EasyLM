@@ -20,7 +20,15 @@ def main(argv):
     # Run inference on fixed text
     test_text = ["Tell me a short story about a cat."]
     response = server.generate(test_text, temperature=1.0)
-    
+
+    print("\nInput:", test_text[0])
+    print("\nOutput:", response[0])
+
+    print ("=====================")
+
+    test_text = ["Tell me a scary story."]
+    response = server.generate(test_text, temperature=1.0)
+
     print("\nInput:", test_text[0])
     print("\nOutput:", response[0])
 
