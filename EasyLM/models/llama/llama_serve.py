@@ -73,12 +73,26 @@ class ModelServer(LMServer):
                 model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
             )
 
-            # Load checkpoint with sharding functions
-            _, params = StreamingCheckpointer.load_trainstate_checkpoint(
+            # Load base model parameters
+            _, base_params = StreamingCheckpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint,
                 disallow_trainstate=True,
                 trainstate_shard_fns={'params': shard_fns}  # Single wrap for base_params mode
             )
+
+            # Load and combine LoRA parameters if enabled
+            if FLAGS.lora_mode and FLAGS.load_lora:
+                _, lora_params = StreamingCheckpointer.load_trainstate_checkpoint(
+                    FLAGS.load_lora,
+                    disallow_trainstate=True,
+                    trainstate_shard_fns={'params': shard_fns}
+                )
+                # Combine base and LoRA parameters
+                params = base_params
+                for k, v in lora_params['params'].items():
+                    params['params'][k] = v
+            else:
+                params = base_params
 
         model_ps = match_partition_rules(
             LLaMAConfigurator.get_partition_rules(), params
