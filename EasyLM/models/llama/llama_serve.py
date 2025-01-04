@@ -398,7 +398,7 @@ class ModelServer(LMServer):
     def create_flags(cls, updates=None):
         """Create standard LLaMA flags with optional updates."""
         flags, flags_def = mlxu.define_flags_with_default(
-            coordinator_url=None,
+            coordinator_url="localhost",
             coordinator_port=5010,
         )
 
