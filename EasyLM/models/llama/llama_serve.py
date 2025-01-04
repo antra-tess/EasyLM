@@ -65,10 +65,24 @@ class ModelServer(LMServer):
                 param_dtype=get_float_dtype_by_name(FLAGS.param_dtype),
             )
 
-            base_shape = hf_model.params_shape_tree
-            lora_shape = hf_model.params_shape_tree
+            # Get full parameter shape tree
+            full_shape = hf_model.params_shape_tree
+            
+            # Filter for base parameters (no LoRA)
+            base_shape = {}
+            for k, v in flatten_dict(full_shape).items():
+                if 'lora_' not in '/'.join(str(x) for x in k):
+                    base_shape[k] = v
+            base_shape = unflatten_dict(base_shape)
+            
+            # Filter for LoRA parameters
+            lora_shape = {}
+            for k, v in flatten_dict(full_shape).items():
+                if 'lora_' in '/'.join(str(x) for x in k):
+                    lora_shape[k] = v
+            lora_shape = unflatten_dict(lora_shape)
 
-            # Get base parameter partition rules
+            # Get partition rules for filtered shapes
             model_ps = match_partition_rules(
                 LLaMAConfigurator.get_base_param_rules(), base_shape
             )
