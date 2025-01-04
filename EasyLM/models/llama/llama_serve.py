@@ -14,6 +14,7 @@ import optax
 from transformers import (
     AutoTokenizer, GenerationConfig, FlaxLogitsProcessorList
 )
+from flax.traverse_util import flatten_dict, unflatten_dict
 
 from EasyLM.checkpoint import StreamingCheckpointer
 from EasyLM.models.llama.llama_config import FLAGS
