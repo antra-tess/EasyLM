@@ -5,6 +5,7 @@ import mlxu
 from transformers import AutoTokenizer
 
 from EasyLM.models.llama.llama_config import create_llama_flags
+create_llama_flags()
 
 def main(argv):
 
