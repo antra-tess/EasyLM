@@ -57,12 +57,38 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--coordinator-url', default='http://localhost:5010')
+    parser.add_argument('--mesh_dim', default='1,-1,1')
+    parser.add_argument('--dtype', default='bf16')
+    parser.add_argument('--llama.base_model', default='llama32_1b')
+    parser.add_argument('--tokenizer')
+    parser.add_argument('--load_checkpoint')
+    parser.add_argument('--input_length', type=int, default=1024)
+    parser.add_argument('--seq_length', type=int, default=2048)
+    parser.add_argument('--do_sample', type=bool, default=True)
+    parser.add_argument('--top_k', type=int, default=50)
+    parser.add_argument('--top_p', type=float, default=0.95)
     args = parser.parse_args()
     
     logging.basicConfig(level=logging.INFO)
     
     # Import and initialize model server here
-    from EasyLM.models.llama.llama_serve import ModelServer, FLAGS
+    from EasyLM.models.llama.llama_serve import ModelServer, FLAGS, FLAGS_DEF
+    
+    # Update FLAGS with command line args
+    updates = {
+        'mesh_dim': args.mesh_dim,
+        'dtype': args.dtype,
+        'llama': {'base_model': args.llama.base_model},
+        'tokenizer': args.tokenizer,
+        'load_checkpoint': args.load_checkpoint,
+        'input_length': args.input_length,
+        'seq_length': args.seq_length,
+        'do_sample': args.do_sample,
+        'top_k': args.top_k,
+        'top_p': args.top_p,
+    }
+    FLAGS.update(updates)
+    
     server = ModelServer(FLAGS.lm_server)
     
     # Start worker client
