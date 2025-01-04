@@ -208,6 +208,30 @@ class ModelServer(LMServer):
         self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
         with self.mesh:
             logging.info("Sharding parameters across mesh...")
+            # Get combined sharding functions for both base and LoRA parameters
+            if FLAGS.lora_mode:
+                # For LoRA mode, combine base and LoRA sharding functions
+                base_model_ps = match_partition_rules(
+                    LLaMAConfigurator.get_base_param_rules(), params
+                )
+                lora_model_ps = match_partition_rules(
+                    LLaMAConfigurator.get_lora_partition_rules(), params
+                )
+                # Merge the partition specs, LoRA rules take precedence
+                combined_ps = base_model_ps.copy()
+                combined_ps.update(lora_model_ps)
+                combined_shard_fns, _ = make_shard_and_gather_fns(
+                    combined_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+                )
+            else:
+                # For base model only, use base sharding functions
+                base_model_ps = match_partition_rules(
+                    LLaMAConfigurator.get_base_param_rules(), params
+                )
+                combined_shard_fns, _ = make_shard_and_gather_fns(
+                    base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+                )
+
             self.params = tree_apply(combined_shard_fns, params)
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
