@@ -32,18 +32,20 @@ class WorkerClient:
             logging.info(f"Received inference request: {data}")
             request_id = data['request_id']
             
-            # Process request using model server
-            response, _ = self.model_server.process_chat(
-                data['prompt'],
-                data['context'],
-                data.get('temperature', None)
-            )
-            
-            # Send response back to coordinator
-            await self.sio.emit('inference_response', {
-                'request_id': request_id,
-                'response': response
-            })
+            # Only worker 0 processes the request and sends response
+            if jax.process_index() == 0:
+                # Process request using model server
+                response, _ = self.model_server.process_chat(
+                    data['prompt'],
+                    data['context'],
+                    data.get('temperature', None)
+                )
+                
+                # Send response back to coordinator
+                await self.sio.emit('inference_response', {
+                    'request_id': request_id,
+                    'response': response
+                })
             
     async def run(self):
         """Connect to coordinator and handle requests."""
