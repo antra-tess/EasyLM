@@ -27,15 +27,12 @@ from EasyLM.models.llama.llama_model import (
 )
 
 
-from EasyLM.models.llama.llama_config import create_llama_flags
-
-FLAGS, FLAGS_DEF = create_llama_flags()
-
 class ModelServer(LMServer):
 
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, FLAGS):
+        config = FLAGS.lm_config
 
+        super().__init__(config)
 
         logging.info("Initializing JAX distributed configuration...")
         JaxDistributedConfig.initialize(FLAGS.jax_distributed)

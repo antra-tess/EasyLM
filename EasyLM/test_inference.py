@@ -8,10 +8,13 @@ from EasyLM.models.llama.llama_serve import ModelServer, FLAGS
 from EasyLM.models.llama.llama_config import create_llama_flags
 
 def main(argv):
+
+    FLAGS, FLAGS_DEF = create_llama_flags()
+
     logging.basicConfig(level=logging.INFO)
     
     # Initialize model server
-    server = ModelServer(FLAGS.lm_server)
+    server = ModelServer(FLAGS)
     
     # Run inference on fixed text
     test_text = ["Tell me a short story about a cat."]
@@ -22,3 +25,5 @@ def main(argv):
 
 if __name__ == '__main__':
     mlxu.run(main)
+
+
