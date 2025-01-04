@@ -72,23 +72,20 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     
     # Import and initialize flags/model server
-    from EasyLM.models.llama.llama_serve import ModelServer, FLAGS_DEF
+    from EasyLM.models.llama.llama_serve import ModelServer, FLAGS, FLAGS_DEF
     import mlxu
     
-    # Define flags with defaults from command line args
-    updates = {
-        'mesh_dim': args.mesh_dim,
-        'dtype': args.dtype,
-        'llama': mlxu.config_dict(base_model=getattr(args, 'llama.base_model')),
-        'tokenizer': args.tokenizer,
-        'load_checkpoint': args.load_checkpoint,
-        'input_length': args.input_length,
-        'seq_length': args.seq_length,
-        'do_sample': args.do_sample,
-        'top_k': args.top_k,
-        'top_p': args.top_p,
-    }
-    FLAGS = mlxu.define_flags_with_default(**updates, **FLAGS_DEF)[0]
+    # Update FLAGS with command line args
+    FLAGS.mesh_dim = args.mesh_dim
+    FLAGS.dtype = args.dtype
+    FLAGS.llama.base_model = getattr(args, 'llama.base_model')
+    FLAGS.tokenizer = args.tokenizer
+    FLAGS.load_checkpoint = args.load_checkpoint
+    FLAGS.input_length = args.input_length
+    FLAGS.seq_length = args.seq_length
+    FLAGS.do_sample = args.do_sample
+    FLAGS.top_k = args.top_k
+    FLAGS.top_p = args.top_p
     
     server = ModelServer(FLAGS.lm_server)
     
