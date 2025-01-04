@@ -277,6 +277,9 @@ class LMServer(object):
         return output
 
     def process_chat(self, prompt, context, temperature):
+        if temperature is None:
+            temperature = self.config.default_temperature
+            
         if jax.process_index() == 0:
             logging.info(f"Processing chat with prompt: {prompt}")
             logging.info(f"Context: {context}")
