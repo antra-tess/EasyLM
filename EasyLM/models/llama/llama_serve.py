@@ -254,12 +254,21 @@ class ModelServer(LMServer):
                 base_model_ps = match_partition_rules(
                     LLaMAConfigurator.get_base_param_rules(), base_params
                 )
+                if jax.process_index() == 0:
+                    logging.info(f"Sharding rules for base model: {str(base_model_ps)}")
+
                 lora_model_ps = match_partition_rules(
                     LLaMAConfigurator.get_lora_partition_rules(), lora_params
                 )
+                if jax.process_index() == 0:
+                    logging.info(f"Sharding rules for LoRA model: {str(lora_model_ps)}")
+
                 # Merge the partition specs, LoRA rules take precedence
                 combined_ps = base_model_ps.copy()
                 combined_ps.update(lora_model_ps)
+
+                if jax.process_index() == 0:
+                    logging.info(f"Sharding rules for combined model: {str(combined_ps)}")
 
                 combined_shard_fns, _ = make_shard_and_gather_fns(
                     combined_ps, get_float_dtype_by_name(FLAGS.param_dtype)
