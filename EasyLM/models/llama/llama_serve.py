@@ -31,7 +31,7 @@ class ModelServer(LMServer):
 
     def __init__(self, FLAGS):
         self.FLAGS = FLAGS
-        config = FLAGS.lm_config
+        config = FLAGS.lm_server
 
         super().__init__(config)
 
