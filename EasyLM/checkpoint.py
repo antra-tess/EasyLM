@@ -279,7 +279,7 @@ class StreamingCheckpointer(object):
             # Wrap in params dict structure
             if not isinstance(restored_params, dict) or 'params' not in restored_params:
                 restored_params = {'params': restored_params}
-            return restored_params  # Return only params, no train state
+            return None, restored_params  # Return only params, no train state
         elif load_type == 'flax_params':
             if trainstate_target is not None:
                 params_target = trainstate_target.params['params']
