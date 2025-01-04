@@ -4,16 +4,16 @@ import jax.numpy as jnp
 import mlxu
 from transformers import AutoTokenizer
 
-from EasyLM.models.llama.llama_serve import ModelServer
 from EasyLM.models.llama.llama_config import create_llama_flags
-
 FLAGS2 = create_llama_flags()
 
 def main(argv):
 
     print("Test Inference Script starts.")
     logging.basicConfig(level=logging.INFO)
-    
+
+    from EasyLM.models.llama.llama_serve import ModelServer
+
     # Initialize model server
     server = ModelServer()
     
