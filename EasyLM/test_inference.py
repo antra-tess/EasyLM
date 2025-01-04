@@ -28,6 +28,6 @@ if __name__ == '__main__':
     print(FLAGS)
     print(FLAGS2)
 
-    mlxu.run(main)
+    #mlxu.run(main)
 
 
