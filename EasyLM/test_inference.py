@@ -8,6 +8,8 @@ from EasyLM.models.llama.llama_serve import ModelServer
 from EasyLM.models.llama.llama_config import create_llama_flags
 from EasyLM.models.llama.llama_config import FLAGS
 
+FLAGS2 = create_llama_flags()
+
 def main(argv):
 
 
@@ -24,10 +26,7 @@ def main(argv):
     print("\nOutput:", response[0])
 
 if __name__ == '__main__':
-    FLAGS2 = create_llama_flags()
+
     print(FLAGS)
     print(FLAGS2)
-
-    #mlxu.run(main)
-
 
