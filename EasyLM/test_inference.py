@@ -6,10 +6,13 @@ from transformers import AutoTokenizer
 
 from EasyLM.models.llama.llama_serve import ModelServer
 from EasyLM.models.llama.llama_config import create_llama_flags
+from EasyLM.models.llama.llama_config import FLAGS
 
 def main(argv):
 
-    create_llama_flags()
+    FLAGS2 = create_llama_flags()
+    print(FLAGS)
+    print(FLAGS2)
 
     logging.basicConfig(level=logging.INFO)
     
