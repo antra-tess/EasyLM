@@ -72,8 +72,8 @@ class ModelServer(LMServer):
             model_lora_ps = match_partition_rules(
                 LLaMAConfigurator.get_lora_partition_rules(), hf_model.params_shape_tree
             )
-            if jax.process_index() == 0:
-                logging.info(f"Sharding rules for lora: {str(model_lora_ps)}")
+            # if jax.process_index() == 0:
+            #     logging.info(f"Sharding rules for lora: {str(model_lora_ps)}")
 
             base_shard_fns, base_gather_fns = make_shard_and_gather_fns(
                 model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
@@ -105,6 +105,8 @@ class ModelServer(LMServer):
                     params = base_params
                     for k, v in lora_params['params'].items():
                         params['params'][k] = v
+                        if jax.process_index() == 0:
+                            logging.info(f"Injected LoRA parameter {k} with shape {v.shape}")
                 else:
                     params = base_params
                 logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
@@ -220,6 +222,7 @@ class ModelServer(LMServer):
                 # Merge the partition specs, LoRA rules take precedence
                 combined_ps = base_model_ps.copy()
                 combined_ps.update(lora_model_ps)
+
                 combined_shard_fns, _ = make_shard_and_gather_fns(
                     combined_ps, get_float_dtype_by_name(FLAGS.param_dtype)
                 )
