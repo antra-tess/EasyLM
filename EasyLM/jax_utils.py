@@ -405,15 +405,25 @@ def tree_apply(fns, tree):
 
 def extract_fns(tuple_tree):
     """ Extract just the functions from a pytree of (function, spec) tuples. """
-    def extract_with_check(x):
-        if not isinstance(x, tuple):
-            if jax.process_index() == 0:
-                logging.info(f"Found non-tuple in extract_fns: {type(x)}")
-            return x
-        return x[0]
-    return jax.tree_util.tree_map(extract_with_check, tuple_tree)
+    if isinstance(tuple_tree, dict):
+        return {k: extract_fns(v) for k, v in tuple_tree.items()}
+    elif isinstance(tuple_tree, tuple):
+        return tuple_tree[0]
+    elif isinstance(tuple_tree, list):
+        return [extract_fns(x) for x in tuple_tree]
+    else:
+        if jax.process_index() == 0:
+            logging.info(f"Found non-tuple in extract_fns: {type(tuple_tree)}")
+        return tuple_tree
 
 def extract_specs(tuple_tree):
     """ Extract just the specs from a pytree of (function, spec) tuples. """
-    return jax.tree_util.tree_map(lambda fn_spec: fn_spec[1], tuple_tree)
+    if isinstance(tuple_tree, dict):
+        return {k: extract_specs(v) for k, v in tuple_tree.items()}
+    elif isinstance(tuple_tree, tuple):
+        return tuple_tree[1]
+    elif isinstance(tuple_tree, list):
+        return [extract_specs(x) for x in tuple_tree]
+    else:
+        return tuple_tree
 
