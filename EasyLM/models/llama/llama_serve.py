@@ -71,6 +71,16 @@ class ModelServer(LMServer):
                 param_dtype=get_float_dtype_by_name(FLAGS.param_dtype),
             )
 
+            # Initialize model parameters first
+            def init_fn(rng):
+                rng_generator = JaxRNG(rng)
+                return hf_model.init(
+                    input_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int32),
+                    position_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int32),
+                    attention_mask=jnp.ones((4, FLAGS.seq_length), dtype=jnp.int32),
+                    rngs=rng_generator(LLaMAConfigurator.rng_keys()),
+                )
+
             # Get full parameter shape tree
             full_shape = hf_model.params_shape_tree
 
@@ -91,21 +101,31 @@ class ModelServer(LMServer):
             else:
                 base_shape = full_shape
 
-            # Get partition rules for filtered shapes
+            # Get partition rules and create sharding functions
             base_model_ps = match_partition_rules(
                 LLaMAConfigurator.get_base_param_rules(), base_shape
             )
-
             base_shard_fns, base_gather_fns = make_shard_and_gather_fns(
                 base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
             )
 
-            # Load base model parameters
+            # Create sharded init function
+            sharded_init_fn = pjit(
+                init_fn,
+                in_shardings=PS(),
+                out_shardings=base_model_ps
+            )
+
+            # Initialize parameters with proper sharding
+            params = sharded_init_fn(next_rng())
+
+            # Load checkpoint values into initialized parameters
             _, base_params = StreamingCheckpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint,
-                disallow_trainstate=True,
-                trainstate_shard_fns={'params': base_shard_fns}  # Single wrap for base_params mode
+                params,  # Pass initialized params as target
+                trainstate_shard_fns={'params': base_shard_fns}
             )
+            base_params = base_params if base_params is not None else params
 
             if FLAGS.lora_mode:
                 if jax.process_index() == 0:
