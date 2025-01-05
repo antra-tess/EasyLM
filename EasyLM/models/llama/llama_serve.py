@@ -301,7 +301,7 @@ class ModelServer(LMServer):
                 logging.info("Sharding parameters across mesh...")
             # Get combined sharding functions for both base and LoRA parameters
 
-            self.params = tree_apply(combined_shard_fns, params)
+            self.params = tree_apply(combined_shard_fns['params'], params)
             #self.params = params
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
