@@ -76,17 +76,20 @@ class ModelServer(LMServer):
 
             # Filter for base parameters (no LoRA)
             base_shape = {}
-            for k, v in flatten_dict(full_shape).items():
-                if 'lora_' not in '/'.join(str(x) for x in k):
-                    base_shape[k] = v
-            base_shape = unflatten_dict(base_shape)
+            if FLAGS.lora_mode:
+                for k, v in flatten_dict(full_shape).items():
+                    if 'lora_' not in '/'.join(str(x) for x in k):
+                        base_shape[k] = v
+                base_shape = unflatten_dict(base_shape)
 
-            # Filter for LoRA parameters
-            lora_shape = {}
-            for k, v in flatten_dict(full_shape).items():
-                if 'lora_' in '/'.join(str(x) for x in k):
-                    lora_shape[k] = v
-            lora_shape = unflatten_dict(lora_shape)
+                # Filter for LoRA parameters
+                lora_shape = {}
+                for k, v in flatten_dict(full_shape).items():
+                    if 'lora_' in '/'.join(str(x) for x in k):
+                        lora_shape[k] = v
+                lora_shape = unflatten_dict(lora_shape)
+            else:
+                base_shape = full_shape
 
             # Get partition rules for filtered shapes
             base_model_ps = match_partition_rules(
