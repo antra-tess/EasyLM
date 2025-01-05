@@ -153,13 +153,14 @@ class ModelServer(LMServer):
                     logging.info(f"Sharding fns for combined model: {str(combined_shard_fns)}")
 
                 combined_shard_fns = {'params': combined_shard_fns}
+                combined_ps = {'params': combined_ps}
             else:
                 base_shard_fns, base_gather_fns = make_shard_and_gather_fns(
                     base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
                 )
 
                 combined_ps = {'params': base_model_ps}
-                combined_shard_fns = base_shard_fns
+                combined_shard_fns = {'params': base_shard_fns}
 
 
             # Create sharded init function
@@ -301,7 +302,7 @@ class ModelServer(LMServer):
                 logging.info("Sharding parameters across mesh...")
             # Get combined sharding functions for both base and LoRA parameters
 
-            self.params = tree_apply(combined_shard_fns['params'], params)
+            self.params = tree_apply(combined_shard_fns, params)
             #self.params = params
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
