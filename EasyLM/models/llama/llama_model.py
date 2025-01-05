@@ -275,19 +275,19 @@ class LLaMAConfigurator(object):
             # embeddings
             ("transformer/wte/embedding", PS("mp", "fsdp")),
             # attention
-            (".*/attention/(wq|wk|wv)/kernel", PS("fsdp", "mp")),
-            (".*/attention/wo/kernel", PS("mp", "fsdp")),
+            ("attention/(wq|wk|wv)/kernel", PS("fsdp", "mp")),
+            ("attention/wo/kernel", PS("mp", "fsdp")),
             # mlp
-            (".*/feed_forward/w1/kernel", PS("fsdp", "mp")),
-            (".*/feed_forward/w2/kernel", PS("mp", "fsdp")),
-            (".*/feed_forward/w3/kernel", PS("fsdp", "mp")),
+            ("feed_forward/w1/kernel", PS("fsdp", "mp")),
+            ("feed_forward/w2/kernel", PS("mp", "fsdp")),
+            ("feed_forward/w3/kernel", PS("fsdp", "mp")),
             # layer norms
-            (".*/attention_norm/kernel", PS(None)),
-            (".*/ffn_norm/kernel", PS(None)),
+            ("attention_norm/kernel", PS(None)),
+            ("ffn_norm/kernel", PS(None)),
             # output head
-            (".*/transformer/ln_f/kernel", PS(None)),
+            ("transformer/ln_f/kernel", PS(None)),
             ("lm_head/kernel", PS("fsdp", "mp")),
-            ('.*', PS(None)),
+#            ('.*', PS(None)),
         )
 
     @staticmethod
@@ -304,7 +304,7 @@ class LLaMAConfigurator(object):
             ("transformer/.*/feed_forward/(w1|w3)/lora_B", PS(None, "mp")),    # shape [lora_rank, intermediate_size]
             ("transformer/.*/feed_forward/w2/lora_A", PS("mp", None)),         # shape [intermediate_size, lora_rank]
             ("transformer/.*/feed_forward/w2/lora_B", PS(None, "fsdp")),       # shape [lora_rank, hidden_size]
-            ('.*', PS(None)),
+#            ('.*', PS(None)),
         )
 
     @staticmethod
@@ -316,19 +316,19 @@ class LLaMAConfigurator(object):
             # embeddings
             ("transformer/wte/embedding", PS("mp", "fsdp")),
             # attention
-            ("attention/(wq|wk|wv)/kernel", PS("fsdp", "mp")),
-            ("attention/wo/kernel", PS("mp", "fsdp")),
+            (".*/attention/(wq|wk|wv)/kernel", PS("fsdp", "mp")),
+            (".*/attention/wo/kernel", PS("mp", "fsdp")),
             # mlp
-            ("feed_forward/w1/kernel", PS("fsdp", "mp")),
-            ("feed_forward/w2/kernel", PS("mp", "fsdp")),
-            ("feed_forward/w3/kernel", PS("fsdp", "mp")),
+            (".*/feed_forward/w1/kernel", PS("fsdp", "mp")),
+            (".*/feed_forward/w2/kernel", PS("mp", "fsdp")),
+            (".*/feed_forward/w3/kernel", PS("fsdp", "mp")),
             # layer norms
-            ("attention_norm/kernel", PS(None)),
-            ("ffn_norm/kernel", PS(None)),
+            (".*/attention_norm/kernel", PS(None)),
+            (".*/ffn_norm/kernel", PS(None)),
             # output head
-            ("transformer/ln_f/kernel", PS(None)),
+            (".*/transformer/ln_f/kernel", PS(None)),
             ("lm_head/kernel", PS("fsdp", "mp")),
-            ('.*', PS(None)),
+ #           ('.*', PS(None)),
         )
 
     @staticmethod
