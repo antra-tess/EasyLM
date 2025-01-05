@@ -22,7 +22,7 @@ from EasyLM.serving import LMServer
 from EasyLM.jax_utils import (
     JaxRNG, JaxDistributedConfig, next_rng, match_partition_rules, tree_apply,
     set_random_seed, get_float_dtype_by_name, make_shard_and_gather_fns,
-    with_sharding_constraint, FlaxTemperatureLogitsWarper, tree_get_specs
+    with_sharding_constraint, FlaxTemperatureLogitsWarper, tree_get_specs, extract_fns
 )
 from EasyLM.models.llama.llama_model import (
     LLaMAConfigurator, FlaxLLaMAForCausalLM
@@ -136,18 +136,22 @@ class ModelServer(LMServer):
 
                 combined_rules = merge_trees(LLaMAConfigurator.get_partition_rules(), LLaMAConfigurator.get_lora_partition_rules())
 
-                lora_shard_fns, lora_gather_fns = make_shard_and_gather_fns(
+                lora_shard_tuples, _ = make_shard_and_gather_fns(
                     model_lora_ps, get_float_dtype_by_name(FLAGS.param_dtype)
                 )
+
+                lora_shard_fns = extract_fns(lora_shard_tuples)
 
                 combined_ps = match_partition_rules(
                     combined_rules, full_shape
                 )
 
                 # Merge the partition specs, preserving both base and LoRA rules
-                combined_shard_fns, _ = make_shard_and_gather_fns(
+                combined_shard_tuples, _ = make_shard_and_gather_fns(
                     combined_ps, get_float_dtype_by_name(FLAGS.param_dtype)
                 )
+
+                combined_shard_fns = extract_fns(combined_shard_tuples)
 
                 if jax.process_index() == 0:
                     logging.info(f"Sharding fns for combined model: {str(combined_shard_fns)}")
@@ -155,9 +159,11 @@ class ModelServer(LMServer):
                 combined_shard_fns = {'params': combined_shard_fns}
                 combined_ps = {'params': combined_ps}
             else:
-                base_shard_fns, base_gather_fns = make_shard_and_gather_fns(
+                base_shard_tuples, _ = make_shard_and_gather_fns(
                     base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
                 )
+
+                base_shard_fns = extract_fns(base_shard_tuples)
 
                 combined_ps = {'params': base_model_ps}
                 combined_shard_fns = {'params': base_shard_fns}
