@@ -352,8 +352,9 @@ class ModelServer(LMServer):
             if jax.process_index() == 0:
                 logging.info(f"Sharding specs from functions: {specs}")
             
-            self.params = tree_apply(combined_shard_tuples, params)
-            #self.params = params
+            # Extract just the functions and apply them
+            shard_fns = extract_fns(combined_shard_tuples)
+            self.params = tree_apply(shard_fns, params)
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
