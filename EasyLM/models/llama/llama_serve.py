@@ -150,7 +150,8 @@ class ModelServer(LMServer):
                         "Merged LoRA parameters into base model, injected {} new parameters".format(injected))
             else:
                 params = base_params
-            logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
+
+            logging.info(f"Loading checkpoints complete. Took {time.time() - mesh_start:.1f}s")
 
             # Get combined sharding functions for both base and LoRA parameters
             if FLAGS.lora_mode:
@@ -167,25 +168,20 @@ class ModelServer(LMServer):
                     return result
 
                 # Merge the partition specs, preserving both base and LoRA rules
-                combined_ps = deep_merge_dicts(base_model_ps, model_lora_ps)
+                combined_shard_fns = deep_merge_dicts(base_shard_fns, lora_shard_fns)
 
                 if jax.process_index() == 0:
-                    logging.info(f"Sharding rules for combined model: {str(combined_ps)}")
+                    logging.info(f"Sharding fns for combined model: {str(combined_shard_fns)}")
 
-                combined_shard_fns, _ = make_shard_and_gather_fns(
-                    combined_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-                )
                 combined_shard_fns = {'params': combined_shard_fns}
             else:
                 # For base model only, use base sharding functions
-                base_model_ps = match_partition_rules(
-                    LLaMAConfigurator.get_base_param_rules(), base_params
-                )
-                combined_shard_fns, _ = make_shard_and_gather_fns(
-                    base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-                )
+                # combined_shard_fns, _ = make_shard_and_gather_fns(
+                #     base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+                # )
 
                 combined_ps = base_model_ps
+
             # if jax.process_index() == 0:
             #     logging.info(f"combined_shard_fns {combined_shard_fns}")
             #
