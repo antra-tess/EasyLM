@@ -126,7 +126,6 @@ class ModelServer(LMServer):
         def forward_generate(params, rng, batch, temperature):
             batch = with_sharding_constraint(batch, PS(('dp', 'fsdp')))
             rng_generator = JaxRNG(rng)
-            jax.debug.print("Starting actual forward pass at {}", jax.process_index())
             output = hf_model.generate(
                 batch['input_tokens'],
                 attention_mask=batch['attention_mask'],
@@ -406,5 +405,5 @@ class ModelServer(LMServer):
 #     server.run()
 
 
-# if __name__ == "__main__":
-#     mlxu.run(main)
+if __name__ == "__main__":
+    mlxu.run(main)
