@@ -29,6 +29,23 @@ from EasyLM.models.llama.llama_model import (
 )
 
 
+# Combine A and B dicts by merging trees
+def merge_trees(a, b, counter=0):
+    """Recursively merge two trees."""
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return b  # At leaf node, take b value
+
+    merged = a.copy()
+    total_counter = 0
+    for k, v in b.items():
+        if k in merged:
+            merged[k], ctr = merge_trees(merged[k], v)
+            total_counter += ctr
+        else:
+            merged[k] = v
+            total_counter += 1
+    return merged, total_counter
+
 class ModelServer(LMServer):
 
     def __init__(self):
@@ -85,8 +102,8 @@ class ModelServer(LMServer):
             full_shape = hf_model.params_shape_tree
 
             # Filter for base parameters (no LoRA)
-            base_shape = {}
             if FLAGS.lora_mode:
+                base_shape = {}
                 for k, v in flatten_dict(full_shape).items():
                     if 'lora_' not in '/'.join(str(x) for x in k):
                         base_shape[k] = v
@@ -101,31 +118,13 @@ class ModelServer(LMServer):
             else:
                 base_shape = full_shape
 
-            # Get partition rules and create sharding functions
             base_model_ps = match_partition_rules(
-                LLaMAConfigurator.get_base_param_rules(), base_shape
+                LLaMAConfigurator.get_partition_rules(), base_shape
             )
+
             base_shard_fns, base_gather_fns = make_shard_and_gather_fns(
                 base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
             )
-
-            # Create sharded init function
-            sharded_init_fn = pjit(
-                init_fn,
-                in_shardings=PS(),
-                out_shardings={'params': base_model_ps}
-            )
-
-            # Initialize parameters with proper sharding
-            params = sharded_init_fn(next_rng())
-
-            # Load checkpoint values into initialized parameters
-            _, base_params = StreamingCheckpointer.load_trainstate_checkpoint(
-                FLAGS.load_checkpoint,
-                params,  # Pass initialized params as target
-                trainstate_shard_fns={'params': base_shard_fns}
-            )
-            base_params = base_params if base_params is not None else params
 
             if FLAGS.lora_mode:
                 if jax.process_index() == 0:
@@ -141,67 +140,41 @@ class ModelServer(LMServer):
                     model_lora_ps, get_float_dtype_by_name(FLAGS.param_dtype)
                 )
 
-                _, lora_params = StreamingCheckpointer.load_trainstate_checkpoint(
-                    FLAGS.load_lora,
-                    disallow_trainstate=True,
-                    trainstate_shard_fns={'params': lora_shard_fns}
-                )
-                injected = 0
-
-                # Combine base and LoRA parameters by merging trees
-                def merge_param_trees(base, lora):
-                    nonlocal injected
-                    """Recursively merge two parameter trees."""
-                    if not isinstance(base, dict) or not isinstance(lora, dict):
-                        return lora  # At leaf node, take LoRA value
-
-                    merged = base.copy()
-                    for k, v in lora.items():
-                        if k in merged:
-                            merged[k] = merge_param_trees(merged[k], v)
-                        else:
-                            merged[k] = v
-                            injected += 1
-                    return merged
-
-                params = base_params.copy()
-                params['params'] = merge_param_trees(base_params['params'], lora_params['params'])
-                if jax.process_index() == 0:
-                    logging.info(
-                        "Merged LoRA parameters into base model, injected {} new parameters".format(injected))
-            else:
-                params = base_params
-
-            logging.info(f"Loading checkpoints complete. Took {time.time() - mesh_start:.1f}s")
-
-            # Get combined sharding functions for both base and LoRA parameters
-            if FLAGS.lora_mode:
-                # Get base and LoRA parameter shapes
-
-                def deep_merge_dicts(dict1, dict2):
-                    """Recursively merge two dictionaries, preserving values from both."""
-                    result = dict1.copy()
-                    for key, value in dict2.items():
-                        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                            result[key] = deep_merge_dicts(result[key], value)
-                        else:
-                            result[key] = value
-                    return result
-
                 # Merge the partition specs, preserving both base and LoRA rules
-                combined_shard_fns = deep_merge_dicts(base_shard_fns, lora_shard_fns)
+                combined_shard_fns = merge_trees(base_shard_fns, lora_shard_fns)
 
                 if jax.process_index() == 0:
                     logging.info(f"Sharding fns for combined model: {str(combined_shard_fns)}")
 
                 combined_shard_fns = {'params': combined_shard_fns}
             else:
-                # For base model only, use base sharding functions
-                # combined_shard_fns, _ = make_shard_and_gather_fns(
-                #     base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-                # )
-
                 combined_ps = {'params': base_model_ps}
+
+
+
+            # Create sharded init function
+            sharded_init_fn = pjit(
+                combined_shard_fns,
+                in_shardings=PS(),
+                out_shardings={'params': base_model_ps}
+            )
+
+            # Initialize parameters with proper sharding
+            params = sharded_init_fn(next_rng())
+
+            # Load checkpoint values into initialized parameters
+            _, _ = StreamingCheckpointer.load_trainstate_checkpoint(
+                FLAGS.load_checkpoint,
+                params,  # Pass initialized params as target
+                trainstate_shard_fns={'params': base_shard_fns}
+            )
+
+            if FLAGS.lora_mode:
+                _, lora_params = StreamingCheckpointer.load_trainstate_checkpoint(
+                    FLAGS.load_lora,
+                    params,
+                    trainstate_shard_fns={'params': lora_shard_fns}
+                )
 
             # if jax.process_index() == 0:
             #     logging.info(f"combined_shard_fns {combined_shard_fns}")
