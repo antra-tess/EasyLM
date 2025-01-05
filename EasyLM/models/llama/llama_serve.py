@@ -302,7 +302,7 @@ class ModelServer(LMServer):
                 logging.info("Sharding parameters across mesh...")
             # Get combined sharding functions for both base and LoRA parameters
 
-            resolved_ps =  jax.tree_map(combined_ps, params)
+            resolved_ps =  jax.tree_map(lambda x: combined_ps, params)
             if jax.process_index() == 0:
                 logging.info(f"Resolved partition specs: {resolved_ps}")
 
