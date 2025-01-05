@@ -287,7 +287,7 @@ class LLaMAConfigurator(object):
             # output head
             (".*/transformer/ln_f/kernel", PS(None)),
             ("lm_head/kernel", PS("fsdp", "mp")),
-            ('.*', PS(None)),
+#            ('.*', PS(None)),
         )
 
     @staticmethod
@@ -304,7 +304,7 @@ class LLaMAConfigurator(object):
             ("transformer/.*/feed_forward/(w1|w3)/lora_B", PS(None, "mp")),    # shape [lora_rank, intermediate_size]
             ("transformer/.*/feed_forward/w2/lora_A", PS("mp", None)),         # shape [intermediate_size, lora_rank]
             ("transformer/.*/feed_forward/w2/lora_B", PS(None, "fsdp")),       # shape [lora_rank, hidden_size]
-            ('.*', PS(None)),
+#            ('.*', PS(None)),
         )
 
     @staticmethod
@@ -328,7 +328,7 @@ class LLaMAConfigurator(object):
             # output head
             (".*/transformer/ln_f/kernel", PS(None)),
             ("lm_head/kernel", PS("fsdp", "mp")),
-            ('.*', PS(None)),
+ #           ('.*', PS(None)),
         )
 
     @staticmethod
