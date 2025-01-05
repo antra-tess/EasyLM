@@ -14,7 +14,6 @@ import optax
 from transformers import (
     AutoTokenizer, GenerationConfig, FlaxLogitsProcessorList
 )
-from flax.traverse_util import flatten_dict, unflatten_dict
 
 from EasyLM.checkpoint import StreamingCheckpointer
 from EasyLM.models.llama.llama_config import FLAGS
@@ -66,149 +65,31 @@ class ModelServer(LMServer):
                 param_dtype=get_float_dtype_by_name(FLAGS.param_dtype),
             )
 
-            # Get full parameter shape tree
-            full_shape = hf_model.params_shape_tree
-            
-            # Filter for base parameters (no LoRA)
-            base_shape = {}
-            for k, v in flatten_dict(full_shape).items():
-                if 'lora_' not in '/'.join(str(x) for x in k):
-                    base_shape[k] = v
-            base_shape = unflatten_dict(base_shape)
-            
-            # Filter for LoRA parameters
-            lora_shape = {}
-            for k, v in flatten_dict(full_shape).items():
-                if 'lora_' in '/'.join(str(x) for x in k):
-                    lora_shape[k] = v
-            lora_shape = unflatten_dict(lora_shape)
-
-            # Get partition rules for filtered shapes
-            base_model_ps = match_partition_rules(
-                LLaMAConfigurator.get_base_param_rules(), base_shape
+            # Get base parameter partition rules
+            model_ps = match_partition_rules(
+                LLaMAConfigurator.get_base_param_rules(), hf_model.params_shape_tree
+            )
+            shard_fns, gather_fns = make_shard_and_gather_fns(
+                model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
             )
 
-            if jax.process_index() == 0:
-                logging.info(f"lora_shape: {lora_shape}")
-
-
-            model_lora_ps = match_partition_rules(
-                LLaMAConfigurator.get_lora_partition_rules(), lora_shape
-            )
-            if jax.process_index() == 0:
-                logging.info(f"Sharding rules for lora: {str(model_lora_ps)}")
-
-            base_shard_fns, base_gather_fns = make_shard_and_gather_fns(
-                base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-            )
-            lora_shard_fns, lora_gather_fns = make_shard_and_gather_fns(
-                model_lora_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-            )
-
-            # Load base model parameters
-            _, base_params = StreamingCheckpointer.load_trainstate_checkpoint(
+            # Load checkpoint with sharding functions
+            _, params = StreamingCheckpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint,
                 disallow_trainstate=True,
-                trainstate_shard_fns={'params': base_shard_fns}  # Single wrap for base_params mode
+                trainstate_shard_fns={'params': shard_fns}  # Single wrap for base_params mode
             )
 
-            # Create mesh before loading parameters
-            logging.info("Setting up JAX mesh...")
-            mesh_start = time.time()
-            self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
-            with self.mesh:
-                # Load and combine LoRA parameters if enabled
-                if FLAGS.lora_mode and FLAGS.load_lora:
-                    _, lora_params = StreamingCheckpointer.load_trainstate_checkpoint(
-                        FLAGS.load_lora,
-                        disallow_trainstate=True,
-                        trainstate_shard_fns={'params': lora_shard_fns}
-                    )
-                    injected = 0
-                    # Combine base and LoRA parameters by merging trees
-                    def merge_param_trees(base, lora):
-                        nonlocal injected
-                        """Recursively merge two parameter trees."""
-                        if not isinstance(base, dict) or not isinstance(lora, dict):
-                            return lora  # At leaf node, take LoRA value
-                        
-                        merged = base.copy()
-                        for k, v in lora.items():
-                            if k in merged:
-                                merged[k] = merge_param_trees(merged[k], v)
-                            else:
-                                merged[k] = v
-                                injected += 1
-                        return merged
-                    
-                    params = base_params.copy()
-                    params['params'] = merge_param_trees(base_params['params'], lora_params['params'])
-                    if jax.process_index() == 0:
-                        logging.info("Merged LoRA parameters into base model, injected {} new parameters".format(injected))
-                else:
-                    params = base_params
-                logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
-
-        with self.mesh:
-            # Get combined sharding functions for both base and LoRA parameters
-            if FLAGS.lora_mode:
-                # Get base and LoRA parameter shapes
-
-                def deep_merge_dicts(dict1, dict2):
-                    """Recursively merge two dictionaries, preserving values from both."""
-                    result = dict1.copy()
-                    for key, value in dict2.items():
-                        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                            result[key] = deep_merge_dicts(result[key], value)
-                        else:
-                            result[key] = value
-                    return result
-
-                # Merge the partition specs, preserving both base and LoRA rules
-                combined_ps = deep_merge_dicts(base_model_ps, model_lora_ps)
-
-                if jax.process_index() == 0:
-                    logging.info(f"Sharding rules for combined model: {str(combined_ps)}")
-
-                combined_shard_fns, _ = make_shard_and_gather_fns(
-                    combined_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-                )
-                combined_shard_fns = {'params': combined_shard_fns}
-            else:
-                # For base model only, use base sharding functions
-                base_model_ps = match_partition_rules(
-                    LLaMAConfigurator.get_base_param_rules(), base_params
-                )
-                combined_shard_fns, _ = make_shard_and_gather_fns(
-                    base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-                )
-
-                combined_ps = base_model_ps
-            if jax.process_index() == 0:
-                logging.info(f"combined_shard_fns {combined_shard_fns}")
-
-                # Print full parameter tree with shapes
-                def print_tree_with_shapes(tree, prefix=''):
-                    if isinstance(tree, dict):
-                        for k, v in tree.items():
-                            logging.info(f"{prefix}{k}:")
-                            print_tree_with_shapes(v, prefix + '  ')
-                    else:
-                        logging.info(f"{prefix}shape: {tree.shape}, dtype: {tree.dtype}")
-
-                logging.info("Parameter tree structure:")
-                print_tree_with_shapes(params)
-
-        # base_model_ps = match_partition_rules(
-        #     LLaMAConfigurator.get_base_param_rules(), params
-        # )
-        # base_shard_fns, _ = make_shard_and_gather_fns(
-        #     base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-        # )
+        model_ps = match_partition_rules(
+            LLaMAConfigurator.get_partition_rules(), params
+        )
+        shard_fns, _ = make_shard_and_gather_fns(
+            model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+        )
 
         @partial(
             pjit,
-            in_shardings=(combined_ps, PS(), PS()),
+            in_shardings=(model_ps, PS(), PS()),
             out_shardings=(PS(), PS(), PS())
         )
         def forward_loglikelihood(params, rng, batch):
@@ -239,7 +120,7 @@ class ModelServer(LMServer):
 
         @partial(
             pjit,
-            in_shardings=(combined_ps, PS(), PS(), PS()),
+            in_shardings=(model_ps, PS(), PS(), PS()),
             out_shardings=(PS(), PS())
         )
         def forward_generate(params, rng, batch, temperature):
@@ -270,7 +151,7 @@ class ModelServer(LMServer):
 
         @partial(
             pjit,
-            in_shardings=(combined_ps, PS(), PS()),
+            in_shardings=(model_ps, PS(), PS()),
             out_shardings=(PS(), PS())
         )
         def forward_greedy_generate(params, rng, batch):
@@ -298,10 +179,7 @@ class ModelServer(LMServer):
         self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
         with self.mesh:
             logging.info("Sharding parameters across mesh...")
-            # Get combined sharding functions for both base and LoRA parameters
-
-
-            self.params = tree_apply(combined_shard_fns, params)
+            self.params = tree_apply(shard_fns, params)
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
