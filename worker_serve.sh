@@ -18,7 +18,7 @@ python -m EasyLM.worker_client \
     --dtype='bf16' \
     --llama.base_model='llama32_1b' \
     --tokenizer="meta-llama/Llama-3.2-1B" \
-    --load_checkpoint='base_params::/mnt/disk2/llama-3.2-1b.easylm' \
+    --load_checkpoint='base_params_unsharded::/mnt/disk2/llama-3.2-1b.easylm' \
     --input_length=1024 \
     --seq_length=2048 \
     --do_sample=True \
