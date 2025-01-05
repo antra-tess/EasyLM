@@ -319,6 +319,17 @@ class ModelServer(LMServer):
 
                 logging.info(f"Resolved partition specs: {resolved_ps}")
 
+            def print_param_sharding(params, prefix=''):
+                if isinstance(params, dict):
+                    for k, v in params.items():
+                        print_param_sharding(v, prefix + k + '/')
+                else:
+                    print(f"{prefix}: {params.sharding}")
+
+            if jax.process_index() == 0:
+                logging.info("Parameter sharding:")
+                print_param_sharding(resolved_ps)
+
             self.params = tree_apply(combined_shard_fns, params)
             #self.params = params
             self.sharded_rng = next_rng()
