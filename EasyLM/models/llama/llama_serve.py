@@ -163,6 +163,11 @@ class ModelServer(LMServer):
                     base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
                 )
 
+                if jax.process_index() == 0:
+                    logging.info(f"base_shard_tuples structure before extract_fns:")
+                    for k, v in flatten_dict(base_shard_tuples).items():
+                        logging.info(f"  {'/'.join(str(x) for x in k)}: {type(v)}")
+
                 base_shard_fns = extract_fns(base_shard_tuples)
 
                 combined_ps = {'params': base_model_ps}
