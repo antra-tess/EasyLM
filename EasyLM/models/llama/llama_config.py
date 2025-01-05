@@ -7,7 +7,6 @@ from EasyLM.jax_utils import JaxDistributedConfig
 FLAGS = None
 FLAGS_DEF = None
 
-
 def create_llama_flags(updates=None):
     """Create standard LLaMA flags with optional updates."""
     global FLAGS, FLAGS_DEF
