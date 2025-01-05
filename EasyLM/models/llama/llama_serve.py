@@ -22,7 +22,7 @@ from EasyLM.serving import LMServer
 from EasyLM.jax_utils import (
     JaxRNG, JaxDistributedConfig, next_rng, match_partition_rules, tree_apply,
     set_random_seed, get_float_dtype_by_name, make_shard_and_gather_fns,
-    with_sharding_constraint, FlaxTemperatureLogitsWarper
+    with_sharding_constraint, FlaxTemperatureLogitsWarper, tree_get_specs
 )
 from EasyLM.models.llama.llama_model import (
     LLaMAConfigurator, FlaxLLaMAForCausalLM
@@ -569,5 +569,5 @@ class ModelServer(LMServer):
 #     server.run()
 
 
-if __name__ == "__main__":
-    mlxu.run(main)
+# if __name__ == "__main__":
+#     mlxu.run(main)
