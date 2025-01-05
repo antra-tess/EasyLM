@@ -149,7 +149,7 @@ class ModelServer(LMServer):
                 combined_shard_fns = {'params': combined_shard_fns}
             else:
                 combined_ps = {'params': base_model_ps}
-
+                combined_shard_fns = base_shard_fns
 
 
             # Create sharded init function
