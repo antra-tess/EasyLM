@@ -326,7 +326,7 @@ class LLaMAConfigurator(object):
             (".*/attention_norm/kernel", PS(None)),
             (".*/ffn_norm/kernel", PS(None)),
             # output head
-            (".*/transformer/ln_f/kernel", PS(None)),
+            ("transformer/ln_f/kernel", PS(None)),
             ("lm_head/kernel", PS("fsdp", "mp")),
  #           ('.*', PS(None)),
         )
