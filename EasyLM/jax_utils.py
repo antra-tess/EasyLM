@@ -123,7 +123,7 @@ def make_shard_and_gather_fns(partition_specs, dtype_specs=None):
         )
         def gather_fn(tensor):
             return jax.device_get(jax_gather_fn(tensor))
-        return gather_fn
+        return (gather_fn, partition_spec)  # Return tuple like make_shard_fn
 
     if dtype_specs is None or dtype_specs in float_dtypes:
         shard_fns = jax.tree_util.tree_map(make_shard_fn, partition_specs)
