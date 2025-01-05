@@ -166,7 +166,7 @@ class ModelServer(LMServer):
             sharded_init_fn = pjit(
                 init_fn,
                 in_shardings=PS(),
-                out_shardings={'params': combined_ps}
+                out_shardings=combined_ps
             )
 
             # Initialize parameters with proper sharding
