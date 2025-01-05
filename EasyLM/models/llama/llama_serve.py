@@ -112,49 +112,44 @@ class ModelServer(LMServer):
             )
 
             # Create mesh before loading parameters
-            logging.info("Setting up JAX mesh...")
-            mesh_start = time.time()
-            self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
-            with self.mesh:
-                # Load and combine LoRA parameters if enabled
-                if FLAGS.lora_mode and FLAGS.load_lora:
-                    _, lora_params = StreamingCheckpointer.load_trainstate_checkpoint(
-                        FLAGS.load_lora,
-                        disallow_trainstate=True,
-                        trainstate_shard_fns={'params': lora_shard_fns}
-                    )
-                    injected = 0
-
-                    # Combine base and LoRA parameters by merging trees
-                    def merge_param_trees(base, lora):
-                        nonlocal injected
-                        """Recursively merge two parameter trees."""
-                        if not isinstance(base, dict) or not isinstance(lora, dict):
-                            return lora  # At leaf node, take LoRA value
-
-                        merged = base.copy()
-                        for k, v in lora.items():
-                            if k in merged:
-                                merged[k] = merge_param_trees(merged[k], v)
-                            else:
-                                merged[k] = v
-                                injected += 1
-                        return merged
-
-                    params = base_params.copy()
-                    params['params'] = merge_param_trees(base_params['params'], lora_params['params'])
-                    if jax.process_index() == 0:
-                        logging.info(
-                            "Merged LoRA parameters into base model, injected {} new parameters".format(injected))
-                else:
-                    params = base_params
-                logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
-
-        logging.info("Setting up JAX mesh and compiling serving functions...")
+        logging.info("Setting up JAX mesh...")
         mesh_start = time.time()
         self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
-
         with self.mesh:
+            # Load and combine LoRA parameters if enabled
+            if FLAGS.lora_mode and FLAGS.load_lora:
+                _, lora_params = StreamingCheckpointer.load_trainstate_checkpoint(
+                    FLAGS.load_lora,
+                    disallow_trainstate=True,
+                    trainstate_shard_fns={'params': lora_shard_fns}
+                )
+                injected = 0
+
+                # Combine base and LoRA parameters by merging trees
+                def merge_param_trees(base, lora):
+                    nonlocal injected
+                    """Recursively merge two parameter trees."""
+                    if not isinstance(base, dict) or not isinstance(lora, dict):
+                        return lora  # At leaf node, take LoRA value
+
+                    merged = base.copy()
+                    for k, v in lora.items():
+                        if k in merged:
+                            merged[k] = merge_param_trees(merged[k], v)
+                        else:
+                            merged[k] = v
+                            injected += 1
+                    return merged
+
+                params = base_params.copy()
+                params['params'] = merge_param_trees(base_params['params'], lora_params['params'])
+                if jax.process_index() == 0:
+                    logging.info(
+                        "Merged LoRA parameters into base model, injected {} new parameters".format(injected))
+            else:
+                params = base_params
+            logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
+
             # Get combined sharding functions for both base and LoRA parameters
             if FLAGS.lora_mode:
                 # Get base and LoRA parameter shapes
