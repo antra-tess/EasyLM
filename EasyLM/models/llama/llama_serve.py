@@ -74,7 +74,7 @@ class ModelServer(LMServer):
             # Initialize model parameters first
             def init_fn(rng):
                 rng_generator = JaxRNG(rng)
-                return hf_model.init(
+                return hf_model.module.init(
                     input_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int32),
                     position_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int32),
                     attention_mask=jnp.ones((4, FLAGS.seq_length), dtype=jnp.int32),
