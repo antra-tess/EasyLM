@@ -150,6 +150,10 @@ class ModelServer(LMServer):
                     params = base_params
                 logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
+        logging.info("Setting up JAX mesh and compiling serving functions...")
+        mesh_start = time.time()
+        self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
+
         with self.mesh:
             # Get combined sharding functions for both base and LoRA parameters
             if FLAGS.lora_mode:
@@ -185,20 +189,20 @@ class ModelServer(LMServer):
                 )
 
                 combined_ps = base_model_ps
-            if jax.process_index() == 0:
-                logging.info(f"combined_shard_fns {combined_shard_fns}")
-
-                # Print full parameter tree with shapes
-                def print_tree_with_shapes(tree, prefix=''):
-                    if isinstance(tree, dict):
-                        for k, v in tree.items():
-                            logging.info(f"{prefix}{k}:")
-                            print_tree_with_shapes(v, prefix + '  ')
-                    else:
-                        logging.info(f"{prefix}shape: {tree.shape}, dtype: {tree.dtype}")
-
-                logging.info("Parameter tree structure:")
-                print_tree_with_shapes(params)
+            # if jax.process_index() == 0:
+            #     logging.info(f"combined_shard_fns {combined_shard_fns}")
+            #
+            #     # Print full parameter tree with shapes
+            #     def print_tree_with_shapes(tree, prefix=''):
+            #         if isinstance(tree, dict):
+            #             for k, v in tree.items():
+            #                 logging.info(f"{prefix}{k}:")
+            #                 print_tree_with_shapes(v, prefix + '  ')
+            #         else:
+            #             logging.info(f"{prefix}shape: {tree.shape}, dtype: {tree.dtype}")
+            #
+            #     logging.info("Parameter tree structure:")
+            #     print_tree_with_shapes(params)
 
         # base_model_ps = match_partition_rules(
         #     LLaMAConfigurator.get_base_param_rules(), params
@@ -296,9 +300,6 @@ class ModelServer(LMServer):
 
         self.forward_greedy_generate = forward_greedy_generate
 
-        logging.info("Setting up JAX mesh and compiling serving functions...")
-        mesh_start = time.time()
-        self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
         with self.mesh:
             logging.info("Sharding parameters across mesh...")
             # Get combined sharding functions for both base and LoRA parameters
