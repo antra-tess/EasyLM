@@ -24,7 +24,7 @@ def main(argv):
     print("\nInput:", test_text[0])
     print("\nOutput:", response[0])
 
-    print("=====================")
+    print ("=====================")
 
     test_text = ["Tell me a scary story."]
     response = server.generate(test_text, temperature=1.0)
