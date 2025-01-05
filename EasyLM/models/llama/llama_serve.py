@@ -166,7 +166,7 @@ class ModelServer(LMServer):
                 if jax.process_index() == 0:
                     logging.info(f"base_shard_tuples structure before extract_fns:")
                     for k, v in flatten_dict(base_shard_tuples).items():
-                        logging.info(f"  {'/'.join(str(x) for x in k)}: {type(v)}")
+                        logging.info(f"  {'/'.join(str(x) for x in k)}: {type(v)}, contents: {v}")
 
                 base_shard_fns = extract_fns(base_shard_tuples)
 
