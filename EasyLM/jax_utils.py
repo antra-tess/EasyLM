@@ -113,7 +113,7 @@ def make_shard_and_gather_fns(partition_specs, dtype_specs=None):
         )
         def shard_fn(tensor):
             return jax_shard_function(tensor).block_until_ready()
-        return shard_fn
+        return (shard_fn, partition_spec)
 
     def make_gather_fn(partition_spec, dtype_spec=None):
         jax_gather_fn = pjit(
@@ -400,5 +400,10 @@ def get_weight_decay_mask(exclusions):
 
 def tree_apply(fns, tree):
     """ Apply a pytree of functions to the pytree. """
-    return jax.tree_util.tree_map(lambda fn, x: fn(x), fns, tree)
+    # Extract just the functions from (function, spec) tuples
+    return jax.tree_util.tree_map(lambda fn_spec, x: fn_spec[0](x), fns, tree)
+
+def tree_get_specs(fns):
+    """ Get specs from a pytree of (function, spec) tuples. """
+    return jax.tree_util.tree_map(lambda fn_spec: fn_spec[1], fns)
 
