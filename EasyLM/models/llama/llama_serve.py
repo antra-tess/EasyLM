@@ -22,7 +22,7 @@ from EasyLM.serving import LMServer
 from EasyLM.jax_utils import (
     JaxRNG, JaxDistributedConfig, next_rng, match_partition_rules, tree_apply,
     set_random_seed, get_float_dtype_by_name, make_shard_and_gather_fns,
-    with_sharding_constraint, FlaxTemperatureLogitsWarper, tree_get_specs, extract_fns
+    with_sharding_constraint, FlaxTemperatureLogitsWarper, extract_fns, extract_specs
 )
 from EasyLM.models.llama.llama_model import (
     LLaMAConfigurator, FlaxLLaMAForCausalLM
@@ -343,11 +343,11 @@ class ModelServer(LMServer):
                 print_param_info(params)
 
             # Get specs from sharding functions
-            specs = tree_get_specs(combined_shard_fns)
+            specs = extract_specs(combined_shard_tuples)
             if jax.process_index() == 0:
                 logging.info(f"Sharding specs from functions: {specs}")
             
-            self.params = tree_apply(combined_shard_fns, params)
+            self.params = tree_apply(combined_shard_tuples, params)
             #self.params = params
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")

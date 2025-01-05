@@ -401,11 +401,7 @@ def get_weight_decay_mask(exclusions):
 def tree_apply(fns, tree):
     """ Apply a pytree of functions to the pytree. """
     # Extract just the functions from (function, spec) tuples
-    return jax.tree_util.tree_map(lambda fn_spec, x: fn_spec[0](x), fns, tree)
-
-def tree_get_specs(fns):
-    """ Get specs from a pytree of (function, spec) tuples. """
-    return jax.tree_util.tree_map(lambda fn_spec: fn_spec[1], fns)
+    return jax.tree_util.tree_map(lambda fn_spec, x: fn_spec(x), fns, tree)
 
 def extract_fns(tuple_tree):
     """ Extract just the functions from a pytree of (function, spec) tuples. """
