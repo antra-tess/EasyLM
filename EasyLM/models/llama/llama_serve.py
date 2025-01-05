@@ -319,16 +319,22 @@ class ModelServer(LMServer):
 
                 logging.info(f"Resolved partition specs: {resolved_ps}")
 
-            def print_param_sharding(params, prefix=''):
+            def print_param_info(params, prefix=''):
                 if isinstance(params, dict):
                     for k, v in params.items():
-                        print_param_sharding(v, prefix + k + '/')
+                        print_param_info(v, prefix + k + '/')
                 else:
-                    print(f"{prefix}: {params.sharding}")
+                    # For actual JAX arrays
+                    if hasattr(params, 'sharding'):
+                        print(f"{prefix}: sharding={params.sharding}")
+                    elif hasattr(params, 'addressable_shards'):
+                        print(f"{prefix}: shards={params.addressable_shards}")
+                    else:
+                        print(f"{prefix}: type={type(params)}")
 
             if jax.process_index() == 0:
                 logging.info("Parameter sharding:")
-                print_param_sharding(resolved_ps)
+                print_param_info(params)
 
             self.params = tree_apply(combined_shard_fns, params)
             #self.params = params
