@@ -302,11 +302,25 @@ class ModelServer(LMServer):
                 logging.info("Sharding parameters across mesh...")
             # Get combined sharding functions for both base and LoRA parameters
 
-            resolved_ps =  jax.tree_map(lambda x: combined_ps, params)
+            def get_param_partition_specs(params_tree, partition_specs):
+                flat_params = flatten_dict(params_tree)
+                flat_specs = flatten_dict(partition_specs)
+
+                resolved = {}
+                for param_key, _ in flat_params.items():
+                    if param_key in flat_specs:
+                        resolved[param_key] = flat_specs[param_key]
+                    else:
+                        resolved[param_key] = PS()  # or None to see which params don't have specs
+
+                return unflatten_dict(resolved)
+
+            resolved_ps = get_param_partition_specs(params, combined_ps)
             if jax.process_index() == 0:
+
                 logging.info(f"Resolved partition specs: {resolved_ps}")
 
-            self.params = jax.tree_apply(combined_shard_fns, params)
+            self.params = tree_apply(combined_shard_fns, params)
             #self.params = params
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")

@@ -397,7 +397,6 @@ def get_weight_decay_mask(exclusions):
 
     return weight_decay_mask
 
-
 def tree_apply(fns, tree):
     """ Apply a pytree of functions to the pytree. """
     return jax.tree_util.tree_map(lambda fn, x: fn(x), fns, tree)
