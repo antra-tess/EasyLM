@@ -141,7 +141,7 @@ class StreamingCheckpointer(object):
                         tensor = shard_fns[key](tensor)
                     except KeyError as e:
                         if jax.process_index() == 0:
-                            logging.info(f"No sharding function found for key {key} for checkpoint {path}")
+                            logging.info(f"No sharding function found for key {key}")
                             logging.info(f"Available shard_fns keys: {list(shard_fns.keys())}")
                         raise
                 flattend_train_state[key] = tensor
