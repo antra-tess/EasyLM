@@ -54,7 +54,12 @@ class ModelServer(LMServer):
 
         logging.info("Loading model checkpoint and initializing model...")
         model_start = time.time()
-        with jax.default_device(jax.devices("cpu")[0]):
+#        with jax.default_device(jax.devices("cpu")[0]):
+        logging.info("Setting up JAX mesh...")
+        mesh_start = time.time()
+        self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
+        with self.mesh:
+
             logging.info(f"Loading checkpoint from {FLAGS.load_checkpoint}")
             # Create model to get parameter shapes
             hf_model = FlaxLLaMAForCausalLM(
@@ -112,10 +117,7 @@ class ModelServer(LMServer):
             )
 
             # Create mesh before loading parameters
-        logging.info("Setting up JAX mesh...")
-        mesh_start = time.time()
-        self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
-        with self.mesh:
+
             # Load and combine LoRA parameters if enabled
             if FLAGS.lora_mode and FLAGS.load_lora:
                 _, lora_params = StreamingCheckpointer.load_trainstate_checkpoint(
@@ -295,7 +297,8 @@ class ModelServer(LMServer):
 
             self.forward_greedy_generate = forward_greedy_generate
 
-            logging.info("Sharding parameters across mesh...")
+            if jax.process_index() == 0:
+                logging.info("Sharding parameters across mesh...")
             # Get combined sharding functions for both base and LoRA parameters
 
             self.params = tree_apply(combined_shard_fns, params)
