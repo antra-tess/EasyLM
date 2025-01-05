@@ -336,6 +336,11 @@ class ModelServer(LMServer):
                 logging.info("Parameter sharding:")
                 print_param_info(params)
 
+            # Get specs from sharding functions
+            specs = tree_get_specs(combined_shard_fns)
+            if jax.process_index() == 0:
+                logging.info(f"Sharding specs from functions: {specs}")
+            
             self.params = tree_apply(combined_shard_fns, params)
             #self.params = params
             self.sharded_rng = next_rng()

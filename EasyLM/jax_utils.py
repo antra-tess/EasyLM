@@ -113,7 +113,7 @@ def make_shard_and_gather_fns(partition_specs, dtype_specs=None):
         )
         def shard_fn(tensor):
             return jax_shard_function(tensor).block_until_ready()
-        return (shard_fn, partition_spec)
+        return (shard_fn, partition_spec)  # Return both function and spec
 
     def make_gather_fn(partition_spec, dtype_spec=None):
         jax_gather_fn = pjit(
