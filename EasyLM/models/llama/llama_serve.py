@@ -96,20 +96,8 @@ class ModelServer(LMServer):
                 LLaMAConfigurator.get_base_param_rules(), base_shape
             )
 
-            if jax.process_index() == 0:
-                logging.info(f"lora_shape: {lora_shape}")
-
-            model_lora_ps = match_partition_rules(
-                LLaMAConfigurator.get_lora_partition_rules(), lora_shape
-            )
-            if jax.process_index() == 0:
-                logging.info(f"Sharding rules for lora: {str(model_lora_ps)}")
-
             base_shard_fns, base_gather_fns = make_shard_and_gather_fns(
                 base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-            )
-            lora_shard_fns, lora_gather_fns = make_shard_and_gather_fns(
-                model_lora_ps, get_float_dtype_by_name(FLAGS.param_dtype)
             )
 
             # Load base model parameters
@@ -119,10 +107,20 @@ class ModelServer(LMServer):
                 trainstate_shard_fns={'params': base_shard_fns}  # Single wrap for base_params mode
             )
 
-            # Create mesh before loading parameters
+            if FLAGS.lora_mode:
+                if jax.process_index() == 0:
+                    logging.info(f"lora_shape: {lora_shape}")
 
-            # Load and combine LoRA parameters if enabled
-            if FLAGS.lora_mode and FLAGS.load_lora:
+                model_lora_ps = match_partition_rules(
+                    LLaMAConfigurator.get_lora_partition_rules(), lora_shape
+                )
+                if jax.process_index() == 0:
+                    logging.info(f"Sharding rules for lora: {str(model_lora_ps)}")
+
+                lora_shard_fns, lora_gather_fns = make_shard_and_gather_fns(
+                    model_lora_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+                )
+
                 _, lora_params = StreamingCheckpointer.load_trainstate_checkpoint(
                     FLAGS.load_lora,
                     disallow_trainstate=True,
