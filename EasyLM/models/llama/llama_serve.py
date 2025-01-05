@@ -122,9 +122,7 @@ class ModelServer(LMServer):
                 LLaMAConfigurator.get_partition_rules(), base_shape
             )
 
-            base_shard_fns, base_gather_fns = make_shard_and_gather_fns(
-                base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-            )
+
 
             if FLAGS.lora_mode:
                 if jax.process_index() == 0:
@@ -136,18 +134,30 @@ class ModelServer(LMServer):
                 if jax.process_index() == 0:
                     logging.info(f"Sharding rules for lora: {str(model_lora_ps)}")
 
+                combined_rules = merge_trees(LLaMAConfigurator.get_partition_rules(), LLaMAConfigurator.get_lora_partition_rules())
+
                 lora_shard_fns, lora_gather_fns = make_shard_and_gather_fns(
                     model_lora_ps, get_float_dtype_by_name(FLAGS.param_dtype)
                 )
 
+                combined_ps = match_partition_rules(
+                    combined_rules, full_shape
+                )
+
                 # Merge the partition specs, preserving both base and LoRA rules
-                combined_shard_fns = merge_trees(base_shard_fns, lora_shard_fns)
+                combined_shard_fns, _ = make_shard_and_gather_fns(
+                    combined_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+                )
 
                 if jax.process_index() == 0:
                     logging.info(f"Sharding fns for combined model: {str(combined_shard_fns)}")
 
                 combined_shard_fns = {'params': combined_shard_fns}
             else:
+                base_shard_fns, base_gather_fns = make_shard_and_gather_fns(
+                    base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+                )
+
                 combined_ps = {'params': base_model_ps}
                 combined_shard_fns = base_shard_fns
 
@@ -156,7 +166,7 @@ class ModelServer(LMServer):
             sharded_init_fn = pjit(
                 init_fn,
                 in_shardings=PS(),
-                out_shardings={'params': base_model_ps}
+                out_shardings={'params': combined_ps}
             )
 
             # Initialize parameters with proper sharding
