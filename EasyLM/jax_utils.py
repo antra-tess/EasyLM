@@ -407,3 +407,11 @@ def tree_get_specs(fns):
     """ Get specs from a pytree of (function, spec) tuples. """
     return jax.tree_util.tree_map(lambda fn_spec: fn_spec[1], fns)
 
+def extract_fns(tuple_tree):
+    """ Extract just the functions from a pytree of (function, spec) tuples. """
+    return jax.tree_util.tree_map(lambda fn_spec: fn_spec[0], tuple_tree)
+
+def extract_specs(tuple_tree):
+    """ Extract just the specs from a pytree of (function, spec) tuples. """
+    return jax.tree_util.tree_map(lambda fn_spec: fn_spec[1], tuple_tree)
+
