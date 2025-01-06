@@ -131,7 +131,7 @@ def make_shard_and_gather_fns(partition_specs, dtype_specs=None):
     def make_shard_fn(partition_spec, dtype_spec=None):
         jax_shard_function = pjit(
             make_to_dtype_fn(dtype_spec),
-            in_shardings=None,
+            in_shardings=partition_spec,
             out_shardings=partition_spec
         )
         def shard_fn(tensor):
