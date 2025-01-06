@@ -66,15 +66,15 @@ class ModelServer(LMServer):
                 param_dtype=get_float_dtype_by_name(FLAGS.param_dtype),
             )
 
-            # # Initialize model parameters first
-            # def init_fn(rng):
-            #     rng_generator = JaxRNG(rng)
-            #     return hf_model.module.init(
-            #         input_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int32),
-            #         position_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int32),
-            #         attention_mask=jnp.ones((4, FLAGS.seq_length), dtype=jnp.int32),
-            #         rngs=rng_generator(LLaMAConfigurator.rng_keys()),
-            #     )
+            # Initialize model parameters first
+            def init_fn(rng):
+                rng_generator = JaxRNG(rng)
+                return hf_model.module.init(
+                    input_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int32),
+                    position_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int32),
+                    attention_mask=jnp.ones((4, FLAGS.seq_length), dtype=jnp.int32),
+                    rngs=rng_generator(LLaMAConfigurator.rng_keys()),
+                )
 
             full_shape = hf_model.params_shape_tree
 
@@ -95,6 +95,10 @@ class ModelServer(LMServer):
             else:
                 base_shape = full_shape
 
+            # concatenate two tuples
+            combined_rules = LLaMAConfigurator.get_base_param_rules() + LLaMAConfigurator.get_lora_partition_rules()
+            print(combined_rules)
+
             # Get base parameter partition rules
             base_model_ps = match_partition_rules(
                 LLaMAConfigurator.get_base_param_rules(), base_shape
@@ -103,10 +107,18 @@ class ModelServer(LMServer):
                 base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
             )
 
+            sharded_init_fn = pjit(
+                init_fn,
+                in_shardings=PS(),
+                out_shardings=PS()
+            )
+
+            params = sharded_init_fn(next_rng())
+
             # Load checkpoint with sharding functions
             _, base_params = StreamingCheckpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint,
-                disallow_trainstate=True,
+                trainstate_target=params,
                 trainstate_shard_fns={'params': base_shard_fns}  # Single wrap for base_params mode
             )
 
@@ -122,15 +134,11 @@ class ModelServer(LMServer):
                 # Load checkpoint with sharding functions
                 _, lora_params = StreamingCheckpointer.load_trainstate_checkpoint(
                     FLAGS.load_checkpoint,
-                    trainstate_target=
+                    trainstate_target=params,
                     trainstate_shard_fns={'params': lora_shard_fns}  # Single wrap for lora_params mode
                 )
 
-                # Merge base and LoRA parameters
-                base_params['lora_params'] = lora_params['params']
-
-
-        params = base_params
+        #params = base_params
 
         model_ps = match_partition_rules(
             LLaMAConfigurator.get_partition_rules(), params
