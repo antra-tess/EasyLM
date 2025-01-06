@@ -183,7 +183,7 @@ class StreamingCheckpointer(object):
                     else:
                         logging.info(f"{prefix}/{k}: shape={v.shape}, dtype={v.dtype}")
             print_dict(flattend_train_state, "Loaded state")
-            print_dict(target.params, "Target state")
+            print_dict(target, "Target state")
 
         if target is None or not restore_state:
             return train_state
