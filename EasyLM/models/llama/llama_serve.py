@@ -199,8 +199,6 @@ class ModelServer(LMServer):
                 )
 
             if jax.process_index() == 0:
-                logging.info(f"combined_shard_fns {combined_shard_fns}")
-
                 # Print full parameter tree with shapes
                 def print_tree_with_shapes(tree, prefix=''):
                     if isinstance(tree, dict):
