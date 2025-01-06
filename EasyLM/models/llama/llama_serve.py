@@ -96,7 +96,10 @@ class ModelServer(LMServer):
                 base_shape = full_shape
 
             # concatenate two tuples
-            combined_rules = LLaMAConfigurator.get_base_param_rules() + LLaMAConfigurator.get_lora_partition_rules()
+            if FLAGS.lora_mode:
+                combined_rules = LLaMAConfigurator.get_base_param_rules() + LLaMAConfigurator.get_lora_partition_rules()
+            else:
+                combined_rules = LLaMAConfigurator.get_base_param_rules()
             print(combined_rules)
 
             # Get base parameter partition rules
