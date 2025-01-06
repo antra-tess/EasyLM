@@ -98,7 +98,12 @@ class ShardFn():
 
     # bracket methods
     def __getitem__(self, key):
-        return ShardFn(lambda tensor: self.shard_fn(tensor[key]), self.partition_spec)
+        if key == 0:
+            return self.shard_fn
+        elif key == 1:
+            return self.partition_spec
+        else:
+            raise IndexError(f'Index {key} out of range for ShardFn')
 
     #to string
     def __str__(self):
