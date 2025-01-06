@@ -70,9 +70,9 @@ class ModelServer(LMServer):
             def init_fn(rng):
                 rng_generator = JaxRNG(rng)
                 return hf_model.module.init(
-                    input_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int32),
-                    position_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int32),
-                    attention_mask=jnp.ones((4, FLAGS.seq_length), dtype=jnp.int32),
+                    input_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int16),
+                    position_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int16),
+                    attention_mask=jnp.ones((4, FLAGS.seq_length), dtype=jnp.int16),
                     rngs=rng_generator(LLaMAConfigurator.rng_keys()),
                 )
 
