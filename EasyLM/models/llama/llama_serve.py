@@ -117,7 +117,7 @@ class ModelServer(LMServer):
             #     out_shardings=PS()
             # )
 
-            params = sharded_init_fn(next_rng())
+#            params = sharded_init_fn(next_rng())
 
             # Load checkpoint with sharding functions
             _, base_params = StreamingCheckpointer.load_trainstate_checkpoint(
