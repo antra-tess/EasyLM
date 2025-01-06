@@ -134,16 +134,16 @@ class StreamingCheckpointer(object):
 
                 tensor = from_bytes(None, value)
                 if shard_fns is not None:
-                    if jax.process_index() == 0:
-                        logging.info(f"Applying sharding to {'/'.join(str(x) for x in key)} with shape {tensor.shape}, spec: {shard_fns[key][1]}")
-                    counter += 1
                     try:
-                        tensor = shard_fns[key][0](tensor)
+                        tup_value = shard_fns[key]
                     except KeyError as e:
                         if jax.process_index() == 0:
                             logging.info(f"No sharding function found for key {key}")
                             logging.info(f"Available shard_fns keys: {list(shard_fns.keys())}")
-                        raise
+                        raise e
+                    logging.info(f"Applying sharding to {'/'.join(str(x) for x in key)} with shape {tensor.shape}, spec: {tup_value[1]}")
+                    counter += 1
+                    tensor = tup_value[0](tensor)
                 flattend_train_state[key] = tensor
         if require_sharding and counter == 0:
             raise ValueError(f"No tensor sharding was applied {path}")
