@@ -124,7 +124,12 @@ class StreamingCheckpointer(object):
         with mlxu.open_file(path) as fin:
             # 83886080 bytes = 80 MB, which is 16 blocks on GCS
             unpacker = msgpack.Unpacker(fin, read_size=83886080, max_buffer_size=0)
+            if jax.process_index() == 0:
+                logging.info("Loading parameters from checkpoint:")
             for key, value in unpacker:
+                if jax.process_index() == 0:
+                    tensor = from_bytes(None, value)
+                    logging.info(f"  {'/'.join(str(x) for x in key)}: shape={tensor.shape}, dtype={tensor.dtype}")
                 key = tuple(key)
                 if remove_dict_prefix is not None:
                     if key[:len(remove_dict_prefix)] == remove_dict_prefix:
