@@ -354,7 +354,16 @@ class ModelServer(LMServer):
             
             # Extract just the functions and apply them
             shard_fns = extract_fns(combined_shard_tuples)
-            self.params = tree_apply(shard_fns, params)
+            try:
+                self.params = tree_apply(shard_fns, params)
+            except Exception as e:
+                logging.info(f"Error applying sharding functions: {e}")
+                import traceback
+                if jax.process_index() == 0:
+                    traceback.print_exc()
+                    #raise e
+                else:
+                    exit(0)
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
