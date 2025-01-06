@@ -198,20 +198,20 @@ class ModelServer(LMServer):
                     trainstate_shard_fns={'params': lora_shard_fns}
                 )
 
-            # if jax.process_index() == 0:
-            #     logging.info(f"combined_shard_fns {combined_shard_fns}")
-            #
-            #     # Print full parameter tree with shapes
-            #     def print_tree_with_shapes(tree, prefix=''):
-            #         if isinstance(tree, dict):
-            #             for k, v in tree.items():
-            #                 logging.info(f"{prefix}{k}:")
-            #                 print_tree_with_shapes(v, prefix + '  ')
-            #         else:
-            #             logging.info(f"{prefix}shape: {tree.shape}, dtype: {tree.dtype}")
-            #
-            #     logging.info("Parameter tree structure:")
-            #     print_tree_with_shapes(params)
+            if jax.process_index() == 0:
+                logging.info(f"combined_shard_fns {combined_shard_fns}")
+
+                # Print full parameter tree with shapes
+                def print_tree_with_shapes(tree, prefix=''):
+                    if isinstance(tree, dict):
+                        for k, v in tree.items():
+                            logging.info(f"{prefix}{k}:")
+                            print_tree_with_shapes(v, prefix + '  ')
+                    else:
+                        logging.info(f"{prefix}shape: {tree.shape}, dtype: {tree.dtype}")
+
+                logging.info("Parameter tree structure:")
+                print_tree_with_shapes(params)
 
         # base_model_ps = match_partition_rules(
         #     LLaMAConfigurator.get_base_param_rules(), params
