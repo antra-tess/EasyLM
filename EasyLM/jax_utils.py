@@ -100,6 +100,10 @@ class ShardFn():
     def __getitem__(self, key):
         return ShardFn(lambda tensor: self.shard_fn(tensor[key]), self.partition_spec)
 
+    #to string
+    def __str__(self):
+        return f'ShardFn({self.partition_spec})'
+
     def __repr__(self):
         return f'ShardFn({self.partition_spec})'
 
@@ -425,7 +429,7 @@ def extract_fns(tuple_tree):
     """ Extract just the functions from a pytree of (function, spec) tuples. """
     if isinstance(tuple_tree, dict):
         return {k: extract_fns(v) for k, v in tuple_tree.items()}
-    elif isinstance(tuple_tree, tuple):
+    elif isinstance(tuple_tree, ShardFn):
         return tuple_tree[0]
     elif isinstance(tuple_tree, list):
         return [extract_fns(x) for x in tuple_tree]
@@ -438,8 +442,8 @@ def extract_specs(tuple_tree):
     """ Extract just the specs from a pytree of (function, spec) tuples. """
     if isinstance(tuple_tree, dict):
         return {k: extract_specs(v) for k, v in tuple_tree.items()}
-    elif isinstance(tuple_tree, tuple):
-        return tuple_tree[1]
+    elif isinstance(tuple_tree, ShardFn):
+        return tuple_tree[0]
     elif isinstance(tuple_tree, list):
         return [extract_specs(x) for x in tuple_tree]
     else:
