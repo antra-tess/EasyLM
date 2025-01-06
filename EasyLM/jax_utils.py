@@ -88,6 +88,20 @@ class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
     def __call__(self, input_ids, scores, cur_len):
         return scores / jnp.clip(self.temperature, a_min=1e-8)
 
+class ShardFn():
+    def __init__(self, shard_fn, partition_spec):
+        self.shard_fn = shard_fn
+        self.partition_spec = partition_spec
+
+    def __call__(self, tensor):
+        return self.shard_fn(tensor)
+
+    # bracket methods
+    def __getitem__(self, key):
+        return ShardFn(lambda tensor: self.shard_fn(tensor[key]), self.partition_spec)
+
+    def __repr__(self):
+        return f'ShardFn({self.partition_spec})'
 
 def make_shard_and_gather_fns(partition_specs, dtype_specs=None):
     """ Create pytree of sharding and gathering functions from pytree of
@@ -113,7 +127,7 @@ def make_shard_and_gather_fns(partition_specs, dtype_specs=None):
         )
         def shard_fn(tensor):
             return jax_shard_function(tensor).block_until_ready()
-        return (shard_fn, partition_spec)  # Return both function and spec
+        return ShardFn(shard_fn, partition_spec)
 
     def make_gather_fn(partition_spec, dtype_spec=None):
         jax_gather_fn = pjit(
