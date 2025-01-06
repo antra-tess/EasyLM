@@ -122,7 +122,7 @@ class ModelServer(LMServer):
             _, base_params = StreamingCheckpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint,
                 trainstate_target=params,
-                trainstate_shard_fns={'params': base_shard_fns}  # Single wrap for base_params mode
+                trainstate_shard_fns=None, #{'params': base_shard_fns}  # Single wrap for base_params mode
             )
 
             if FLAGS.lora_mode:
@@ -138,7 +138,7 @@ class ModelServer(LMServer):
                 _, lora_params = StreamingCheckpointer.load_trainstate_checkpoint(
                     FLAGS.load_checkpoint,
                     trainstate_target=params,
-                    trainstate_shard_fns={'params': lora_shard_fns}  # Single wrap for lora_params mode
+                    trainstate_shard_fns=None, #{'params': lora_shard_fns}  # Single wrap for lora_params mode
                 )
 
         #params = base_params
