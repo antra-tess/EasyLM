@@ -104,7 +104,6 @@ class StreamingCheckpointer(object):
 
     @staticmethod
     def load_checkpoint(path, target=None, shard_fns=None, remove_dict_prefix=None, restore_state=True, require_sharding=True):
-        orig_shard_fns = shard_fns
         if jax.process_index() == 0:
             logging.info(f"Loading checkpoint from {path}")
             if shard_fns is not None:
@@ -135,18 +134,16 @@ class StreamingCheckpointer(object):
 
                 tensor = from_bytes(None, value)
                 if shard_fns is not None:
+                    if jax.process_index() == 0:
+                        logging.info(f"Applying sharding to {'/'.join(str(x) for x in key)} with shape {tensor.shape}")
+                    counter += 1
                     try:
-                        tup_value = shard_fns[key]
+                        tensor = shard_fns[key](tensor)
                     except KeyError as e:
                         if jax.process_index() == 0:
                             logging.info(f"No sharding function found for key {key}")
                             logging.info(f"Available shard_fns keys: {list(shard_fns.keys())}")
-                            logging.info(f"Original shard_fns keys: {list(orig_shard_fns.keys())}")
-                        raise e
-                    if jax.process_index() == 0:
-                        logging.info(f"Applying sharding to {'/'.join(str(x) for x in key)} with shape {tensor.shape}, spec: {tup_value[1]}")
-                    counter += 1
-                    tensor = tup_value[0](tensor)
+                        raise
                 flattend_train_state[key] = tensor
         if require_sharding and counter == 0:
             raise ValueError(f"No tensor sharding was applied {path}")

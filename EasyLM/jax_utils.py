@@ -88,31 +88,8 @@ class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
     def __call__(self, input_ids, scores, cur_len):
         return scores / jnp.clip(self.temperature, a_min=1e-8)
 
-class ShardFn():
-    def __init__(self, shard_fn, partition_spec):
-        self.shard_fn = shard_fn
-        self.partition_spec = partition_spec
 
-    def __call__(self, tensor):
-        return self.shard_fn(tensor)
-
-    # bracket methods
-    def __getitem__(self, key):
-        if key == 0:
-            return self.shard_fn
-        elif key == 1:
-            return self.partition_spec
-        else:
-            raise IndexError(f'Index {key} out of range for ShardFn')
-
-    #to string
-    def __str__(self):
-        return f'ShardFn({self.partition_spec})'
-
-    def __repr__(self):
-        return f'ShardFn({self.partition_spec})'
-
-def make_shard_and_gather_fns(partition_specs, dtype_specs=None, presharded=False):
+def make_shard_and_gather_fns(partition_specs, dtype_specs=None):
     """ Create pytree of sharding and gathering functions from pytree of
         partition specs.
     """
@@ -128,23 +105,15 @@ def make_shard_and_gather_fns(partition_specs, dtype_specs=None, presharded=Fals
             return tensor
         return to_dtype
 
-
     def make_shard_fn(partition_spec, dtype_spec=None):
-        if presharded:
-            jax_shard_function = pjit(
-                make_to_dtype_fn(dtype_spec),
-                in_shardings=partition_spec,
-                out_shardings=partition_spec
-            )
-        else:
-            jax_shard_function = pjit(
-                make_to_dtype_fn(dtype_spec),
-                in_shardings=None,
-                out_shardings=partition_spec
-            )
+        jax_shard_function = pjit(
+            make_to_dtype_fn(dtype_spec),
+            in_shardings=None,
+            out_shardings=partition_spec
+        )
         def shard_fn(tensor):
             return jax_shard_function(tensor).block_until_ready()
-        return ShardFn(shard_fn, partition_spec)
+        return shard_fn
 
     def make_gather_fn(partition_spec, dtype_spec=None):
         jax_gather_fn = pjit(
@@ -154,7 +123,7 @@ def make_shard_and_gather_fns(partition_specs, dtype_specs=None, presharded=Fals
         )
         def gather_fn(tensor):
             return jax.device_get(jax_gather_fn(tensor))
-        return gather_fn  # Return just the function since we don't use gather specs
+        return gather_fn
 
     if dtype_specs is None or dtype_specs in float_dtypes:
         shard_fns = jax.tree_util.tree_map(make_shard_fn, partition_specs)
@@ -431,34 +400,5 @@ def get_weight_decay_mask(exclusions):
 
 def tree_apply(fns, tree):
     """ Apply a pytree of functions to the pytree. """
-    if isinstance(fns, dict):
-        return {k: tree_apply(v, tree[k]) for k, v in fns.items()}
-    elif isinstance(fns, (tuple, list)):
-        return type(fns)([tree_apply(v, tree[i]) for i, v in enumerate(fns)])
-    else:
-        return fns(tree)
-
-def extract_fns(tuple_tree):
-    """ Extract just the functions from a pytree of (function, spec) tuples. """
-    if isinstance(tuple_tree, dict):
-        return {k: extract_fns(v) for k, v in tuple_tree.items()}
-    elif isinstance(tuple_tree, ShardFn):
-        return tuple_tree[0]
-    elif isinstance(tuple_tree, list):
-        return [extract_fns(x) for x in tuple_tree]
-    else:
-        if jax.process_index() == 0:
-            logging.info(f"Found non-tuple in extract_fns: {type(tuple_tree)}")
-        return tuple_tree
-
-def extract_specs(tuple_tree):
-    """ Extract just the specs from a pytree of (function, spec) tuples. """
-    if isinstance(tuple_tree, dict):
-        return {k: extract_specs(v) for k, v in tuple_tree.items()}
-    elif isinstance(tuple_tree, ShardFn):
-        return tuple_tree[0]
-    elif isinstance(tuple_tree, list):
-        return [extract_specs(x) for x in tuple_tree]
-    else:
-        return tuple_tree
+    return jax.tree_util.tree_map(lambda fn, x: fn(x), fns, tree)
 
