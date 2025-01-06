@@ -111,13 +111,6 @@ class ModelServer(LMServer):
             )
 
             params = init_fn(next_rng())
-            # sharded_init_fn = pjit(
-            #     init_fn,
-            #     in_shardings=PS(),
-            #     out_shardings=PS()
-            # )
-
-#            params = sharded_init_fn(next_rng())
 
             # Load checkpoint with sharding functions
             _, base_params = StreamingCheckpointer.load_trainstate_checkpoint(
@@ -145,7 +138,7 @@ class ModelServer(LMServer):
         #params = base_params
 
         model_ps = match_partition_rules(
-            LLaMAConfigurator.get_partition_rules(), params
+            combined_rules, params
         )
         shard_fns, _ = make_shard_and_gather_fns(
             model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
