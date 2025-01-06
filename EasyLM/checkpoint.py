@@ -124,8 +124,6 @@ class StreamingCheckpointer(object):
         with mlxu.open_file(path) as fin:
             # 83886080 bytes = 80 MB, which is 16 blocks on GCS
             unpacker = msgpack.Unpacker(fin, read_size=83886080, max_buffer_size=0)
-            if jax.process_index() == 0:
-                logging.info("Loading parameters from checkpoint:")
             for key, value in unpacker:
                 if jax.process_index() == 0:
                     tensor = from_bytes(None, value)
@@ -176,6 +174,17 @@ class StreamingCheckpointer(object):
             pass
 
         train_state = unflatten_dict(flattend_train_state)
+
+        if jax.process_index() == 0:
+            def print_dict(d, prefix=''):
+                for k, v in d.items():
+                    if isinstance(v, dict):
+                        print_dict(v, prefix=f'{prefix}/{k}')
+                    else:
+                        logging.info(f"{prefix}/{k}: shape={v.shape}, dtype={v.dtype}")
+            print_dict(flattend_train_state, "Loaded state")
+            print_dict(target.params, "Target state")
+
         if target is None or not restore_state:
             return train_state
 
