@@ -100,6 +100,8 @@ class ModelServer(LMServer):
                 trainstate_shard_fns={'params': base_shard_fns}  # Single wrap for base_params mode
             )
 
+        params = base_params
+
         model_ps = match_partition_rules(
             LLaMAConfigurator.get_partition_rules(), params
         )
@@ -424,6 +426,6 @@ class ModelServer(LMServer):
 #     logging.info("Starting server...")
 #     server.run()
 
-
-if __name__ == "__main__":
-    mlxu.run(main)
+#
+# if __name__ == "__main__":
+#     mlxu.run(main)
