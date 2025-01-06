@@ -361,7 +361,7 @@ class ModelServer(LMServer):
                 import traceback
                 if jax.process_index() == 0:
                     traceback.print_exc()
-                    #raise e
+                    raise e
                 else:
                     exit(0)
             self.sharded_rng = next_rng()
