@@ -110,11 +110,12 @@ class ModelServer(LMServer):
                 base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
             )
 
-            sharded_init_fn = pjit(
-                init_fn,
-                in_shardings=PS(),
-                out_shardings=PS()
-            )
+            init_fn(next_rng())
+            # sharded_init_fn = pjit(
+            #     init_fn,
+            #     in_shardings=PS(),
+            #     out_shardings=PS()
+            # )
 
             params = sharded_init_fn(next_rng())
 
