@@ -14,6 +14,7 @@ import optax
 from transformers import (
     AutoTokenizer, GenerationConfig, FlaxLogitsProcessorList
 )
+from flax.traverse_util import flatten_dict, unflatten_dict
 
 from EasyLM.checkpoint import StreamingCheckpointer
 from EasyLM.models.llama.llama_config import FLAGS
@@ -65,19 +66,38 @@ class ModelServer(LMServer):
                 param_dtype=get_float_dtype_by_name(FLAGS.param_dtype),
             )
 
+            full_shape = hf_model.params_shape_tree
+
+            # Filter for base parameters (no LoRA)
+            if FLAGS.lora_mode:
+                base_shape = {}
+                for k, v in flatten_dict(full_shape).items():
+                    if 'lora_' not in '/'.join(str(x) for x in k):
+                        base_shape[k] = v
+                base_shape = unflatten_dict(base_shape)
+
+                # Filter for LoRA parameters
+                lora_shape = {}
+                for k, v in flatten_dict(full_shape).items():
+                    if 'lora_' in '/'.join(str(x) for x in k):
+                        lora_shape[k] = v
+                lora_shape = unflatten_dict(lora_shape)
+            else:
+                base_shape = full_shape
+
             # Get base parameter partition rules
-            model_ps = match_partition_rules(
-                LLaMAConfigurator.get_base_param_rules(), hf_model.params_shape_tree
+            base_model_ps = match_partition_rules(
+                LLaMAConfigurator.get_base_param_rules(), base_shape
             )
-            shard_fns, gather_fns = make_shard_and_gather_fns(
-                model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+            base_shard_fns, _ = make_shard_and_gather_fns(
+                base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
             )
 
             # Load checkpoint with sharding functions
-            _, params = StreamingCheckpointer.load_trainstate_checkpoint(
+            _, base_params = StreamingCheckpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint,
                 disallow_trainstate=True,
-                trainstate_shard_fns={'params': shard_fns}  # Single wrap for base_params mode
+                trainstate_shard_fns={'params': base_shard_fns}  # Single wrap for base_params mode
             )
 
         model_ps = match_partition_rules(
