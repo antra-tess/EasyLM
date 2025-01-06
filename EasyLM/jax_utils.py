@@ -112,7 +112,7 @@ class ShardFn():
     def __repr__(self):
         return f'ShardFn({self.partition_spec})'
 
-def make_shard_and_gather_fns(partition_specs, dtype_specs=None):
+def make_shard_and_gather_fns(partition_specs, dtype_specs=None, presharded=False):
     """ Create pytree of sharding and gathering functions from pytree of
         partition specs.
     """
@@ -128,12 +128,20 @@ def make_shard_and_gather_fns(partition_specs, dtype_specs=None):
             return tensor
         return to_dtype
 
+
     def make_shard_fn(partition_spec, dtype_spec=None):
-        jax_shard_function = pjit(
-            make_to_dtype_fn(dtype_spec),
-            in_shardings=partition_spec,
-            out_shardings=partition_spec
-        )
+        if presharded:
+            jax_shard_function = pjit(
+                make_to_dtype_fn(dtype_spec),
+                in_shardings=partition_spec,
+                out_shardings=partition_spec
+            )
+        else:
+            jax_shard_function = pjit(
+                make_to_dtype_fn(dtype_spec),
+                in_shardings=None,
+                out_shardings=partition_spec
+            )
         def shard_fn(tensor):
             return jax_shard_function(tensor).block_until_ready()
         return ShardFn(shard_fn, partition_spec)

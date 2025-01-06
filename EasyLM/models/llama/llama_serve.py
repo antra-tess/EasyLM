@@ -159,9 +159,14 @@ class ModelServer(LMServer):
                 combined_shard_fns = {'params': combined_shard_fns}
                 combined_ps = {'params': combined_ps}
             else:
-                base_shard_tuples, _ = make_shard_and_gather_fns(
+                base_shard_tuples_load, _ = make_shard_and_gather_fns(
                     base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
                 )
+
+                base_shard_tuples, _ = make_shard_and_gather_fns(
+                    base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype), presharded=True,
+                )
+
 
                 base_shard_fns = extract_fns(base_shard_tuples)
 
@@ -183,7 +188,7 @@ class ModelServer(LMServer):
             StreamingCheckpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint,
                 params,  # Pass initialized params as target
-                trainstate_shard_fns={'params': base_shard_tuples}
+                trainstate_shard_fns={'params': base_shard_tuples_load}
             )
 
             if FLAGS.lora_mode:
