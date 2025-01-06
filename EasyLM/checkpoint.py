@@ -143,7 +143,8 @@ class StreamingCheckpointer(object):
                             logging.info(f"Available shard_fns keys: {list(shard_fns.keys())}")
                             logging.info(f"Original shard_fns keys: {list(orig_shard_fns.keys())}")
                         raise e
-                    logging.info(f"Applying sharding to {'/'.join(str(x) for x in key)} with shape {tensor.shape}, spec: {tup_value[1]}")
+                    if jax.process_index() == 0:
+                        logging.info(f"Applying sharding to {'/'.join(str(x) for x in key)} with shape {tensor.shape}, spec: {tup_value[1]}")
                     counter += 1
                     tensor = tup_value[0](tensor)
                 flattend_train_state[key] = tensor
