@@ -36,13 +36,13 @@ def main():
     config.dataset.type = 'huggingface'
     config.dataset.text_processor.template = """
 sequence:
-  - no_loss: "{instruction}\\n{input}\\n"
-  - with_loss: "{output}\\n"
+  - no_loss: "{instruction}{input}"
+  - with_loss: "{output}"
 """
     config.dataset.huggingface_dataset.path = "tatsu-lab/alpaca"
     config.dataset.huggingface_dataset.name = ""
     config.dataset.huggingface_dataset.split = "train"
-    config.dataset.huggingface_dataset.seq_length = 1024
+    config.dataset.huggingface_dataset.seq_length = 2048
     config.dataset.huggingface_dataset.batch_size = 2  # Small batch for inspection
 
     # Initialize tokenizer
