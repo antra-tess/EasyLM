@@ -269,6 +269,7 @@ class StreamingCheckpointer(object):
                 path=load_path,
                 target=params_target,
                 shard_fns=params_shard_fns,
+                restore_state=True,
             )
             restored_params = {'params': restored_params}
         elif load_type == 'base_params':
@@ -282,7 +283,7 @@ class StreamingCheckpointer(object):
                 path=load_path,
                 target=params_target,
                 shard_fns=params_shard_fns,  # Use params sharding directly
-                restore_state=False
+                restore_state=True
             )
             # Wrap in params dict structure
             if not isinstance(restored_params, dict) or 'params' not in restored_params:
