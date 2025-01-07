@@ -19,7 +19,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --tokenizer="meta-llama/Meta-Llama-3.1-8B" \
     --load_checkpoint='params::/mnt/disk2/llama-3.1-8b' \
     --train_dataset.type='huggingface' \
-    --train_dataset.text_processor.template="$(cat templates/simple_chat.yaml)" \
+    --train_dataset.text_processor.template="$(cat templates/borg_chat.yaml)" \
     --train_dataset.huggingface_dataset.name="" \
     --train_dataset.huggingface_dataset.path='tatsu-lab/alpaca' \
     --train_dataset.huggingface_dataset.seq_length=2048 \

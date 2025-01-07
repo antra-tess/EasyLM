@@ -34,10 +34,10 @@ def main():
     config = mlxu.config_dict()
     config.dataset = DatasetFactory.get_default_config()
     config.dataset.type = 'json'
-    config.dataset.text_processor.template = open('templates/test_chat.yaml').read()
-    config.dataset.json_dataset.path = 'test_conversations.json'
+    config.dataset.text_processor.template = open('templates/borg_chat.yaml').read()
+    config.dataset.json_dataset.path = 'simulect_conversations.json'
     config.dataset.json_dataset.seq_length = 1024
-    config.dataset.json_dataset.batch_size = 2  # Small batch for inspection
+    config.dataset.json_dataset.batch_size = 64
 
     # Initialize tokenizer
     tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B")
