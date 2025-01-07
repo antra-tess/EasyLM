@@ -193,10 +193,14 @@ class StreamingCheckpointer(object):
                 print_dict(target, "Target state")
 
                 # Compare different ways of looking at the data
-                first_dict = next(iter(flatten_dict(target).values()))
+                flattened = flatten_dict(target)
+                first_key = next(iter(flattened.keys()))
+                first_dict = flattened[first_key]
                 first_leaf = jax.tree_util.tree_leaves(target)[0]
-                logging.info(f"First param via dict: type={type(first_dict)}, dtype={getattr(first_dict, 'dtype', None)}")
-                logging.info(f"First param via leaves: type={type(first_leaf)}, dtype={getattr(first_leaf, 'dtype', None)}")
+                logging.info(f"First param key via dict: {first_key}")
+                logging.info(f"First param via dict: type={type(first_dict)}, dtype={getattr(first_dict, 'dtype', None)}, shape={getattr(first_dict, 'shape', None)}")
+                logging.info(f"First param via leaves: type={type(first_leaf)}, dtype={getattr(first_leaf, 'dtype', None)}, shape={getattr(first_leaf, 'shape', None)}")
+                logging.info(f"Are they the same object? {first_dict is first_leaf}")
 
         if target is None or not restore_state:
             return train_state
