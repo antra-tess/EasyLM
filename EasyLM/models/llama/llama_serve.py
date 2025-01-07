@@ -114,7 +114,7 @@ class ModelServer(LMServer):
             params = init_fn(next_rng())
             if jax.process_index() == 0:
                 # Get first parameter's dtype
-                first_param = jax.tree_util.tree_leaves(params)[0]
+                first_param = jax.tree_util.tree_leaves(params.get('params'))[0]
                 logging.info(f"First parameter dtype after initialization: {first_param.dtype}")
 
             # Load checkpoint with sharding functions
