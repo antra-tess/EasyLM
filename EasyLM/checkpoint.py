@@ -195,6 +195,11 @@ class StreamingCheckpointer(object):
         if target is None or not restore_state:
             return train_state
 
+        if jax.process_index() == 0:
+            # Get first parameter's dtype
+            first_param = jax.tree_util.tree_leaves(target)[0]
+            logging.info(f"First parameter dtype right before state dict {first_param.dtype}")
+
         return from_state_dict(target, train_state)
 
     @staticmethod
