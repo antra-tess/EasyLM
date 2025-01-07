@@ -71,6 +71,10 @@ sequence:
                 logging.info("Starting template pre-tokenization...")
             import yaml
             template = yaml.safe_load(self.config.template)
+            # Convert \n to actual newlines in template
+            for segment in template['sequence']:
+                for key, content in segment.items():
+                    segment[key] = content.replace('\\n', '\n')
             self.cached_segments = []
             
             # Process each segment in the sequence
