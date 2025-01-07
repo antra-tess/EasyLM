@@ -170,7 +170,7 @@ class StreamingCheckpointer(object):
                     else:
                         pass
                     continue
-                if key not in flattend_train_state and value == empty_node:
+                if key not in flattend_train_state and (value is empty_node or jnp.array_equal(value, empty_node)):
                     flattend_train_state[key] = value
 
         else:
