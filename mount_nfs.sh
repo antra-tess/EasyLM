@@ -19,7 +19,7 @@ WORKER_IPS=$(echo "$WORKER_IPS" | tr ';' ' ')
 
 # First SSH to the jump host, then to target instance using IPs
 echo "Using ${JUMP_HOST} as jump host to reach ${INSTANCE_NAME}..."
-gcloud compute tpus tpu-vm ssh "${JUMP_HOST}" --zone=us-central2-b --command="
+gcloud compute tpus tpu-vm ssh "${JUMP_HOST}" --zone=us-central2-b -A --command="
     echo 'Connecting to ${INSTANCE_NAME} workers...'
     read -r -a IPS <<< \"${WORKER_IPS}\"
     for i in {0..15}; do
