@@ -118,7 +118,7 @@ class ModelServer(LMServer):
                 logging.info(f"First parameter dtype after initialization: {first_param.dtype}")
 
             # Load checkpoint with sharding functions
-            _, base_params = StreamingCheckpointer.load_trainstate_checkpoint(
+            _, params = StreamingCheckpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint,
                 trainstate_target=params,
                 trainstate_shard_fns=None, #{'params': base_shard_fns}  # Single wrap for base_params mode
@@ -134,7 +134,7 @@ class ModelServer(LMServer):
                 )
 
                 # Load checkpoint with sharding functions
-                _, lora_params = StreamingCheckpointer.load_trainstate_checkpoint(
+                _, params = StreamingCheckpointer.load_trainstate_checkpoint(
                     FLAGS.load_checkpoint,
                     trainstate_target=params,
                     trainstate_shard_fns=None, #{'params': lora_shard_fns}  # Single wrap for lora_params mode
