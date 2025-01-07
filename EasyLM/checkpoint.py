@@ -229,18 +229,21 @@ class StreamingCheckpointer(object):
             if jax.process_index() == 0:
                 logging.info("=== Parameter Value Check ===")
                 # Check first few values of first parameter in each dict
-                first_target_key = next(iter(flat_target.keys()))
-                first_state_key = next(iter(flat_state.keys()))
-                first_target_val = flat_target[first_target_key]
-                first_state_val = new_state[first_target_key]  # Check new_state instead of flat_state
+                first_key = next(iter(flat_target.keys()))
                 
-                logging.info(f"Target first param ({first_target_key}):")
-                logging.info(f"  dtype: {first_target_val.dtype}")
-                logging.info(f"  first few values: {first_target_val.flatten()[:5]}")
+                logging.info(f"\nOriginal values:")
+                logging.info(f"Target ({first_key}):")
+                logging.info(f"  dtype: {flat_target[first_key].dtype}")
+                logging.info(f"  first few values: {flat_target[first_key].flatten()[:5]}")
                 
-                logging.info(f"State first param ({first_target_key}):")  # Use same key for comparison
-                logging.info(f"  dtype: {first_state_val.dtype}")
-                logging.info(f"  first few values: {first_state_val.flatten()[:5]}")
+                logging.info(f"State ({first_key}):")
+                logging.info(f"  dtype: {flat_state[first_key].dtype}")
+                logging.info(f"  first few values: {flat_state[first_key].flatten()[:5]}")
+                
+                logging.info(f"\nAfter copy to new_state:")
+                logging.info(f"new_state ({first_key}):")
+                logging.info(f"  dtype: {new_state[first_key].dtype}")
+                logging.info(f"  first few values: {new_state[first_key].flatten()[:5]}")
                     
             return unflatten_dict(new_state)
 
