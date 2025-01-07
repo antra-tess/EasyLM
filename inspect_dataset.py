@@ -35,7 +35,7 @@ def main():
     config.dataset = DatasetFactory.get_default_config()
     config.dataset.type = 'json'
     config.dataset.text_processor.template = open('templates/borg_chat.yaml').read()
-    config.dataset.json_dataset.path = 'simulect_conversations.json'
+    config.dataset.json_dataset.path = 'simulect_conversations.jsonl'
     config.dataset.json_dataset.seq_length = 1024
     config.dataset.json_dataset.batch_size = 64
 
