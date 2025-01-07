@@ -219,6 +219,22 @@ class StreamingCheckpointer(object):
             flat_target = flatten_dict(to_state_dict(target))
             flat_state = flatten_dict(state)
             
+            if jax.process_index() == 0:
+                logging.info("=== Parameter Value Check ===")
+                # Check first few values of first parameter in each dict
+                first_target_key = next(iter(flat_target.keys()))
+                first_state_key = next(iter(flat_state.keys()))
+                first_target_val = flat_target[first_target_key]
+                first_state_val = flat_state[first_state_key]
+                
+                logging.info(f"Target first param ({first_target_key}):")
+                logging.info(f"  dtype: {first_target_val.dtype}")
+                logging.info(f"  first few values: {first_target_val.flatten()[:5]}")
+                
+                logging.info(f"State first param ({first_state_key}):")
+                logging.info(f"  dtype: {first_state_val.dtype}")
+                logging.info(f"  first few values: {first_state_val.flatten()[:5]}")
+            
             new_state = {}
             for key in flat_target.keys():
                 if key in flat_state:
