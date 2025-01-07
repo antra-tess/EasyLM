@@ -112,6 +112,12 @@ class StreamingCheckpointer(object):
                     logging.info(f"  {'/'.join(str(x) for x in k)}")
             if remove_dict_prefix is not None:
                 logging.info(f"Removing prefix: {remove_dict_prefix}")
+        if target is not None:
+            if jax.process_index() == 0:
+                # Get first parameter's dtype
+                first_param = jax.tree_util.tree_leaves(target)[0]
+                logging.info(f"First parameter dtype during load checkpoint: {first_param.dtype}")
+
 
         if shard_fns is not None:
             shard_fns = flatten_dict(
