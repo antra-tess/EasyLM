@@ -12,7 +12,7 @@ echo "HF_TOKEN is${HF_TOKEN:+ set}${HF_TOKEN:-" not set"}"
 
 ## Run training
 cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
-    --mesh_dim='1,-1,1' \
+    --mesh_dim='2,-1,1' \
     --dtype='bf16' \
     --llama.base_model='llama31_8b' \
     --tokenizer="meta-llama/Meta-Llama-3.1-8B" \
@@ -22,6 +22,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --train_dataset.huggingface_dataset.seq_length=4096 \
     --train_dataset.huggingface_dataset.seq_length=2048 \
     --train_dataset.huggingface_dataset.batch_size=64 \
+    --train_dataset.text_processor.fields='[instruction+input],output' \
     --optimizer.type='adamw' \
     --optimizer.adamw_optimizer.lr=3e-4 \
     --optimizer.adamw_optimizer.end_lr=3e-5 \
