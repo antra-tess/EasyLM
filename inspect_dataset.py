@@ -54,41 +54,53 @@ sequence:
     print("Inspecting dataset batches...")
     print("=" * 80)
 
-    # Look at first few batches
+    # Look at just a few examples in detail
+    print("\n=== Detailed Example Inspection ===\n")
     for batch_idx, (batch, metrics) in enumerate(dataset):
-        if batch_idx >= 3:  # Just look at first 3 batches
+        if batch_idx >= 1:  # Just look at first batch
             break
-
-        print(f"Batch {batch_idx}:")
-        print("-" * 40)
-        
-        # For each sequence in batch
-        for seq_idx in range(config.dataset.huggingface_dataset.batch_size):
-            print(f"Sequence {seq_idx}:")
             
-            # Show input tokens
+        # For first few sequences in batch
+        for seq_idx in range(min(2, config.dataset.huggingface_dataset.batch_size)):
+            print(f"\nExample {seq_idx + 1}:")
+            print("=" * 80)
+            
             input_tokens = batch['input_tokens'][seq_idx]
-            print_tokens(tokenizer, input_tokens, prefix="  Input  | ")
-            
-            # Show target tokens
             target_tokens = batch['target_tokens'][seq_idx]
-            print_tokens(tokenizer, target_tokens, prefix="  Target | ")
-            
-            # Show loss masks and their effect
             loss_masks = batch['loss_masks'][seq_idx]
-            print(f"  Loss Mask | {loss_masks}")
             
-            # Verify alignment
-            print("\n  Token Alignment:")
+            # Show statistics
+            print(f"\nSequence Statistics:")
+            print(f"  Total length: {len(input_tokens)}")
+            print(f"  Tokens with loss: {np.sum(loss_masks)}")
+            print(f"  Loss percentage: {np.mean(loss_masks)*100:.1f}%")
+            
+            # Show the full sequence broken into segments by loss mask
+            print(f"\nSequence Breakdown:")
+            current_mask = loss_masks[0]
+            current_text = ""
+            for i, (inp, mask) in enumerate(zip(input_tokens, loss_masks)):
+                if mask != current_mask:
+                    print(f"  {'[LOSS]' if current_mask else '[ -- ]'} {current_text}")
+                    current_text = ""
+                    current_mask = mask
+                current_text += tokenizer.decode([inp])
+            print(f"  {'[LOSS]' if current_mask else '[ -- ]'} {current_text}")
+            
+            # Show token-level details for a small window
+            print(f"\nDetailed Token View (first 10 transitions):")
+            transitions_shown = 0
             for i, (inp, tgt, mask) in enumerate(zip(input_tokens, target_tokens, loss_masks)):
-                if inp != tgt:
-                    print(f"    Position {i}:")
-                    print(f"      Input:  {inp} -> {tokenizer.decode([inp])}")
-                    print(f"      Target: {tgt} -> {tokenizer.decode([tgt])}")
-                    print(f"      Mask:   {mask}")
+                if i > 0 and loss_masks[i] != loss_masks[i-1]:
+                    print(f"\n  Position {i}:")
+                    print(f"    Input:  {inp} -> {tokenizer.decode([inp])}")
+                    print(f"    Target: {tgt} -> {tokenizer.decode([tgt])}")
+                    print(f"    Mask:   {mask}")
+                    transitions_shown += 1
+                    if transitions_shown >= 10:
+                        break
             
-            print("\n" + "-" * 40)
-        print("=" * 80 + "\n")
+            print("\n" + "=" * 80)
 
 if __name__ == '__main__':
     main()
