@@ -54,6 +54,7 @@ class ModelServer(LMServer):
 
         logging.info("Loading model checkpoint and initializing model...")
         model_start = time.time()
+        logging.info("Param dtype: {}".format(FLAGS.param_dtype))
         with jax.default_device(jax.devices("cpu")[0]):
             logging.info(f"Loading checkpoint from {FLAGS.load_checkpoint}")
             # Create model to get parameter shapes
