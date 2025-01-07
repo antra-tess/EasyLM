@@ -11,10 +11,10 @@ INSTANCE_NAME=$1
 
 # First SSH to finetune-70b, then use it to reach target workers
 echo "Using finetune-70b as jump host to reach ${INSTANCE_NAME} workers..."
-gcloud compute tpus tpu-vm ssh "finetune-70b" --zone=us-central2-b --command="
+gcloud compute tpus tpu-vm ssh "finetune-70b" --zone=us-central2-b --account=antra@tesserae.cc --command="
     for i in {0..15}; do
         echo \"Configuring worker \$i...\"
-        gcloud compute tpus tpu-vm ssh \"${INSTANCE_NAME}\" --zone=us-central2-b --worker=\$i --command=\"
+        gcloud compute tpus tpu-vm ssh \"${INSTANCE_NAME}\" --zone=us-central2-b --account=antra@tesserae.cc --worker=\$i --command=\"
             sudo mkdir -p /mnt/disk2
             if ! mount | grep -q '/mnt/disk2'; then
                 sudo apt-get update
