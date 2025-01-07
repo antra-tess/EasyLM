@@ -46,7 +46,7 @@ sequence:
     config.dataset.huggingface_dataset.batch_size = 2  # Small batch for inspection
 
     # Initialize tokenizer
-    tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B")
 
     # Load dataset
     dataset = DatasetFactory.load_dataset(config.dataset, tokenizer)
