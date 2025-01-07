@@ -81,6 +81,7 @@ class ModelServer(LMServer):
 
             # Filter for base parameters (no LoRA)
             if FLAGS.lora_mode:
+                logging.info("LoRA mode enabled. Filtering for LoRA parameters...")
                 base_shape = {}
                 for k, v in flatten_dict(full_shape).items():
                     if 'lora_' not in '/'.join(str(x) for x in k):
@@ -125,6 +126,7 @@ class ModelServer(LMServer):
             )
 
             if FLAGS.lora_mode:
+                logging.info("Loading LoRA parameters...")
                 # Get LoRA parameter partition rules
                 lora_model_ps = match_partition_rules(
                     LLaMAConfigurator.get_lora_partition_rules(), lora_shape
