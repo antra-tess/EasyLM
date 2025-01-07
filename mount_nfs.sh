@@ -14,15 +14,18 @@ JUMP_HOST="finetune-70b"
 echo "Getting worker IPs for ${INSTANCE_NAME}..."
 WORKER_IPS=$(gcloud compute tpus tpu-vm list --zone=us-central2-b --filter="name~'${INSTANCE_NAME}'" --format="csv[no-heading](networkEndpoints[].ipAddress)")
 
+# Convert semicolon-separated list to space-separated
+WORKER_IPS=$(echo "$WORKER_IPS" | tr ';' ' ')
+
 # First SSH to the jump host, then to target instance using IPs
 echo "Using ${JUMP_HOST} as jump host to reach ${INSTANCE_NAME}..."
 gcloud compute tpus tpu-vm ssh "${JUMP_HOST}" --zone=us-central2-b --command="
     echo 'Connecting to ${INSTANCE_NAME} workers...'
-    WORKER_IPS=(${WORKER_IPS})
+    read -r -a IPS <<< \"${WORKER_IPS}\"
     for i in {0..15}; do
-        IP=\${WORKER_IPS[\$i]}
+        IP=\${IPS[\$i]}
         echo \"Configuring worker \$i (\$IP)...\"
-        ssh \$IP \"
+        ssh -o StrictHostKeyChecking=no \$IP \"
             sudo mkdir -p /mnt/disk2
             if ! mount | grep -q '/mnt/disk2'; then
                 sudo apt-get update
