@@ -83,9 +83,6 @@ class TextProcessor(object):
             if field.startswith('[') and field.endswith(']'):
                 field = field[1:-1]  # Remove brackets
                 mask = 0.0  # No loss for this field
-                # No loss for this field.
-                field = field[1:-1]
-                mask = 0.0
             else:
                 mask = 1.0  # Apply loss to this field
 
