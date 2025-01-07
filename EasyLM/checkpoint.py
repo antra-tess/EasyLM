@@ -302,7 +302,7 @@ class StreamingCheckpointer(object):
                 path=load_path,
                 target=params_target,
                 shard_fns=None,  # No sharding required
-                restore_state=False,
+                restore_state=True,
                 require_sharding=False  # Skip sharding requirement check
             )
             # Wrap in params dict structure

@@ -122,7 +122,6 @@ class ModelServer(LMServer):
                 FLAGS.load_checkpoint,
                 trainstate_target=params,
                 trainstate_shard_fns=None, #{'params': base_shard_fns}  # Single wrap for base_params mode
-                restore_state=True  # Make sure we actually restore the state!
             )
 
             if FLAGS.lora_mode:
