@@ -197,10 +197,21 @@ class StreamingCheckpointer(object):
                 first_key = next(iter(flattened.keys()))
                 first_dict = flattened[first_key]
                 first_leaf = jax.tree_util.tree_leaves(target)[0]
-                logging.info(f"First param key via dict: {first_key}")
-                logging.info(f"First param via dict: type={type(first_dict)}, dtype={getattr(first_dict, 'dtype', None)}, shape={getattr(first_dict, 'shape', None)}")
-                logging.info(f"First param via leaves: type={type(first_leaf)}, dtype={getattr(first_leaf, 'dtype', None)}, shape={getattr(first_leaf, 'shape', None)}")
-                logging.info(f"Are they the same object? {first_dict is first_leaf}")
+
+                logging.info("=== Parameter Views ===")
+                logging.info(f"Via flatten_dict:")
+                for k, v in flattened.items():
+                    logging.info(f"  {'/'.join(str(x) for x in k)}: type={type(v)}, dtype={getattr(v, 'dtype', None)}, shape={getattr(v, 'shape', None)}")
+                
+                logging.info(f"\nVia tree_leaves:")
+                for i, leaf in enumerate(jax.tree_util.tree_leaves(target)):
+                    logging.info(f"  Leaf {i}: type={type(leaf)}, dtype={getattr(leaf, 'dtype', None)}, shape={getattr(leaf, 'shape', None)}")
+
+                logging.info(f"\nFirst param comparisons:")
+                logging.info(f"  Key via dict: {first_key}")
+                logging.info(f"  Via dict: type={type(first_dict)}, dtype={getattr(first_dict, 'dtype', None)}, shape={getattr(first_dict, 'shape', None)}")
+                logging.info(f"  Via leaves: type={type(first_leaf)}, dtype={getattr(first_leaf, 'dtype', None)}, shape={getattr(first_leaf, 'shape', None)}")
+                logging.info(f"  Same object? {first_dict is first_leaf}")
 
         if target is None or not restore_state:
             return train_state
