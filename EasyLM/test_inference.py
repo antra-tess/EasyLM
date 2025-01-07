@@ -17,19 +17,17 @@ def main(argv):
     # Initialize model server
     server = ModelServer()
 
-    # Run inference on fixed text
-    test_text = ["Tell me a short story about a cat."]
-    response = server.generate(test_text, temperature=1.0)
-
-    print("\nInput:", test_text[0])
+    # Format prompt using chat template
+    test_prompt = "<|begin_of_text|><|start_header_id|>system<|end_header_id|>You are a helpful AI assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>Tell me a short story about a cat.<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+    response = server.generate([test_prompt], temperature=1.0)
+    print("\nInput: Tell me a short story about a cat.")
     print("\nOutput:", response[0])
 
     print ("=====================")
 
-    test_text = ["Tell me a scary story."]
-    response = server.generate(test_text, temperature=1.0)
-
-    print("\nInput:", test_text[0])
+    test_prompt = "<|begin_of_text|><|start_header_id|>system<|end_header_id|>You are a helpful AI assistant.<|eot_id|><|start_header_id|>user<|end_header_id|>Tell me a scary story.<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+    response = server.generate([test_prompt], temperature=1.0)
+    print("\nInput: Tell me a scary story.")
     print("\nOutput:", response[0])
 
 if __name__ == '__main__':
