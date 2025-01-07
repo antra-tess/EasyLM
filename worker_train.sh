@@ -33,4 +33,6 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --logger.online=true \
     --logger.project='levanter-sft' \
     --logger.entity='antra-cyborgism' \
-    --logger.output_dir='params::/mnt/disk2/easylm_chkp'
+    --logger.output_dir='params::/mnt/disk2/easylm_chkp' \
+    --checkpointing.save_min_step=1000 \
+    --checkpointing.save_loss_threshold=0.8
