@@ -25,7 +25,7 @@ gcloud compute tpus tpu-vm ssh "${JUMP_HOST}" --zone=us-central2-b --command="
     for i in {0..15}; do
         IP=\${IPS[\$i]}
         echo \"Configuring worker \$i (\$IP)...\"
-        ssh -o StrictHostKeyChecking=no \$IP \"
+        ssh -A -o StrictHostKeyChecking=no \$IP \"
             sudo mkdir -p /mnt/disk2
             if ! mount | grep -q '/mnt/disk2'; then
                 sudo apt-get update
