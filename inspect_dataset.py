@@ -33,17 +33,11 @@ def main():
     # Load the same config used in training
     config = mlxu.config_dict()
     config.dataset = DatasetFactory.get_default_config()
-    config.dataset.type = 'huggingface'
-    config.dataset.text_processor.template = """
-sequence:
-  - no_loss: "{instruction}{input}"
-  - with_loss: "{output}"
-"""
-    config.dataset.huggingface_dataset.path = "tatsu-lab/alpaca"
-    config.dataset.huggingface_dataset.name = ""
-    config.dataset.huggingface_dataset.split = "train"
-    config.dataset.huggingface_dataset.seq_length = 2048
-    config.dataset.huggingface_dataset.batch_size = 2  # Small batch for inspection
+    config.dataset.type = 'json'
+    config.dataset.text_processor.template = open('templates/test_chat.yaml').read()
+    config.dataset.json_dataset.path = 'test_conversations.json'
+    config.dataset.json_dataset.seq_length = 1024
+    config.dataset.json_dataset.batch_size = 2  # Small batch for inspection
 
     # Initialize tokenizer
     tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B")
