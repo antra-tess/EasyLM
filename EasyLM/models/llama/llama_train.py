@@ -102,9 +102,6 @@ def main(argv):
     # Use trainable_mask for both weight decay and controlling optimizer state allocation
     optimizer, optimizer_info = OptimizerFactory.get_optimizer(
         FLAGS.optimizer,
-        weight_decay_mask=None,
-        trainable_mask=None,
-        lora_mode=False,
     )
     logginginfo(f"Optimizer setup complete: {str(optimizer_info)}, {str(optimizer)}, {str(type(optimizer))}")
 
