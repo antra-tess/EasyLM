@@ -172,9 +172,7 @@ class StreamingCheckpointer(object):
                     continue
                 if key not in flattend_train_state and value == empty_node:
                     flattend_train_state[key] = value
-                elif key in flattend_train_state and hasattr(value, 'dtype'):
-                    # Convert loaded parameters to match target dtype
-                    flattend_train_state[key] = flattend_train_state[key].astype(value.dtype)
+
         else:
             #logging.info(f"target is None, not initializing LoRA parameters")
             pass
