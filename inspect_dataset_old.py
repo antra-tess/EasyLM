@@ -34,7 +34,7 @@ def main():
     config = mlxu.config_dict()
     config.dataset = DatasetFactory.get_default_config()
     config.dataset.type = 'huggingface'
-    config.dataset.text_processor.fields = '[instruction],output'  # Old style field specification
+    config.dataset.text_processor.fields = 'instruction,output'  # Old style field specification
     config.dataset.text_processor.add_bos_token = True
     config.dataset.text_processor.add_eos_token = True
     config.dataset.huggingface_dataset.path = "tatsu-lab/alpaca"
