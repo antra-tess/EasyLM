@@ -135,3 +135,6 @@ Llama-3-8B
 Llama-3.1-8B
 request_logs
 .aider*
+*.md
+*.json
+simulect_conversations.jsonl
