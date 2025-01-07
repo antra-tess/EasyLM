@@ -192,6 +192,12 @@ class StreamingCheckpointer(object):
             if target is not None:
                 print_dict(target, "Target state")
 
+                # Compare different ways of looking at the data
+                first_dict = next(iter(flatten_dict(target).values()))
+                first_leaf = jax.tree_util.tree_leaves(target)[0]
+                logging.info(f"First param via dict: type={type(first_dict)}, dtype={getattr(first_dict, 'dtype', None)}")
+                logging.info(f"First param via leaves: type={type(first_leaf)}, dtype={getattr(first_leaf, 'dtype', None)}")
+
         if target is None or not restore_state:
             return train_state
 
