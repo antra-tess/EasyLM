@@ -70,15 +70,15 @@ def main():
             print(f"  Loss percentage: {np.mean(loss_masks)*100:.1f}%")
             
             # Show the full sequence broken into segments by loss mask
-            print(f"\nSequence Breakdown:")
+            print(f"\nSequence Breakdown (Target Tokens):")
             current_mask = loss_masks[0]
             current_text = ""
-            for i, (inp, mask) in enumerate(zip(input_tokens, loss_masks)):
+            for i, (tgt, mask) in enumerate(zip(target_tokens, loss_masks)):
                 if mask != current_mask:
                     print(f"  {'[LOSS]' if current_mask else '[ -- ]'} {current_text}")
                     current_text = ""
                     current_mask = mask
-                current_text += tokenizer.decode([inp])
+                current_text += tokenizer.decode([tgt])
             print(f"  {'[LOSS]' if current_mask else '[ -- ]'} {current_text}")
             
             # Show token-level details for a small window
