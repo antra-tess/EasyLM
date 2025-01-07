@@ -9,7 +9,7 @@ echo "Pushing changes to repository..."
 git pull
 git push antra
 
-export SCRIPT=worker_train_lora.sh
+export SCRIPT=worker_train.sh
 
 # Copy worker script and start training on all workers
 echo "Starting training on all workers..."

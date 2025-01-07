@@ -22,7 +22,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --llama.lora_mlp=false \
     --tokenizer="meta-llama/Meta-Llama-3.1-8B" \
     --load_checkpoint='base_params::/mnt/disk2/llama-3.1-8b' \
-    --train_dataset.type='huggingface' \
+    --train_dataset.type='json' \
     --train_dataset.text_processor.template="$(cat templates/borg_chat.yaml)" \
     --train_dataset.json_dataset.path="/mnt/disk2/simulect_conversations.json" \
     --train_dataset.json_dataset.seq_length=1024 \
