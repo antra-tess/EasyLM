@@ -15,9 +15,9 @@ PROXY_HOSTNAME=$(gcloud compute tpus tpu-vm ssh "finetune-70b" --zone=us-central
 echo "Setting up SOCKS proxy on ${PROXY_HOSTNAME}..."
 gcloud compute tpus tpu-vm ssh "finetune-70b" --zone=us-central2-b --worker=0 --account=antra@tesserae.cc --command="
     # Kill any existing proxy
-    pkill -f 'gcloud.*1080'
+    pkill -f 'ssh.*1080'
     # Set up new SOCKS proxy on all interfaces
-    gcloud compute tpus tpu-vm ssh "finetune-70b" --zone=us-central2-b --worker=0 -- -D 0.0.0.0:1080 -N -f
+    gcloud compute tpus tpu-vm ssh "finetune-70b" --zone=us-central2-b --account=antra@tesserae.cc --worker=0 -- -D 0.0.0.0:1080 -N -f
 "
 
 # Configure proxy on each worker of target instance
