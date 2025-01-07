@@ -287,7 +287,7 @@ class LLaMAConfigurator(object):
             # output head
             ("transformer/ln_f/kernel", PS(None)),
             ("lm_head/kernel", PS("fsdp", "mp")),
-#            ('.*', PS(None)),
+            ('.*', PS(None)),
         )
 
     @staticmethod
@@ -536,21 +536,16 @@ class FlaxLLaMAAttention(nn.Module):
             xq, 'b s (h d) -> b s h d',
             h=self.config.num_attention_heads,
         )
-#        xq = with_sharding_constraint(xq, PS(("dp", "fsdp"), None, "mp", None))
-
         xk = einops.repeat(
             xk, 'b s (h d) -> b s (h g) d',
             h=self.config.num_key_value_heads,
             g=self.config.num_attention_heads // self.config.num_key_value_heads,
         )
-#        xk = with_sharding_constraint(xk, PS(("dp", "fsdp"), None, "mp", None))
-
         xv = einops.repeat(
             xv, 'b s (h d) -> b s (h g) d',
             h=self.config.num_key_value_heads,
             g=self.config.num_attention_heads // self.config.num_key_value_heads,
         )
-#        xv = with_sharding_constraint(xv, PS(("dp", "fsdp"), None, "mp", None))
 
         xq, xk = apply_rotary_emb(
             xq, xk, position_ids,
@@ -611,13 +606,9 @@ class FlaxLLaMAAttention(nn.Module):
 
             batch_size = hidden_states.shape[0]
             causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
-            #causal_mask = with_sharding_constraint(causal_mask, PS(("dp", "fsdp"), None, None, None))
 
             attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
-            #attention_mask = with_sharding_constraint(attention_mask, PS(("dp", "fsdp"), None, None, None))
             attention_mask = combine_masks(attention_mask, causal_mask, fcm_mask)
-            #attention_mask = with_sharding_constraint(attention_mask, PS(("dp", "fsdp"), None, None, None))
-            #del causal_mask
 
             # During fast autoregressive decoding, we feed one position at a time,
             # and cache the keys and values step by step.

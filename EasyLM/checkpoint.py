@@ -134,9 +134,6 @@ class StreamingCheckpointer(object):
             # 83886080 bytes = 80 MB, which is 16 blocks on GCS
             unpacker = msgpack.Unpacker(fin, read_size=83886080, max_buffer_size=0)
             for key, value in unpacker:
-                # if jax.process_index() == 0:
-                #     tensor = from_bytes(None, value)
-                #     logging.info(f"  {'/'.join(str(x) for x in key)}: shape={tensor.shape}, dtype={tensor.dtype}")
                 key = tuple(key)
                 if remove_dict_prefix is not None:
                     if key[:len(remove_dict_prefix)] == remove_dict_prefix:
@@ -182,80 +179,10 @@ class StreamingCheckpointer(object):
 
         train_state = unflatten_dict(flattend_train_state)
 
-        # if jax.process_index() == 0:
-        #     def print_dict(d, prefix=''):
-        #         for k, v in d.items():
-        #             if isinstance(v, dict):
-        #                 print_dict(v, prefix=f'{prefix}/{k}')
-        #             else:
-        #                 logging.info(f"{prefix}/{k}: shape={v.shape}, dtype={v.dtype}")
-        #     print_dict(train_state, "Loaded state")
-            # if target is not None:
-            #     print_dict(target, "Target state")
-            #
-            #     # Compare different ways of looking at the data
-            #     flattened = flatten_dict(target)
-            #     first_key = next(iter(flattened.keys()))
-            #     first_dict = flattened[first_key]
-            #     first_leaf = jax.tree_util.tree_leaves(target)[0]
-            #
-            #     logging.info("=== Parameter Views ===")
-            #     logging.info(f"Via flatten_dict:")
-            #     for k, v in flattened.items():
-            #         logging.info(f"  {'/'.join(str(x) for x in k)}: type={type(v)}, dtype={getattr(v, 'dtype', None)}, shape={getattr(v, 'shape', None)}")
-            #
-            #     logging.info(f"\nVia tree_leaves:")
-            #     for i, leaf in enumerate(jax.tree_util.tree_leaves(target)):
-            #         logging.info(f"  Leaf {i}: type={type(leaf)}, dtype={getattr(leaf, 'dtype', None)}, shape={getattr(leaf, 'shape', None)}")
-            #
-            #     logging.info(f"\nFirst param comparisons:")
-            #     logging.info(f"  Key via dict: {first_key}")
-            #     logging.info(f"  Via dict: type={type(first_dict)}, dtype={getattr(first_dict, 'dtype', None)}, shape={getattr(first_dict, 'shape', None)}")
-            #     logging.info(f"  Via leaves: type={type(first_leaf)}, dtype={getattr(first_leaf, 'dtype', None)}, shape={getattr(first_leaf, 'shape', None)}")
-            #     logging.info(f"  Same object? {first_dict is first_leaf}")
-
         if target is None or not restore_state:
             if jax.process_index() == 0:
                 logging.info("Loaded state without restoring target state")
             return train_state
-        #
-        # def from_state_dict_preserve_dtype(target, state):
-        #     """Like from_state_dict but preserves source parameter dtypes instead of enforcing target dtypes"""
-        #     flat_target = flatten_dict(to_state_dict(target))
-        #     flat_state = flatten_dict(state)
-        #
-        #     new_state = {}
-        #     for key in flat_target.keys():
-        #         if key in flat_state:
-        #             new_state[key] = flat_state[key]  # Keep original value and dtype
-        #         else:
-        #             new_state[key] = flat_target[key]  # Use target value for missing keys
-        #
-        #     if jax.process_index() == 0:
-        #         logging.info("=== Parameter Value Check ===")
-        #         # Check first few values of first parameter in each dict
-        #         first_key = next(iter(flat_target.keys()))
-        #
-        #         logging.info(f"\nOriginal values:")
-        #         logging.info(f"Target ({first_key}):")
-        #         logging.info(f"  dtype: {flat_target[first_key].dtype}")
-        #         logging.info(f"  first few values: {flat_target[first_key].flatten()[:5]}")
-        #
-        #         logging.info(f"State ({first_key}):")
-        #         logging.info(f"  dtype: {flat_state[first_key].dtype}")
-        #         logging.info(f"  first few values: {flat_state[first_key].flatten()[:5]}")
-        #
-        #         logging.info(f"\nAfter copy to new_state:")
-        #         logging.info(f"new_state ({first_key}):")
-        #         logging.info(f"  dtype: {new_state[first_key].dtype}")
-        #         logging.info(f"  first few values: {new_state[first_key].flatten()[:5]}")
-        #
-        #     return unflatten_dict(new_state)
-        #
-        # if jax.process_index() == 0:
-        #     # Get first parameter's dtype
-        #     first_param = jax.tree_util.tree_leaves(target)[0]
-        #     logging.info(f"First parameter dtype right before state dict {first_param.dtype}")
 
         # Create a copy of train_state with all target keys
         full_state = {}
