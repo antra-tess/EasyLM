@@ -254,7 +254,20 @@ class StreamingCheckpointer(object):
         #     first_param = jax.tree_util.tree_leaves(target)[0]
         #     logging.info(f"First parameter dtype right before state dict {first_param.dtype}")
 
-        return from_state_dict(target, train_state)
+        # Create a copy of train_state with all target keys
+        full_state = {}
+        flattened_target = flatten_dict(to_state_dict(target))
+        flattened_state = flatten_dict(train_state)
+        
+        # Copy all available keys from train_state
+        for key in flattened_target.keys():
+            if key in flattened_state:
+                full_state[key] = flattened_state[key]
+            else:
+                # For missing keys (like lm_head in LoRA), use target's value
+                full_state[key] = flattened_target[key]
+        
+        return from_state_dict(target, unflatten_dict(full_state))
 
     @staticmethod
     def load_flax_checkpoint(path, target=None, shard_fns=None):
