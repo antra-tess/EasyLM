@@ -67,34 +67,61 @@ class StreamingCheckpointer(object):
             path = '/dev/null'
         mlxu.save_pickle(obj, path)
 
-    def save_all(self, train_state, gather_fns, metadata=None, dataset=None, milestone=False):
+    def save_all(self, train_state, gather_fns, metadata=None, dataset=None, milestone=False, params_wrapped=True):
         step = int(jax.device_get(train_state.step))
         if self.config.save_optimizer_state:
             checkpoint_state = train_state
             checkpoint_name = 'streaming_train_state'
             checkpoint_gather_fns = gather_fns
+            if not params_wrapped:
+                raise ValueError("save_all with optimizer state requires params_wrapped=True")
         else:
             checkpoint_state = train_state.params['params']
             checkpoint_name = 'streaming_params'
-            checkpoint_gather_fns = gather_fns.params['params']
+            if params_wrapped:
+                checkpoint_gather_fns = gather_fns.params['params']
+            else:
+                checkpoint_gather_fns = gather_fns.params
+
+        # Strip any prefix like "params::" from checkpoint directory path
+        base_dir = self.checkpoint_dir.split("::")[-1] if "::" in self.checkpoint_dir else self.checkpoint_dir
 
         if milestone:
             # Save a milestone checkpoint that will not be overwritten
-            self.save_pickle(metadata, f'metadata_{step}.pkl')
-            self.save_pickle(dataset, f'dataset_{step}.pkl')
+            checkpoint_dir = os.path.join(base_dir, f"milestone_{step}")
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            self.save_pickle(metadata, os.path.join(checkpoint_dir, 'metadata.pkl'))
+            self.save_pickle(dataset, os.path.join(checkpoint_dir, 'dataset.pkl'))
             self.save_checkpoint(
-                checkpoint_state, f'{checkpoint_name}_{step}', checkpoint_gather_fns
+                checkpoint_state, os.path.join(checkpoint_dir, checkpoint_name), checkpoint_gather_fns
             )
         else:
             # Save a normal checkpoint that can be overwritten
-            self.save_pickle(metadata, 'metadata.pkl')
-            self.save_pickle(dataset, 'dataset.pkl')
+            checkpoint_dir = os.path.join(base_dir, f"checkpoint_{step}")
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            self.save_pickle(metadata, os.path.join(checkpoint_dir, 'metadata.pkl'))
+            self.save_pickle(dataset, os.path.join(checkpoint_dir, 'dataset.pkl'))
             self.save_checkpoint(
-                checkpoint_state, f'{checkpoint_name}', checkpoint_gather_fns
+                checkpoint_state, os.path.join(checkpoint_dir, checkpoint_name), checkpoint_gather_fns
             )
 
     @staticmethod
-    def load_checkpoint(path, target=None, shard_fns=None, remove_dict_prefix=None):
+    def load_checkpoint(path, target=None, shard_fns=None, remove_dict_prefix=None, restore_state=True,
+                        require_sharding=True):
+        if jax.process_index() == 0:
+            logging.info(f"Loading checkpoint from {path}")
+            if shard_fns is not None:
+                logging.info("Shard functions provided:")
+                for k, v in flatten_dict(to_state_dict(shard_fns)).items():
+                    logging.info(f"  {'/'.join(str(x) for x in k)}")
+            if remove_dict_prefix is not None:
+                logging.info(f"Removing prefix: {remove_dict_prefix}")
+        if target is not None:
+            if jax.process_index() == 0:
+                # Get first parameter's dtype
+                first_param = jax.tree_util.tree_leaves(target)[0]
+                logging.info(f"First parameter dtype during load checkpoint: {first_param.dtype}")
+
         if shard_fns is not None:
             shard_fns = flatten_dict(
                 to_state_dict(shard_fns)
@@ -102,6 +129,7 @@ class StreamingCheckpointer(object):
         if remove_dict_prefix is not None:
             remove_dict_prefix = tuple(remove_dict_prefix)
         flattend_train_state = {}
+        counter = 0
         with mlxu.open_file(path) as fin:
             # 83886080 bytes = 80 MB, which is 16 blocks on GCS
             unpacker = msgpack.Unpacker(fin, read_size=83886080, max_buffer_size=0)
@@ -115,36 +143,61 @@ class StreamingCheckpointer(object):
 
                 tensor = from_bytes(None, value)
                 if shard_fns is not None:
-                    tensor = shard_fns[key](tensor)
+                    if jax.process_index() == 0:
+                        logging.info(f"Applying sharding to {'/'.join(str(x) for x in key)} with shape {tensor.shape}")
+                    counter += 1
+                    try:
+                        tensor = shard_fns[key](tensor)
+                    except KeyError as e:
+                        if jax.process_index() == 0:
+                            logging.info(f"No sharding function found for key {key}")
+                            logging.info(f"Available shard_fns keys: {list(shard_fns.keys())}")
+                        raise
                 flattend_train_state[key] = tensor
+        if require_sharding and counter == 0:
+            raise ValueError(f"No tensor sharding was applied {path}")
 
         if target is not None:
             flattened_target = flatten_dict(
                 to_state_dict(target), keep_empty_nodes=True
             )
             for key, value in flattened_target.items():
-                #logging.info(f"Loading target parameter {key} with shape {value.shape}")
                 if 'lora_' in str(key):
                     # Initialize LoRA parameters with zeros
                     # Handle both actual arrays and ShapeDtypeStruct
                     if hasattr(value, 'shape') and hasattr(value, 'dtype'):
                         flattend_train_state[key] = jnp.zeros(value.shape, dtype=value.dtype)
-                        #logging.info(f"Initialized LoRA parameter {key} with shape {value.shape}")
                     else:
-                        #logging.info(f"Skipping LoRA parameter {key} because it has no shape/dtype: {type(value)}")
                         pass
                     continue
-                if key not in flattend_train_state and value == empty_node:
+                if key not in flattend_train_state and value is empty_node:
                     flattend_train_state[key] = value
+
         else:
-            #logging.info(f"target is None, not initializing LoRA parameters")
+            # logging.info(f"target is None, not initializing LoRA parameters")
             pass
 
         train_state = unflatten_dict(flattend_train_state)
-        if target is None:
+
+        if target is None or not restore_state:
+            if jax.process_index() == 0:
+                logging.info("Loaded state without restoring target state")
             return train_state
 
-        return from_state_dict(target, train_state)
+        # Create a copy of train_state with all target keys
+        full_state = {}
+        flattened_target = flatten_dict(to_state_dict(target))
+        flattened_state = flatten_dict(train_state)
+
+        # Copy all available keys from train_state
+        for key in flattened_target.keys():
+            if key in flattened_state:
+                full_state[key] = flattened_state[key]
+            else:
+                # For missing keys (like lm_head in LoRA), use target's value
+                full_state[key] = flattened_target[key]
+
+        return from_state_dict(target, unflatten_dict(full_state))
 
     @staticmethod
     def load_flax_checkpoint(path, target=None, shard_fns=None):
@@ -167,17 +220,21 @@ class StreamingCheckpointer(object):
     def load_trainstate_checkpoint(cls, load_from, trainstate_target=None,
                                    trainstate_shard_fns=None,
                                    disallow_trainstate=False):
-        if trainstate_target is not None:
-            params_target = trainstate_target.params['params']
-        else:
-            params_target = None
 
         if trainstate_shard_fns is not None:
-            params_shard_fns = trainstate_shard_fns.params['params']
+            # print("trainstate_shard_fns: ", trainstate_shard_fns)
+            # Handle both dictionary and object cases
+            if isinstance(trainstate_shard_fns, dict):
+                params_shard_fns = trainstate_shard_fns['params']
+            else:
+                params_shard_fns = trainstate_shard_fns.params['params']
         else:
             params_shard_fns = None
 
-        load_type, load_path = load_from.split('::', 1)
+        try:
+            load_type, load_path = load_from.split('::', 1)
+        except ValueError:
+            raise ValueError(f'Invalid load_from format: {load_from}')
         if disallow_trainstate:
             assert load_type != 'trainstate', 'Loading full trainstate is not allowed!'
         train_state = None
@@ -190,6 +247,10 @@ class StreamingCheckpointer(object):
                 shard_fns=trainstate_shard_fns,
             )
         elif load_type == 'trainstate_params':
+            if trainstate_target is not None:
+                params_target = trainstate_target.params['params']
+            else:
+                params_target = None
             # Load the params part of the train state in the streaming format
             restored_params = cls.load_checkpoint(
                 path=load_path,
@@ -199,14 +260,58 @@ class StreamingCheckpointer(object):
             )
             restored_params = {'params': restored_params}
         elif load_type == 'params':
+            if trainstate_target is not None:
+                params_target = trainstate_target.params['params']
+            else:
+                params_target = None
             # Load the params in the streaming format
             restored_params = cls.load_checkpoint(
                 path=load_path,
                 target=params_target,
                 shard_fns=params_shard_fns,
+                restore_state=True,
             )
             restored_params = {'params': restored_params}
+        elif load_type == 'base_params':
+            # Load base model parameters only, no train state
+            if trainstate_target is not None:
+                params_target = trainstate_target.get('params', None)
+            else:
+                params_target = None
+
+            restored_params = cls.load_checkpoint(
+                path=load_path,
+                target=params_target,
+                shard_fns=params_shard_fns,  # Use params sharding directly
+                restore_state=True
+            )
+            # Wrap in params dict structure
+            if not isinstance(restored_params, dict) or 'params' not in restored_params:
+                restored_params = {'params': restored_params}
+            return restored_params  # Return only params, no train state
+        elif load_type == 'base_params_unsharded':
+            # Load base model parameters without requiring sharding functions
+            if trainstate_target is not None:
+                params_target = trainstate_target.get('params', None)
+            else:
+                params_target = None
+
+            restored_params = cls.load_checkpoint(
+                path=load_path,
+                target=params_target,
+                shard_fns=None,  # No sharding required
+                restore_state=True,
+                require_sharding=False  # Skip sharding requirement check
+            )
+            # Wrap in params dict structure
+            if not isinstance(restored_params, dict) or 'params' not in restored_params:
+                restored_params = {'params': restored_params}
+            return None, restored_params  # Return only params, no train state
         elif load_type == 'flax_params':
+            if trainstate_target is not None:
+                params_target = trainstate_target.params['params']
+            else:
+                params_target = None
             # Load the params in the standard flax format (non-streaming)
             # This requires the entire params to fit in memory
             restored_params = cls.load_flax_checkpoint(
