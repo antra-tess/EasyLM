@@ -3,6 +3,10 @@ from functools import partial
 import json
 import base64
 from multiprocessing import Pool
+import logging
+import os
+from tqdm import tqdm
+import jax
 
 import mlxu
 import numpy as np
@@ -44,21 +48,89 @@ class TextProcessor(object):
     @staticmethod
     def get_default_config(updates=None):
         config = mlxu.config_dict()
-        config.fields_from_example = ''
-        config.fields = ''
-        config.subfield_separator = ' '
+        config.template = """
+sequence:
+  - no_loss: "{instruction} {input}"
+  - with_loss: "{output}"
+"""
         config.add_bos_token = True
         config.add_eos_token = True
-        config.prepend_text = ''
         config.base64_token_dtype = 'i4'
+        config.fields = ''  # Keep for backwards compatibility
+        config.fields_from_example = ''  # Keep for backwards compatibility
         return mlxu.update_config_dict(config, updates)
 
     def __init__(self, config, tokenizer):
         self.config = self.get_default_config(config)
-        assert self.config.fields != '' or self.config.fields_from_example != '', (
-            'Either fields or fields_from_example must be specified.'
-        )
         self.tokenizer = tokenizer
+
+        # Pre-tokenize template if provided
+        self.cached_segments = None
+        if self.config.template:
+            if jax.process_index() == 0:
+                logging.info("Starting template pre-tokenization...")
+            import yaml
+            template = yaml.safe_load(self.config.template)
+            # Convert \n to actual newlines in template
+            for segment in template['sequence']:
+                for key, content in segment.items():
+                    segment[key] = content.replace('\\n', '\n')
+            self.cached_segments = []
+
+            # Process each segment in the sequence
+            for segment in template['sequence']:
+                # Each segment is a dict with one key-value pair
+                for loss_key, content in segment.items():
+                    # Set loss mask based on key
+                    mask = 0.0 if loss_key == 'no_loss' else 1.0
+
+                    # Find all dynamic field references
+                    import re
+                    field_pattern = r'\{([^}]+)\}'
+                    parts = re.split(field_pattern, content)
+
+                    # Pre-tokenize static parts
+                    cached_parts = []
+                    for i, part in enumerate(parts):
+                        if i % 2 == 0:  # Static content
+                            tokens = []
+                            text = part
+                            # Handle special tokens
+                            while '<|' in text and '|>' in text:
+                                start = text.index('<|')
+                                end = text.index('|>') + 2
+
+                                # Add text before special token
+                                if start > 0:
+                                    prefix_tokens = self.tokenizer.encode(
+                                        text[:start], add_special_tokens=False
+                                    )
+                                    tokens.extend(prefix_tokens)
+
+                                # Add special token
+                                token_name = text[start + 2:end - 2]
+                                if token_name == 'bos':
+                                    tokens.append(self.tokenizer.bos_token_id)
+                                elif token_name == 'eos':
+                                    tokens.append(self.tokenizer.eos_token_id)
+                                else:
+                                    special_token = f"<|{token_name}|>"
+                                    token_id = self.tokenizer.convert_tokens_to_ids(special_token)
+                                    tokens.append(token_id)
+
+                                text = text[end:]
+
+                            # Add remaining text
+                            if text:
+                                tokens.extend(self.tokenizer.encode(text, add_special_tokens=False))
+
+                            cached_parts.append(('static', tokens))
+                        else:  # Dynamic field name
+                            cached_parts.append(('field', part))
+
+                    self.cached_segments.append((mask, cached_parts))
+            if jax.process_index() == 0:
+                logging.info("Template pre-tokenization complete")
 
     def __call__(self, example, has_aux=False):
         if has_aux:
@@ -72,49 +144,31 @@ class TextProcessor(object):
             token_buffer.append(self.tokenizer.bos_token_id)
             loss_mask_buffer.append(0.0)
 
-        if self.config.fields_from_example != '':
-            fields = example[self.config.fields_from_example].split(',')
+        if self.cached_segments is not None:
+            # Use pre-tokenized segments
+            for mask, parts in self.cached_segments:
+                for part_type, part in parts:
+                    if part_type == 'static':
+                        # Add pre-tokenized static content
+                        token_buffer.extend(part)
+                        loss_mask_buffer.extend([mask] * len(part))
+                    else:  # Dynamic field
+                        # Tokenize and add dynamic content
+                        field_content = str(example.get(part, ''))
+                        tokens = self.tokenizer.encode(field_content, add_special_tokens=False)
+                        token_buffer.extend(tokens)
+                        loss_mask_buffer.extend([mask] * len(tokens))
         else:
-            fields = self.config.fields.split(',')
-
-        for i, field in enumerate(fields):
-            if field.startswith('[') and field.endswith(']'):
-                # No loss for this field.
-                field = field[1:-1]
-                mask = 0.0
-            else:
-                mask = 1.0
-
-            if field.startswith('<|') and field.endswith('|>'):
-                # Special tokens.
-                field = field[2:-2]
-                if field == 'bos':
-                    token_buffer.append(self.tokenizer.bos_token_id)
-                elif field == 'eos':
-                    token_buffer.append(self.tokenizer.eos_token_id)
-                else:
-                    # Token ID specified directly.
-                    token_buffer.append(int(field))
-                loss_mask_buffer.append(mask)
-            elif field.startswith('{') and field.endswith('}'):
-                field = field[1:-1]
-                # Base64 encoded raw tokens.
-                tokens = np.frombuffer(
-                    base64.b64decode(example[field]),
-                    dtype=self.config.base64_token_dtype
-                ).tolist()
-                token_buffer.extend(tokens)
-                loss_mask_buffer.extend([mask for _ in range(len(tokens))])
-            else:
-                subfields = field.split('+')
-                text = self.config.subfield_separator.join(
-                    [example[subfield] for subfield in subfields]
-                )
-                if i == 0:
-                    text = self.config.prepend_text + text
-                tokens = self.tokenizer.encode(text, add_special_tokens=False)
-                token_buffer.extend(tokens)
-                loss_mask_buffer.extend([mask for _ in range(len(tokens))])
+            # Fallback to old template processing
+            import yaml
+            template = yaml.safe_load(self.config.template)
+            for segment in template['sequence']:
+                for loss_key, content in segment.items():
+                    mask = 0.0 if loss_key == 'no_loss' else 1.0
+                    text = content.format(**example)
+                    tokens = self.tokenizer.encode(text, add_special_tokens=False)
+                    token_buffer.extend(tokens)
+                    loss_mask_buffer.extend([mask] * len(tokens))
 
         if self.config.add_eos_token:
             token_buffer.append(self.tokenizer.eos_token_id)
@@ -147,9 +201,47 @@ class HuggingfaceDataset(object):
         split = self.config.split if self.config.split != '' else None
         self._tokenizer = tokenizer
         self._text_processor = text_processor
-        self._dataset = load_dataset(
-            self.config.path, name, split=split, streaming=self.config.streaming
-        )
+
+        # Create cache directory if needed
+        cache_dir = os.path.expanduser("~/.cache/easylm/datasets")
+        # Create full path including dataset-specific subdirectories
+        cache_path = os.path.join(cache_dir, f"{self.config.path}_{name}_{split}_{tokenizer.name_or_path}.npz")
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+
+        # Cache path was already created above
+
+        if os.path.exists(cache_path):
+            logging.info(f"Loading preprocessed dataset from cache: {cache_path}")
+            cached_data = np.load(cache_path, allow_pickle=True)
+            self._dataset = list(cached_data['dataset'])  # Convert to list directly
+            logging.info(f"Loaded {len(self._dataset)} examples from cache")
+        else:
+            logging.info(f"Loading dataset from {self.config.path}")
+            raw_dataset = load_dataset(
+                self.config.path, name, split=split, streaming=self.config.streaming
+            )
+
+            # Process all examples
+            processed_examples = []
+            total_examples = len(raw_dataset)
+            if jax.process_index() == 0:
+                logging.info(f"Starting dataset pre-tokenization of {total_examples} examples...")
+            for i, example in enumerate(tqdm(raw_dataset, desc="Processing dataset")):
+                if i % 1000 == 0 and jax.process_index() == 0:
+                    logging.info(f"Pre-tokenized {i}/{total_examples} examples...")
+                tokens, loss_masks = text_processor(example)
+                processed_examples.append({
+                    'tokens': np.array(tokens, dtype=np.int32),
+                    'loss_masks': np.array(loss_masks, dtype=np.float32)
+                })
+            if jax.process_index() == 0:
+                logging.info(f"Dataset pre-tokenization complete. Processed {total_examples} examples.")
+            self._dataset = processed_examples
+
+            # Save to cache
+            logging.info(f"Saving processed dataset to cache: {cache_path}")
+            np.savez(cache_path, dataset=self._dataset)
+            logging.info(f"Processed and cached {len(self._dataset)} examples")
 
     def __iter__(self):
         chunk_size = self.config.batch_size * self.config.seq_length
@@ -158,9 +250,9 @@ class HuggingfaceDataset(object):
             token_buffer = []
             loss_mask_buffer = []
             for index, example in enumerate(self._dataset):
-                tokens, loss_masks = self.text_processor(example)
-                token_buffer.extend(tokens)
-                loss_mask_buffer.extend(loss_masks)
+                # Use pre-tokenized data directly
+                token_buffer.extend(example['tokens'])
+                loss_mask_buffer.extend(example['loss_masks'])
                 while len(token_buffer) > chunk_size + 1:
                     total_tokens += chunk_size
                     metrics = {
@@ -168,10 +260,12 @@ class HuggingfaceDataset(object):
                         'dataset_total_tokens': total_tokens,
                     }
                     batch = {
-                        'input_tokens': np.array(token_buffer[:chunk_size], dtype=self.config.batch_token_dtype).reshape(
+                        'input_tokens': np.array(token_buffer[:chunk_size],
+                                                 dtype=self.config.batch_token_dtype).reshape(
                             self.config.batch_size, -1
                         ),
-                        'target_tokens': np.array(token_buffer[1:chunk_size + 1], dtype=self.config.batch_token_dtype).reshape(
+                        'target_tokens': np.array(token_buffer[1:chunk_size + 1],
+                                                  dtype=self.config.batch_token_dtype).reshape(
                             self.config.batch_size, -1
                         ),
                         'loss_masks': np.array(loss_mask_buffer[1:chunk_size + 1], dtype=np.float32).reshape(
@@ -258,7 +352,7 @@ class JsonDataset(object):
             while True:
                 line = fin.readline()
                 self._file_loc = fin.tell()
-                if not line:   # Reached EOF
+                if not line:  # Reached EOF
                     self._index = 0
                     fin.seek(0)
                     continue
@@ -322,7 +416,7 @@ class JsonDataset(object):
                     step_times = step_times[-self.config.throughput_average_window_size:]
                 average_throughput = chunk_size / np.mean(step_times)
                 accumulated_throughput = (
-                    (self._total_tokens - start_tokens) / (time.time() - start_time)
+                        (self._total_tokens - start_tokens) / (time.time() - start_time)
                 )
                 metrics = {
                     'dataset_file_loc': loc,
