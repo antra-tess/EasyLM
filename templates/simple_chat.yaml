@@ -1,0 +1,3 @@
+sequence:
+  - no_loss: "{instruction}{input}"
+  - with_loss: "{output}"
