@@ -100,11 +100,11 @@ class LLaMAConfigurator(object):
         config.fcm_min_ratio = 0.0
         config.fcm_max_ratio = 0.0
 
-        config.lora_rank = 0          # 0 means "disabled"
+        config.lora_rank = 0  # 0 means "disabled"
         config.lora_alpha = 32.0
         config.lora_dropout = 0.0
-        config.lora_attn = True      # whether to apply LoRA to attention W_q, W_k, W_v, W_o
-        config.lora_mlp = False      # optionally, also apply LoRA to MLP layers
+        config.lora_attn = True  # whether to apply LoRA to attention W_q, W_k, W_v, W_o
+        config.lora_mlp = False  # optionally, also apply LoRA to MLP layers
         config.lora_merge_weights = False  # If True, merges LoRA into main weights at inference time
 
         updates = {
@@ -233,7 +233,7 @@ class LLaMAConfigurator(object):
                 num_hidden_layers=32,
                 num_attention_heads=32,
                 num_key_value_heads=8,
-                max_position_embeddings=4096, #16384, #131072,
+                max_position_embeddings=4096,  # 16384, #131072,
                 rope_theta=5e5,
                 rms_norm_eps=1e-5,
             ),
@@ -257,7 +257,7 @@ class LLaMAConfigurator(object):
                 num_hidden_layers=80,  # "num_hidden_layers": 80
                 num_attention_heads=64,  # "num_attention_heads": 64
                 num_key_value_heads=8,  # "num_key_value_heads": 8
-                max_position_embeddings=8192, #16384, # 131072,  # "max_position_embeddings": 131072
+                max_position_embeddings=8192,  # 16384, # 131072,  # "max_position_embeddings": 131072
                 rope_theta=5e5,  # "rope_theta": 500000.0
                 rms_norm_eps=1e-5,  # "rms_norm_eps": 1e-05
             )
@@ -270,15 +270,11 @@ class LLaMAConfigurator(object):
 
     @staticmethod
     def get_partition_rules():
-        """ Parition rules for GPTJ. Note that these rules are orderd, so that
-            the beginning rules match first. It is important to use
-            PartitionSpec() instead of None here because JAX does not treat
-            None as a pytree leaf.
-        """
+        """ Partition rules for full model training. """
         return (
             # embeddings
             ("transformer/wte/embedding", PS("mp", "fsdp")),
-            # atention
+            # attention
             ("attention/(wq|wk|wv)/kernel", PS("fsdp", "mp")),
             ("attention/wo/kernel", PS("mp", "fsdp")),
             # mlp
@@ -295,16 +291,56 @@ class LLaMAConfigurator(object):
         )
 
     @staticmethod
+    def get_lora_partition_rules():
+        """ Partition rules specifically for LoRA parameters. """
+        return (
+            # LoRA parameters in attention
+            ("transformer/.*/attention/(wq|wk|wv)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
+            ("transformer/.*/attention/(wq|wk|wv)/lora_B", PS(None, "mp")),  # shape [lora_rank, hidden_size]
+            ("transformer/.*/attention/wo/lora_A", PS("mp", None)),  # shape [hidden_size, lora_rank]
+            ("transformer/.*/attention/wo/lora_B", PS(None, "fsdp")),  # shape [lora_rank, hidden_size]
+            # LoRA parameters in mlp (if enabled)
+            ("transformer/.*/feed_forward/(w1|w3)/lora_A", PS("fsdp", None)),  # shape [hidden_size, lora_rank]
+            ("transformer/.*/feed_forward/(w1|w3)/lora_B", PS(None, "mp")),  # shape [lora_rank, intermediate_size]
+            ("transformer/.*/feed_forward/w2/lora_A", PS("mp", None)),  # shape [intermediate_size, lora_rank]
+            ("transformer/.*/feed_forward/w2/lora_B", PS(None, "fsdp")),  # shape [lora_rank, hidden_size]
+            #            ('.*', PS(None)),
+        )
+
+    @staticmethod
+    def get_base_param_rules():
+        """ Partition rules for base model parameters during LoRA training.
+            Similar to regular rules but simpler.
+        """
+        return (
+            # embeddings
+            ("transformer/wte/embedding", PS("mp", "fsdp")),
+            # attention
+            (".*/attention/(wq|wk|wv)/kernel", PS("fsdp", "mp")),
+            (".*/attention/wo/kernel", PS("mp", "fsdp")),
+            # mlp
+            (".*/feed_forward/w1/kernel", PS("fsdp", "mp")),
+            (".*/feed_forward/w2/kernel", PS("mp", "fsdp")),
+            (".*/feed_forward/w3/kernel", PS("fsdp", "mp")),
+            # layer norms
+            (".*/attention_norm/kernel", PS(None)),
+            (".*/ffn_norm/kernel", PS(None)),
+            # output head
+            ("transformer/ln_f/kernel", PS(None)),
+            ("lm_head/kernel", PS("fsdp", "mp")),
+            #           ('.*', PS(None)),
+        )
+
+    @staticmethod
     def rng_keys():
         return ('params', 'dropout', 'fcm')
 
 
-
 class RMSNorm(nn.Module):
     dim: int
-    eps: float=1e-6
-    dtype: jnp.dtype=jnp.float32
-    param_dtype: jnp.dtype=jnp.float32
+    eps: float = 1e-6
+    dtype: jnp.dtype = jnp.float32
+    param_dtype: jnp.dtype = jnp.float32
 
     def setup(self) -> None:
         self.weight = self.param(
@@ -329,7 +365,7 @@ def apply_rotary_emb(
         xk: jnp.ndarray,
         position_ids: jnp.ndarray,
         max_pos: int,
-        theta: float=10000.0
+        theta: float = 10000.0
 ):
     input_dtype = xq.dtype
     with jax.ensure_compile_time_eval():
@@ -354,18 +390,17 @@ def apply_rotary_emb(
     return xq_out.astype(input_dtype), xk_out.astype(input_dtype)
 
 
-
 class FlaxLLaMAAttention(nn.Module):
     config: PretrainedConfig
-    dtype: jnp.dtype=jnp.float32
-    param_dtype: jnp.dtype=jnp.float32
-    precision: Optional[Union[jax.lax.Precision, str]]=None
+    dtype: jnp.dtype = jnp.float32
+    param_dtype: jnp.dtype = jnp.float32
+    precision: Optional[Union[jax.lax.Precision, str]] = None
 
     def setup(self):
         config = self.config
         head_dim = config.hidden_size // config.num_attention_heads
 
-        if config.lora_attn:
+        if config.lora_rank > 0:
             # Use LoRA for attention layers
             self.wq = LoRALinear(
                 config.num_attention_heads * head_dim,
@@ -444,7 +479,6 @@ class FlaxLLaMAAttention(nn.Module):
 
         self.resid_dropout = nn.Dropout(rate=config.residue_dropout)
 
-
     @nn.compact
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
@@ -480,14 +514,14 @@ class FlaxLLaMAAttention(nn.Module):
         return key, value, attention_mask
 
     def __call__(
-        self,
-        hidden_states,
-        attention_mask,
-        position_ids,
-        deterministic: bool = True,
-        init_cache: bool = False,
-        output_attentions: bool = False,
-        fcm_mask=None,
+            self,
+            hidden_states,
+            attention_mask,
+            position_ids,
+            deterministic: bool = True,
+            init_cache: bool = False,
+            output_attentions: bool = False,
+            fcm_mask=None,
     ):
         xq, xk, xv = self.wq(hidden_states), self.wk(hidden_states), self.wv(hidden_states)
 
@@ -606,9 +640,9 @@ class FlaxLLaMAAttention(nn.Module):
 
 class FlaxLLaMAMLP(nn.Module):
     config: PretrainedConfig
-    dtype: jnp.dtype=jnp.float32
-    param_dtype: jnp.dtype=jnp.float32
-    precision: Optional[Union[jax.lax.Precision, str]]=None
+    dtype: jnp.dtype = jnp.float32
+    param_dtype: jnp.dtype = jnp.float32
+    precision: Optional[Union[jax.lax.Precision, str]] = None
 
     def setup(self) -> None:
         config = self.config
@@ -677,9 +711,9 @@ class FlaxLLaMAMLP(nn.Module):
 
 class FlaxLLaMABlock(nn.Module):
     config: PretrainedConfig
-    dtype: jnp.dtype=jnp.float32
-    param_dtype: jnp.dtype=jnp.float32
-    precision: Optional[Union[jax.lax.Precision, str]]=None
+    dtype: jnp.dtype = jnp.float32
+    param_dtype: jnp.dtype = jnp.float32
+    precision: Optional[Union[jax.lax.Precision, str]] = None
 
     def setup(self) -> None:
         self.attention = FlaxLLaMAAttention(
@@ -708,14 +742,14 @@ class FlaxLLaMABlock(nn.Module):
         )
 
     def __call__(
-        self,
-        hidden_states,
-        attention_mask=None,
-        position_ids=None,
-        deterministic: bool = True,
-        init_cache: bool = False,
-        output_attentions: bool = False,
-        fcm_mask: Optional[jnp.ndarray] = None,
+            self,
+            hidden_states,
+            attention_mask=None,
+            position_ids=None,
+            deterministic: bool = True,
+            init_cache: bool = False,
+            output_attentions: bool = False,
+            fcm_mask: Optional[jnp.ndarray] = None,
     ):
         attn_outputs = self.attention(
             self.attention_norm(hidden_states),
@@ -743,7 +777,8 @@ class FlaxLLaMABlock(nn.Module):
                 feed_forward_input,
                 deterministic,
             )
-        feed_forward_hidden_states = with_sharding_constraint(feed_forward_hidden_states, PS(("dp", "fsdp"), None, "mp"))
+        feed_forward_hidden_states = with_sharding_constraint(feed_forward_hidden_states,
+                                                              PS(("dp", "fsdp"), None, "mp"))
 
         hidden_states = hidden_states + feed_forward_hidden_states
 
@@ -759,13 +794,13 @@ class FlaxLLaMAPreTrainedModel(FlaxPreTrainedModel):
     module_class: nn.Module = None
 
     def __init__(
-        self,
-        config: PretrainedConfig,
-        input_shape: Tuple = (1, 1),
-        seed: int = 0,
-        dtype: jnp.dtype = jnp.float32,
-        _do_init: bool = True,
-        **kwargs,
+            self,
+            config: PretrainedConfig,
+            input_shape: Tuple = (1, 1),
+            seed: int = 0,
+            dtype: jnp.dtype = jnp.float32,
+            _do_init: bool = True,
+            **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -812,17 +847,17 @@ class FlaxLLaMAPreTrainedModel(FlaxPreTrainedModel):
         return init_variables["cache"]
 
     def __call__(
-        self,
-        input_ids,
-        attention_mask=None,
-        position_ids=None,
-        params: dict = None,
-        past_key_values: dict = None,
-        dropout_rng: jax.random.PRNGKey = None,
-        train: bool = False,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids,
+            attention_mask=None,
+            position_ids=None,
+            params: dict = None,
+            past_key_values: dict = None,
+            dropout_rng: jax.random.PRNGKey = None,
+            train: bool = False,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -885,8 +920,8 @@ class FlaxLLaMAPreTrainedModel(FlaxPreTrainedModel):
 class FlaxLLaMABlockCollection(nn.Module):
     config: PretrainedConfig
     dtype: jnp.dtype = jnp.float32
-    param_dtype: jnp.dtype=jnp.float32
-    precision: Optional[Union[jax.lax.Precision, str]]=None
+    param_dtype: jnp.dtype = jnp.float32
+    precision: Optional[Union[jax.lax.Precision, str]] = None
 
     def setup(self):
         block = FlaxLLaMABlock
@@ -906,14 +941,14 @@ class FlaxLLaMABlockCollection(nn.Module):
         ]
 
     def __call__(
-        self,
-        hidden_states,
-        attention_mask=None,
-        position_ids=None,
-        deterministic: bool = True,
-        init_cache: bool = False,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
+            self,
+            hidden_states,
+            attention_mask=None,
+            position_ids=None,
+            deterministic: bool = True,
+            init_cache: bool = False,
+            output_attentions: bool = False,
+            output_hidden_states: bool = False,
     ):
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
@@ -962,8 +997,8 @@ class FlaxLLaMABlockCollection(nn.Module):
 class FlaxLLaMAModule(nn.Module):
     config: PretrainedConfig
     dtype: jnp.dtype = jnp.float32
-    param_dtype: jnp.dtype=jnp.float32
-    precision: Optional[Union[jax.lax.Precision, str]]=None
+    param_dtype: jnp.dtype = jnp.float32
+    precision: Optional[Union[jax.lax.Precision, str]] = None
 
     def setup(self):
         self.embed_dim = self.config.hidden_size
@@ -990,15 +1025,15 @@ class FlaxLLaMAModule(nn.Module):
         )
 
     def __call__(
-        self,
-        input_ids,
-        attention_mask,
-        position_ids,
-        deterministic=True,
-        init_cache: bool = False,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
+            self,
+            input_ids,
+            attention_mask,
+            position_ids,
+            deterministic=True,
+            init_cache: bool = False,
+            output_attentions: bool = False,
+            output_hidden_states: bool = False,
+            return_dict: bool = True,
     ):
         input_embeds = self.wte(input_ids.astype("i4"))
 
@@ -1040,8 +1075,8 @@ class FlaxLLaMAModel(FlaxLLaMAPreTrainedModel):
 class FlaxLLaMAForCausalLMModule(nn.Module):
     config: PretrainedConfig
     dtype: jnp.dtype = jnp.float32
-    param_dtype: jnp.dtype=jnp.float32
-    precision: Optional[Union[jax.lax.Precision, str]]=None
+    param_dtype: jnp.dtype = jnp.float32
+    precision: Optional[Union[jax.lax.Precision, str]] = None
 
     def setup(self):
         self.transformer = FlaxLLaMAModule(self.config, dtype=self.dtype)
@@ -1057,15 +1092,15 @@ class FlaxLLaMAForCausalLMModule(nn.Module):
         )
 
     def __call__(
-        self,
-        input_ids,
-        attention_mask=None,
-        position_ids=None,
-        deterministic: bool = True,
-        init_cache: bool = False,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
+            self,
+            input_ids,
+            attention_mask=None,
+            position_ids=None,
+            deterministic: bool = True,
+            init_cache: bool = False,
+            output_attentions: bool = False,
+            output_hidden_states: bool = False,
+            return_dict: bool = True,
     ):
         batch_size, seq_length = input_ids.shape
         if attention_mask is None:
@@ -1126,7 +1161,6 @@ class FlaxLLaMAForCausalLM(FlaxLLaMAPreTrainedModel):
 
 
 class LoRALinear(nn.Module):
-    """A linear layer that can optionally include LoRA."""
     features: int
     use_bias: bool = False
     config: Any = None
@@ -1154,14 +1188,7 @@ class LoRALinear(nn.Module):
                 self.param_dtype,
             )
 
-        # If LoRA is disabled, just do the standard matmul
-        if self.config.lora_rank == 0:
-            y = jnp.matmul(x, kernel.astype(self.dtype))
-            if bias is not None:
-                y = y + bias.astype(self.dtype)
-            return y
-
-        # Otherwise, add LoRA "low-rank" decomposition
+        # Get LoRA parameters
         lora_rank = self.config.lora_rank
         lora_alpha = self.config.lora_alpha
         scaling = lora_alpha / lora_rank
@@ -1169,7 +1196,6 @@ class LoRALinear(nn.Module):
         # A and B are the low-rank factors
         #   A: (in_features, lora_rank)
         #   B: (lora_rank, out_features)
-        # Here we name them lora_A and lora_B
         lora_A = self.param(
             "lora_A",
             jax.nn.initializers.zeros,  # or normal with small std
@@ -1191,12 +1217,27 @@ class LoRALinear(nn.Module):
         else:
             x_lora = x
 
-        # The LoRA contribution
+        # First LoRA matmul - keep batch sharding but don't shard small lora_rank dim
         delta = jnp.matmul(x_lora, lora_A.astype(self.dtype))
-        delta = jnp.matmul(delta, lora_B.astype(self.dtype)) * scaling
+        delta = with_sharding_constraint(delta, PS(("dp", "fsdp"), None, None))
 
-        # Final output = Wx + delta + bias
-        y = jnp.matmul(x, kernel.astype(self.dtype)) + delta
+        # Second LoRA matmul - output must match final sharding
+        delta = jnp.matmul(delta, lora_B.astype(self.dtype)) * scaling
+        if 'attention/wo/' in self.name:
+            delta = with_sharding_constraint(delta, PS(("dp", "fsdp"), None, "mp"))
+        else:
+            delta = with_sharding_constraint(delta, PS(("dp", "fsdp"), None, "mp"))
+
+        # Compute base output and add LoRA contribution
+        base_out = jnp.matmul(x, kernel.astype(self.dtype))
+        if 'attention/wo/' in self.name:
+            base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
+        else:
+            base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
+
+        y = base_out + delta
+
+        # Add bias if present
         if bias is not None:
             y = y + bias.astype(self.dtype)
         return y
