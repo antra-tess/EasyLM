@@ -30,20 +30,21 @@ cd ~/EasyLM
 python -m EasyLM.test_inference \
     --mesh_dim='1,-1,1' \
     --dtype='bf16' \
-    --llama.base_model='llama32_1b' \
+    --llama.base_model='llama31_8b' \
     --param_dtype='bf16' \
-    --tokenizer='meta-llama/Llama-3.2-1B' \
-    --load_checkpoint='base_params_unsharded::/mnt/disk2/llama-3.2-1b.easylm' \
-    --load_lora='base_params_unsharded::/mnt/disk2/easylm_chkp/1febd23a8f154d748cbc59896981b9aa/checkpoint_15000/streaming_params' \
-    --lora_mode=True \
-    --llama.lora_rank=16 \
-    --llama.lora_alpha=32 \
-    --llama.lora_dropout=0.1 \
-    --llama.lora_attn=true \
-    --llama.lora_mlp=true \
+    --tokenizer='meta-llama/Llama-3.1-8B' \
+    --load_checkpoint='base_params_unsharded::/mnt/disk2/trained/simulect8b/streaming_params' \
     --input_length=1024 \
     --seq_length=2048 \
     --do_sample=True \
     --top_k=50 \
     --top_p=0.95 \
     --lm_server.port=5009
+
+    # --load_lora='base_params_unsharded::/mnt/disk2/easylm_chkp/1febd23a8f154d748cbc59896981b9aa/checkpoint_15000/streaming_params' \
+    # --lora_mode=True \
+    # --llama.lora_rank=16 \
+    # --llama.lora_alpha=32 \
+    # --llama.lora_dropout=0.1 \
+    # --llama.lora_attn=true \
+    # --llama.lora_mlp=true \

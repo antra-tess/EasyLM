@@ -33,7 +33,7 @@ python -m EasyLM.test_inference \
     --llama.base_model='llama31_8b' \
     --param_dtype='bf16' \
     --tokenizer='meta-llama/Llama-3.1-8B' \
-    --load_checkpoint='base_params_unsharded::/mnt/disk2/trained/simulect8b.easylm' \
+    --load_checkpoint='base_params_unsharded::/mnt/disk2/trained/simulect8b/streaming_params' \
     --input_length=1024 \
     --seq_length=2048 \
     --do_sample=True \
