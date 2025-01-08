@@ -2,4 +2,4 @@ sequence:
   - no_loss: "{instruction}{input}\\n"
   - no_loss: '<msg username="simulect">'
   - with_loss: "{output}"
-  - no_loss: '</msg>\\n'
+  - with_loss: '</msg>\\n'
