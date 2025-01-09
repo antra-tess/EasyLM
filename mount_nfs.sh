@@ -1,28 +1,48 @@
 #!/bin/bash
 
-# Check if instance name is provided
-if [ -z "$1" ]; then
-    echo "Usage: $0 <instance-name>"
-    echo "Example: $0 node-001"
-    exit 1
-fi
+# Get the list of TPU worker IPs
+WORKER_IPS=$(gcloud compute tpus tpu-vm list --zone=us-central2-b --filter="name~'finetune-70b'" --format="csv[no-heading](networkEndpoints[].ipAddress)")
 
-INSTANCE_NAME=$1
+# Function to mount NFS on a worker
+mount_nfs() {
+    local worker_ip=$1
+    local worker_index=$2
+    echo "Configuring NFS mount on worker ${worker_index}: ${worker_ip}"
 
-# First SSH to finetune-70b, then use it to reach target workers
-echo "Using finetune-70b as jump host to reach ${INSTANCE_NAME} workers..."
-gcloud compute tpus tpu-vm ssh "finetune-70b" --zone=us-central2-b --account=antra@tesserae.cc --command="
-    for i in {0..15}; do
-        echo \"Configuring worker \$i...\"
-        gcloud compute tpus tpu-vm ssh \"${INSTANCE_NAME}\" --zone=us-central2-b --account=antra@tesserae.cc --worker=\$i --command=\"
-            sudo mkdir -p /mnt/disk2
-            if ! mount | grep -q '/mnt/disk2'; then
+    # Use SSH to execute commands on the worker
+    gcloud compute tpus tpu-vm ssh "finetune-70b" --zone=us-central2-b --worker=${worker_index} --command="
+        # Create mount directory if it doesn't exist
+        sudo mkdir -p /mnt/disk2
+
+        # Check if already mounted to avoid duplicate mounts
+        if ! mount | grep -q '/mnt/disk2'; then
+            # Install NFS client if not already installed
+            if ! command -v mount.nfs &> /dev/null; then
                 sudo apt-get update
                 sudo apt-get install -y nfs-common
-                sudo mount -t nfs 10.96.49.202:/ftshare /mnt/disk2
             fi
-            sudo chown -R \\\$(whoami):\\\$(whoami) /mnt/disk2
-            sudo chmod -R 777 /mnt/disk2
-        \"
-    done
-"
+
+            # Mount the NFS share
+            sudo mount -t nfs 10.96.49.202:/ftshare /mnt/disk2
+        fi
+
+        # Always ensure proper permissions
+        sudo chown -R $(whoami):$(whoami) /mnt/disk2
+        sudo chmod -R 777 /mnt/disk2
+
+        echo 'NFS mount configured on worker ${worker_ip}'
+    "
+}
+
+# Mount NFS on each worker
+echo "Starting NFS mount process across workers..."
+worker_index=0
+for worker_ip in $(echo $WORKER_IPS | tr ';' '\n'); do
+    mount_nfs "$worker_ip" "$worker_index" &
+    ((worker_index++))
+done
+
+# Wait for all mounts to complete
+wait
+
+echo "NFS mount process completed on all workers"
