@@ -106,7 +106,7 @@ def main(argv):
     logginginfo("Setting up optimizer...")
     # Use trainable_mask for both weight decay and controlling optimizer state allocation
     optimizer, optimizer_info = OptimizerFactory.get_optimizer(
-        FLAGS.optimizer,
+        FLAGS.optimizer, weight_decay_mask=lambda x: True
     )
     logginginfo(f"Optimizer setup complete: {str(optimizer_info)}, {str(optimizer)}, {str(type(optimizer))}")
 
@@ -343,9 +343,11 @@ def main(argv):
             logginginfo("Loaded checkpoint")
             log_memory_usage("After checkpoint load")
 
+        if train_state is None and restored_params is not None:
+            train_state = sharded_create_trainstate_from_params(restored_params)
+
         if train_state is None:
-            # Initialize LoRA parameters from scratch
-            logginginfo("Initializing LoRA parameters from scratch")
+            logginginfo("Initializing parameters from scratch")
             log_memory_usage("Before initialization")
             train_state = sharded_init_fn(next_rng())
             log_memory_usage("After initialization")
