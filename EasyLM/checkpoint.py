@@ -162,25 +162,26 @@ class StreamingCheckpointer(object):
         if require_sharding and counter == 0:
             raise ValueError(f"No tensor sharding was applied {path}")
 
-        if target is not None:
-            flattened_target = flatten_dict(
-                to_state_dict(target), keep_empty_nodes=True
-            )
-            for key, value in flattened_target.items():
-                if 'lora_' in str(key):
-                    # Initialize LoRA parameters with zeros
-                    # Handle both actual arrays and ShapeDtypeStruct
-                    if hasattr(value, 'shape') and hasattr(value, 'dtype'):
-                        flattend_train_state[key] = jnp.zeros(value.shape, dtype=value.dtype)
-                    else:
-                        pass
-                    continue
-                if key not in flattend_train_state and value is empty_node:
-                    flattend_train_state[key] = value
 
-        else:
-            #logging.info(f"target is None, not initializing LoRA parameters")
-            pass
+        # if target is not None:
+        #     flattened_target = flatten_dict(
+        #         to_state_dict(target), keep_empty_nodes=True
+        #     )
+        #     for key, value in flattened_target.items():
+        #         if 'lora_' in str(key):
+        #             # Initialize LoRA parameters with zeros
+        #             # Handle both actual arrays and ShapeDtypeStruct
+        #             if hasattr(value, 'shape') and hasattr(value, 'dtype'):
+        #                 flattend_train_state[key] = jnp.zeros(value.shape, dtype=value.dtype)
+        #             else:
+        #                 pass
+        #             continue
+        #         if key not in flattend_train_state and value is empty_node:
+        #             flattend_train_state[key] = value
+        #
+        # else:
+        #     #logging.info(f"target is None, not initializing LoRA parameters")
+        #     pass
 
         train_state = unflatten_dict(flattend_train_state)
 
