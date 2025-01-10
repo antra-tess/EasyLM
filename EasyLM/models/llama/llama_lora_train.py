@@ -334,6 +334,20 @@ def main(argv):
         grad_max = jnp.max(grad_norms)
         grad_mean = jnp.mean(grad_norms)
         
+        # Calculate separate gradient stats for MLP and attention
+        mlp_grads = []
+        attn_grads = []
+        for key, value in flat_grads.items():
+            path = '/'.join(str(x) for x in key)
+            if 'lora_' in path:
+                if 'feed_forward' in path:
+                    mlp_grads.append(jnp.mean(jnp.abs(value)))
+                elif 'attention' in path:
+                    attn_grads.append(jnp.mean(jnp.abs(value)))
+
+        mlp_grad_mean = jnp.mean(jnp.array(mlp_grads)) if mlp_grads else 0
+        attn_grad_mean = jnp.mean(jnp.array(attn_grads)) if attn_grads else 0
+
         metrics = dict(
             loss=loss,
             accuracy=accuracy,
@@ -343,7 +357,9 @@ def main(argv):
             num_grads=len(flat_grads),
             num_nonzero_grads=num_nonzero,
             grad_max=grad_max,
-            grad_mean=grad_mean
+            grad_mean=grad_mean,
+            mlp_grad_mean=mlp_grad_mean,
+            attn_grad_mean=attn_grad_mean
         )
         rng = rng_generator()
         logginginfo("Train step complete")
