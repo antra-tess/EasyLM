@@ -40,7 +40,7 @@ python -m EasyLM.test_inference \
     --top_k=150 \
     --top_p=0.99 \
     --lm_server.port=5009 \
-    --load_lora='base_params_unsharded::/mnt/disk2/easylm_chkp/a46dfdf701c6495882316a472776dc28/checkpoint_600/streaming_params' \
+    --load_lora='base_params_unsharded::/mnt/disk2/easylm_chkp/a46dfdf701c6495882316a472776dc28/checkpoint_1800/streaming_params' \
     --lora_mode=True \
     --llama.lora_rank=16 \
     --llama.lora_alpha=32 \
