@@ -19,7 +19,8 @@ from typing import Any
 import flax.struct
 import optax
 
-jax.config.update("jax_persistent_cache_enable_xla_caches", "xla_gpu_per_fusion_autotune_cache_dir")
+jax.config.update("jax_compilation_cache_dir", "/mnt/disk2/jax_cache")
+jax.config.update("jax_persistent_cache_enable_xla_caches", "all")
 
 class LoRATrainState(flax.struct.PyTreeNode):
     """Simple train state for LoRA training."""
