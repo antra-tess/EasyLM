@@ -142,6 +142,11 @@ class StreamingCheckpointer(object):
                         continue
 
                 tensor = from_bytes(None, value)
+                if jax.process_index() == 0 and 'lora_' in '/'.join(str(x) for x in key):
+                    logging.info(f"Loaded LoRA tensor {'/'.join(str(x) for x in key)}:")
+                    logging.info(f"  Shape: {tensor.shape}")
+                    logging.info(f"  Mean: {jnp.mean(tensor)}")
+                    logging.info(f"  First 10 values: {tensor.flatten()[:10]}")
                 if shard_fns is not None:
                     if jax.process_index() == 0:
                         logging.info(f"Applying sharding to {'/'.join(str(x) for x in key)} with shape {tensor.shape}")
