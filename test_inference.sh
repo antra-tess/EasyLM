@@ -32,7 +32,7 @@ python -m EasyLM.test_inference \
     --dtype='bf16' \
     --llama.base_model='llama32_1b' \
     --param_dtype='bf16' \
-    --tokenizer='meta-llama/Llama-3.2-8B' \
+    --tokenizer='meta-llama/Llama-3.2-1B' \
     --load_checkpoint='base_params_unsharded::/mnt/disk2/llama-3.2-1b.easylm' \
     --input_length=1024 \
     --seq_length=2048 \
