@@ -36,7 +36,7 @@ class ModelServer(LMServer):
 
         super().__init__(config)
 
-        logging.info("Initializing JAX distributed configuration...")
+        logging.info("Initializing JAX distributed configuration and compiling functions...")
         JaxDistributedConfig.initialize(FLAGS.jax_distributed)
         set_random_seed(FLAGS.seed)
 
@@ -180,7 +180,20 @@ class ModelServer(LMServer):
             is_greedy = match_count == total
             return loglikelihood, is_greedy, rng_generator()
 
-        self.forward_loglikelihood = forward_loglikelihood
+        # Pre-compile functions during initialization
+        logging.info("Pre-compiling forward functions...")
+        self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
+        with self.mesh:
+            self.forward_loglikelihood = forward_loglikelihood
+            # Compile with dummy inputs
+            dummy_batch = {
+                'input_tokens': jnp.zeros((1, FLAGS.seq_length), dtype=jnp.int32),
+                'output_tokens': jnp.zeros((1, FLAGS.seq_length), dtype=jnp.int32),
+                'input_mask': jnp.ones((1, FLAGS.seq_length), dtype=jnp.int32),
+                'output_mask': jnp.ones((1, FLAGS.seq_length), dtype=jnp.int32),
+            }
+            # Warm-up compilation
+            _, _, _ = self.forward_loglikelihood(self.params, next_rng(), dummy_batch)
 
         @partial(
             pjit,
@@ -210,7 +223,14 @@ class ModelServer(LMServer):
                 )
             ).sequences[:, batch['input_tokens'].shape[1]:]
             return output, rng_generator()
-        self.forward_generate = forward_generate
+            self.forward_generate = forward_generate
+            # Compile generate with dummy inputs
+            dummy_generate_batch = {
+                'input_tokens': jnp.zeros((1, FLAGS.input_length), dtype=jnp.int32),
+                'attention_mask': jnp.ones((1, FLAGS.input_length), dtype=jnp.int32),
+            }
+            # Warm-up compilation
+            _, _ = self.forward_generate(self.params, next_rng(), dummy_generate_batch, jnp.array(1.0))
 
         @partial(
             pjit,
@@ -237,14 +257,10 @@ class ModelServer(LMServer):
             return output, rng_generator()
         self.forward_greedy_generate = forward_greedy_generate
 
-        logging.info("Setting up JAX mesh and compiling serving functions...")
-        mesh_start = time.time()
-        self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
         with self.mesh:
             logging.info("Sharding parameters across mesh...")
             self.params = tree_apply(shard_fns, params)
             self.sharded_rng = next_rng()
-            logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
     def loglikelihood(self, prefix_text, text):
         prefix = self.prefix_tokenizer(
