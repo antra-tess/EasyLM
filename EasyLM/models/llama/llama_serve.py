@@ -137,6 +137,15 @@ class ModelServer(LMServer):
                     trainstate_target=params,
                     trainstate_shard_fns=None, #{'params': lora_shard_fns}  # Single wrap for lora_params mode
                 )
+            
+                # Print fingerprint of LoRA weights
+                if jax.process_index() == 0:
+                    flattened = flatten_dict(params)
+                    for key, value in flattened.items():
+                        if 'lora_' in '/'.join(str(x) for x in key):
+                            logging.info(f"LoRA weight fingerprint for {key}:")
+                            logging.info(f"  Mean: {jnp.mean(value)}")
+                            logging.info(f"  First 10 values: {value.flatten()[:10]}")
 
         #params = base_params
 
