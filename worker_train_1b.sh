@@ -40,4 +40,5 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --logger.entity='antra-cyborgism' \
     --logger.output_dir='/mnt/disk2/easylm_chkp' \
     --checkpointing.save_min_step=100 \
-    --checkpointing.save_loss_threshold=3
+    --checkpointing.save_loss_threshold=3 \
+    --checkpointing.keep_recent=100

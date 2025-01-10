@@ -112,9 +112,9 @@ FLAGS, FLAGS_DEF = mlxu.define_flags_with_default(
     log_all_worker=False,
     jax_distributed=JaxDistributedConfig.get_default_config(),
     checkpointing=mlxu.config_dict(
-        save_min_step=1000,
-        save_loss_threshold=0.8,
-        keep_recent=5,  # Number of recent checkpoints to keep
+        save_min_step=100,
+        save_loss_threshold=3,
+        keep_recent=25,  # Number of recent checkpoints to keep
     ),
 )
 
