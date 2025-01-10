@@ -10,7 +10,7 @@ echo "Pushing local changes to repository..."
 git pull
 git push antra
 
-export SCRIPT=test_inference_sim.sh
+export SCRIPT=test_inference.sh
 
 
 # Copy script and run on all workers
