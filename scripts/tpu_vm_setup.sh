@@ -33,6 +33,7 @@ fastapi
 uvicorn
 gradio
 python-socketio
+etils
 EndOfFile
 
 pip install --upgrade -r $HOME/tpu_requirements.txt

@@ -1,4 +1,8 @@
+import os
+os.environ["JAX_COMPILATION_CACHE_DIR"] = "/mnt/disk2/jax_cache"
+
 import pprint
+
 from functools import partial
 
 from tqdm import tqdm, trange
@@ -14,6 +18,8 @@ from jax.sharding import PartitionSpec as PS
 from typing import Any
 import flax.struct
 import optax
+
+jax.config.update("jax_persistent_cache_enable_xla_caches", "xla_gpu_per_fusion_autotune_cache_dir")
 
 class LoRATrainState(flax.struct.PyTreeNode):
     """Simple train state for LoRA training."""
