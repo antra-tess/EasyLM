@@ -16,7 +16,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --dtype='bf16' \
     --llama.base_model='llama31_70b' \
     --tokenizer="meta-llama/Meta-Llama-3.1-70B" \
-    --load_checkpoint='base_params::gs://finetune70b/llama-3.1-70b' \
+    --load_checkpoint='/mnt/disk2/llama-3.1-70b' \
     --train_dataset.type='json' \
     --train_dataset.text_processor.template="$(cat templates/borg_chat.yaml)" \
     --train_dataset.json_dataset.path="/mnt/disk2/simulect_conversations.jsonl" \
