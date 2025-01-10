@@ -27,7 +27,7 @@ mount_nfs() {
         fi
 
         # Always ensure proper permissions
-        sudo chown -R $(whoami):$(whoami) /mnt/disk2
+        # sudo chown -R $(whoami):$(whoami) /mnt/disk2
         sudo chmod -R 777 /mnt/disk2
 
         echo 'NFS mount configured on worker ${worker_ip}'
