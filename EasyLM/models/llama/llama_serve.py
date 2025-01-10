@@ -285,7 +285,7 @@ class ModelServer(LMServer):
             output_mask=output_mask,
         )
         with self.mesh:
-            loglikelihood, is_greedy, sharded_rng = self.forward_loglikelihood(
+            loglikelihood, is_greedy, self.sharded_rng = self.forward_loglikelihood(
                 self.params, self.sharded_rng, batch
             )
             loglikelihood, is_greedy = jax.device_get((loglikelihood, is_greedy))
@@ -347,7 +347,7 @@ class ModelServer(LMServer):
                 )
 
             with self.mesh:
-                loglikelihood, is_greedy, sharded_rng = self.forward_loglikelihood(
+                loglikelihood, is_greedy, self.sharded_rng = self.forward_loglikelihood(
                     self.params, self.sharded_rng, batch
                 )
                 loglikelihood, is_greedy = jax.device_get((loglikelihood, is_greedy))
@@ -380,7 +380,7 @@ class ModelServer(LMServer):
             attention_mask=input_mask,
         )
         with self.mesh:
-            output, sharded_rng = self.forward_generate(
+            output, self.sharded_rng = self.forward_generate(
                 self.params, self.sharded_rng, batch, temperature
             )
             output = jax.device_get(output)
