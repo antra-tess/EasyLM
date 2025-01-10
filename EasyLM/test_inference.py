@@ -89,7 +89,8 @@ None of these interventions (on its own, at least) seem to provoke the same resp
 if __name__ == '__main__':
     # print all command line arguments
     import sys
-    print('Number of arguments:', len(sys.argv), 'arguments.')
-    print('Argument List:', str(sys.argv))
+    if jax.process_index() == 0:
+        print('Number of arguments:', len(sys.argv), 'arguments.')
+        print('Argument List:', str(sys.argv))
 
     mlxu.run(main)
