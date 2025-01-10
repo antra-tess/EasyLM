@@ -104,36 +104,32 @@ class ModelServer(LMServer):
                 combined_rules = LLaMAConfigurator.get_base_param_rules()
             print(combined_rules)
 
-            # Get base parameter partition rules
-            base_model_ps = match_partition_rules(
-                LLaMAConfigurator.get_base_param_rules(), base_shape
-            )
-            base_shard_fns, _ = make_shard_and_gather_fns(
-                base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-            )
+            # # Get base parameter partition rules
+            # base_model_ps = match_partition_rules(
+            #     LLaMAConfigurator.get_base_param_rules(), base_shape
+            # )
+            # base_shard_fns, _ = make_shard_and_gather_fns(
+            #     base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+            # )
 
             params = init_fn(next_rng())
-            if jax.process_index() == 0:
-                # Get first parameter's dtype
-                first_param = jax.tree_util.tree_leaves(params.get('params'))[0]
-                logging.info(f"First parameter dtype after initialization: {first_param.dtype}")
 
             # Load checkpoint with sharding functions
             _, params = StreamingCheckpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint,
                 trainstate_target=params,
-                trainstate_shard_fns=None, #{'params': base_shard_fns}  # Single wrap for base_params mode
+                trainstate_shard_fns=None,
             )
 
             if FLAGS.lora_mode:
                 logging.info("Loading LoRA parameters...")
-                # Get LoRA parameter partition rules
-                lora_model_ps = match_partition_rules(
-                    LLaMAConfigurator.get_lora_partition_rules(), lora_shape
-                )
-                lora_shard_fns, _ = make_shard_and_gather_fns(
-                    lora_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-                )
+                # # Get LoRA parameter partition rules
+                # lora_model_ps = match_partition_rules(
+                #     LLaMAConfigurator.get_lora_partition_rules(), lora_shape
+                # )
+                # lora_shard_fns, _ = make_shard_and_gather_fns(
+                #     lora_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+                # )
 
                 # Load checkpoint with sharding functions
                 _, params = StreamingCheckpointer.load_trainstate_checkpoint(
