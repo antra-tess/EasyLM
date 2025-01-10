@@ -34,10 +34,10 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --optimizer.adamw_optimizer.lr_decay_steps=3000 \
     --total_steps=15000 \
     --log_freq=50 \
-    --save_model_freq=500 \
+    --save_model_freq=200 \
     --logger.online=true \
     --logger.project='levanter-sft' \
     --logger.entity='antra-cyborgism' \
     --logger.output_dir='/mnt/disk2/easylm_chkp' \
-    --checkpointing.save_min_step=1000 \
-    --checkpointing.save_loss_threshold=0.8
+    --checkpointing.save_min_step=100 \
+    --checkpointing.save_loss_threshold=3
