@@ -1,6 +1,6 @@
 import os
 os.environ["JAX_COMPILATION_CACHE_DIR"] = "/mnt/disk2/jax_cache"
-os.environ["JAX_DEBUG_LOG_MODULES"] = "jax._src.compiler,jax._src.lru_cache"
+#os.environ["JAX_DEBUG_LOG_MODULES"] = "jax._src.compiler,jax._src.lru_cache"
 
 import logging
 import jax
