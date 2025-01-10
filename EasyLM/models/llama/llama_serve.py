@@ -76,26 +76,26 @@ class ModelServer(LMServer):
                     attention_mask=jnp.ones((4, FLAGS.seq_length), dtype=jnp.int16),
                     rngs=rng_generator(LLaMAConfigurator.rng_keys()),
                 )
+            #
+            # full_shape = hf_model.params_shape_tree
 
-            full_shape = hf_model.params_shape_tree
-
-            # Filter for base parameters (no LoRA)
-            if FLAGS.lora_mode:
-                logging.info("LoRA mode enabled. Filtering for LoRA parameters...")
-                base_shape = {}
-                for k, v in flatten_dict(full_shape).items():
-                    if 'lora_' not in '/'.join(str(x) for x in k):
-                        base_shape[k] = v
-                base_shape = unflatten_dict(base_shape)
-
-                # Filter for LoRA parameters
-                lora_shape = {}
-                for k, v in flatten_dict(full_shape).items():
-                    if 'lora_' in '/'.join(str(x) for x in k):
-                        lora_shape[k] = v
-                lora_shape = unflatten_dict(lora_shape)
-            else:
-                base_shape = full_shape
+            # # Filter for base parameters (no LoRA)
+            # if FLAGS.lora_mode:
+            #     logging.info("LoRA mode enabled. Filtering for LoRA parameters...")
+            #     base_shape = {}
+            #     for k, v in flatten_dict(full_shape).items():
+            #         if 'lora_' not in '/'.join(str(x) for x in k):
+            #             base_shape[k] = v
+            #     base_shape = unflatten_dict(base_shape)
+            #
+            #     # Filter for LoRA parameters
+            #     lora_shape = {}
+            #     for k, v in flatten_dict(full_shape).items():
+            #         if 'lora_' in '/'.join(str(x) for x in k):
+            #             lora_shape[k] = v
+            #     lora_shape = unflatten_dict(lora_shape)
+            # else:
+            #     base_shape = full_shape
 
             # concatenate two tuples
             if FLAGS.lora_mode:
