@@ -8,7 +8,7 @@ import mlxu
 from transformers import AutoTokenizer
 
 jax.config.update("jax_compilation_cache_dir", "/mnt/disk2/jax_cache")
-jax.config.update("jax_explain_cache_misses", True)
+#jax.config.update("jax_explain_cache_misses", True)
 #jax.config.update("jax_persistent_cache_enable_xla_caches", "all")
 
 
