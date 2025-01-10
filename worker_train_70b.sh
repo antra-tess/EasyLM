@@ -27,7 +27,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --llama.scan_attention=true \
     --llama.scan_query_chunk_size=1024 \
     --llama.scan_key_chunk_size=1024 \
-    --llama.lora_rank=74 \
+    --llama.lora_rank=32 \
     --llama.lora_alpha=64 \
     --llama.lora_dropout=0.1 \
     --llama.lora_attn=true \
@@ -37,7 +37,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --optimizer.adamw_optimizer.lr_decay_steps=5000 \
     --total_steps=4000 \
     --log_freq=50 \
-    --save_model_freq=2500 \
+    --save_model_freq=125 \
     --logger.online=true \
     --logger.project='levanter-sft' \
     --logger.entity='antra-cyborgism' \
