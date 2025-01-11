@@ -130,12 +130,10 @@ class StreamingCheckpointer(object):
             remove_dict_prefix = tuple(remove_dict_prefix)
         flattend_train_state = {}
         counter = 0
-        with mlxu.open_file(path) as fin:
-            # Get file size for progress bar
-            fin.seek(0, 2)  # Seek to end
-            total_size = fin.tell()
-            fin.seek(0)  # Back to start
+        # Get file size without seeking
+        total_size = os.path.getsize(path)
 
+        with mlxu.open_file(path) as fin:
             # 83886080 bytes = 80 MB, which is 16 blocks on GCS
             unpacker = msgpack.Unpacker(fin, read_size=83886080, max_buffer_size=0)
             if jax.process_index() == 0:
