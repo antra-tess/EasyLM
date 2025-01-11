@@ -131,11 +131,16 @@ class StreamingCheckpointer(object):
         flattend_train_state = {}
         counter = 0
         with mlxu.open_file(path) as fin:
+            # Get file size for progress bar
+            fin.seek(0, 2)  # Seek to end
+            total_size = fin.tell()
+            fin.seek(0)  # Back to start
+
             # 83886080 bytes = 80 MB, which is 16 blocks on GCS
             unpacker = msgpack.Unpacker(fin, read_size=83886080, max_buffer_size=0)
             if jax.process_index() == 0:
                 from tqdm import tqdm
-                pbar = tqdm(desc="Loading checkpoint")
+                pbar = tqdm(total=total_size, unit='B', unit_scale=True, desc="Loading checkpoint")
             for key, value in unpacker:
                 key = tuple(key)
                 if remove_dict_prefix is not None:
@@ -164,6 +169,8 @@ class StreamingCheckpointer(object):
                     pbar = tqdm(total=len(flattend_train_state), desc="Loading checkpoint")
                     pbar.update(1)
                 flattend_train_state[key] = tensor
+                if jax.process_index() == 0:
+                    pbar.update(unpacker.tell() - pbar.n)  # Update to current position
                 if jax.process_index() == 0:
                     pbar.update(1)
                 if jax.process_index() == 0:
