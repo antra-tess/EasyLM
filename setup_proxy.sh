@@ -8,12 +8,12 @@ fi
 
 TARGET_INSTANCE=$1
 
-# Get worker0's hostname from finetune-70b
-echo "Getting proxy hostname from finetune-70b worker0..."
-PROXY_HOSTNAME=$(gcloud compute tpus tpu-vm ssh "finetune-70b" --zone=us-central2-b --worker=0 --account=antra@tesserae.cc --command="hostname -f")
+# Get worker0's hostname from finetune70b
+echo "Getting proxy hostname from finetune70b worker0..."
+PROXY_HOSTNAME=$(gcloud compute tpus tpu-vm ssh "finetune70b" --zone=us-central2-b --worker=0 --account=antra@tesserae.cc --command="hostname -f")
 
 echo "Setting up SOCKS proxy on ${PROXY_HOSTNAME}..."
-gcloud compute tpus tpu-vm ssh "finetune-70b" --zone=us-central2-b --account=antra@tesserae.cc --command='pkill -f "ssh.*1080" || true; ssh -D 0.0.0.0:1080 -N -f -v localhost'
+gcloud compute tpus tpu-vm ssh "finetune70b" --zone=us-central2-b --account=antra@tesserae.cc --command='pkill -f "ssh.*1080" || true; ssh -D 0.0.0.0:1080 -N -f -v localhost'
 
 
 # Configure proxy on each worker of target instance

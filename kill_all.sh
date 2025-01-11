@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TPU_NODE="finetune-70b"
+TPU_NODE="finetune70b"
 ZONE="us-central2-b"
 
 echo "=== Cleaning processes on all workers ==="
