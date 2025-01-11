@@ -166,6 +166,8 @@ class StreamingCheckpointer(object):
                 flattend_train_state[key] = tensor
                 if jax.process_index() == 0:
                     pbar.update(1)
+                if jax.process_index() == 0:
+                    pbar.update(1)
         if require_sharding and counter == 0:
             raise ValueError(f"No tensor sharding was applied {path}")
 
