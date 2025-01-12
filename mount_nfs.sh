@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Get the list of TPU worker IPs
-WORKER_IPS=$(gcloud compute tpus tpu-vm list --zone=$MOUNT_ZONE --filter="name~'finetune70b'" --format="csv[no-heading](networkEndpoints[].ipAddress)")
+WORKER_IPS=$(gcloud compute tpus tpu-vm list --zone=$MOUNT_ZONE --filter="name~'$MOUNT_NAME'" --format="csv[no-heading](networkEndpoints[].ipAddress)")
 
 # Function to mount NFS on a worker
 mount_nfs() {
