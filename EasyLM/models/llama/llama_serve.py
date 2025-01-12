@@ -385,17 +385,24 @@ class ModelServer(LMServer):
             input_tokens=input_tokens,
             attention_mask=input_mask,
         )
-        with self.mesh:
-            output, self.sharded_rng = self.forward_generate(
-                self.params, self.sharded_rng, batch, temperature
-            )
-            output = jax.device_get(output)
-        output_text = []
-        for text in list(self.tokenizer.batch_decode(output)):
-            if self.tokenizer.eos_token in text:
-                text = text.split(self.tokenizer.eos_token, maxsplit=1)[0]
-            output_text.append(text)
+        try:
+            with self.mesh:
+                output, self.sharded_rng = self.forward_generate(
+                    self.params, self.sharded_rng, batch, temperature
+                )
+                output = jax.device_get(output)
 
+            output_text = []
+            for text in list(self.tokenizer.batch_decode(output)):
+                if self.tokenizer.eos_token in text:
+                    text = text.split(self.tokenizer.eos_token, maxsplit=1)[0]
+                output_text.append(text)
+        except Exception as e:
+            if jax.process_index() == 0:
+                logging.error(f"Error generating text: {e}")
+                import traceback
+                traceback.print_exc()
+            output_text = ['']
         return output_text
 
     def greedy_until(self, prefix_text, until, max_length):
