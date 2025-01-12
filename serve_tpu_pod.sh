@@ -28,7 +28,7 @@ git push antra
 # Copy worker script and start serving on all workers
 echo "Starting worker clients..."
 gcloud compute tpus tpu-vm scp $SCRIPT $INFER_NAME:~/$SCRIPT --zone=$INFER_ZONE --worker=all
-gcloud compute tpus tpu-vm ssh $INFER_NAME --zone=$INFER_ZONE --worker=all --command="cd ~/EasyLM && git fetch && git reset --hard HEAD && git checkout main && git pull && chmod +x ~/$SCRIPT && export WANDB_API_KEY='${WANDB_API_KEY}'  && export HF_TOKEN='${HF_TOKEN}' && export COORDINATOR_URL='http://${COORDINATOR_IP}:5010' && ~/$SCRIPT"
+gcloud compute tpus tpu-vm ssh $INFER_NAME --zone=$INFER_ZONE --worker=all --command="cd ~/EasyLM && git fetch && git reset --hard HEAD && git checkout main && git pull && chmod +x ~/$SCRIPT && export INFER_DISK=${INFER_DISK} && export WANDB_API_KEY='${WANDB_API_KEY}'  && export HF_TOKEN='${HF_TOKEN}' && export COORDINATOR_URL='http://${COORDINATOR_IP}:5010' && ~/$SCRIPT"
 
 echo "TPU pod serving deployment complete!"
 echo "Coordinator server running with PID $COORDINATOR_PID"
