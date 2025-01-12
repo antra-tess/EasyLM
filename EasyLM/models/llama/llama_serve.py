@@ -249,7 +249,8 @@ class ModelServer(LMServer):
 
         with self.mesh:
             logging.info("Sharding parameters across mesh...")
-            self.params = tree_apply(shard_fns, params)
+            #self.params = tree_apply(shard_fns, params)
+            self.params = params
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
