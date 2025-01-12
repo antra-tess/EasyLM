@@ -247,6 +247,15 @@ class StreamingCheckpointer(object):
             assert load_type != 'trainstate', 'Loading full trainstate is not allowed!'
         train_state = None
         restored_params = None
+        if jac.process_index() == 0:
+            trainstate_target_str = None
+            if trainstate_target is not None:
+                trainstate_target_str = type(trainstate_target).__name__
+            trainstate_shard_fns_str = None
+            if trainstate_shard_fns is not None:
+                trainstate_shard_fns_str = type(trainstate_shard_fns).__name__
+            logging.info(f"Loading {load_type} from {load_path}, target: {trainstate_target_str}, shard_fns: {trainstate_shard_fns_str}, disallow_trainstate: {disallow_trainstate}")
+
         if load_type == 'trainstate':
             # Load the entire train state in the streaming format
             train_state = cls.load_checkpoint(
