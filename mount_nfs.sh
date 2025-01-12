@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Get the list of TPU worker IPs
-WORKER_IPS=$(gcloud compute tpus tpu-vm list --zone=us-central2-b --filter="name~'finetune70b'" --format="csv[no-heading](networkEndpoints[].ipAddress)")
+WORKER_IPS=$(gcloud compute tpus tpu-vm list --zone=$MOUNT_ZONE --filter="name~'finetune70b'" --format="csv[no-heading](networkEndpoints[].ipAddress)")
 
 # Function to mount NFS on a worker
 mount_nfs() {
@@ -10,7 +10,7 @@ mount_nfs() {
     echo "Configuring NFS mount on worker ${worker_index}: ${worker_ip}"
 
     # Use SSH to execute commands on the worker
-    gcloud compute tpus tpu-vm ssh "finetune70b" --zone=us-central2-b --worker=${worker_index} --command="
+    gcloud compute tpus tpu-vm ssh "$MOUNT_NAME" --zone=$MOUNT_ZONE --worker=${worker_index} --command="
         # Create mount directory if it doesn't exist
         sudo mkdir -p /mnt/disk2
 

@@ -23,10 +23,10 @@ setup=${1:-false}
 echo "Deploying to TPU workers..."
 if [ "$setup" = "true" ]; then
     echo "Running with full environment setup..."
-    gcloud compute tpus tpu-vm ssh finetune70b --zone=us-central2-b --worker=all --command="export HF_TOKEN='${HF_TOKEN}' && export WANDB_API_KEY='${WANDB_API_KEY}'  && cd ~ && rm -rf EasyLM && git clone https://github.com/antra-tess/EasyLM.git && cd EasyLM && chmod +x setup_tpu_worker.sh && ./setup_tpu_worker.sh"
+    gcloud compute tpus tpu-vm ssh $MOUNT_NAME --zone=$MOUNT_ZONE --worker=all --command="export HF_TOKEN='${HF_TOKEN}' && export WANDB_API_KEY='${WANDB_API_KEY}'  && cd ~ && rm -rf EasyLM && git clone https://github.com/antra-tess/EasyLM.git && cd EasyLM && chmod +x setup_tpu_worker.sh && ./setup_tpu_worker.sh"
 else
     echo "Running without environment setup..."
-    gcloud compute tpus tpu-vm ssh finetune70b --zone=us-central2-b --worker=all --command="export HF_TOKEN='${HF_TOKEN}' && export WANDB_API_KEY='${WANDB_API_KEY}' && cd ~ && (if [ -d 'EasyLM' ]; then cd EasyLM && git pull; else git clone https://github.com/antra-tess/EasyLM.git && cd EasyLM; fi) && export PYTHONPATH=~/EasyLM:\${PYTHONPATH}"
+    gcloud compute tpus tpu-vm ssh $MOUNT_NAME --zone=$MOUNT_ZONE --worker=all --command="export HF_TOKEN='${HF_TOKEN}' && export WANDB_API_KEY='${WANDB_API_KEY}' && cd ~ && (if [ -d 'EasyLM' ]; then cd EasyLM && git pull; else git clone https://github.com/antra-tess/EasyLM.git && cd EasyLM; fi) && export PYTHONPATH=~/EasyLM:\${PYTHONPATH}"
 fi
 
 echo "TPU pod deployment complete!"
