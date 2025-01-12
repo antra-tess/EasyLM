@@ -8,6 +8,7 @@ if [ "$DISK" == "disk2" ]; then
     DISK_PATH="10.96.49.202:/ftshare"
 else
     DISK_PATH="10.127.194.242:/disk3"
+fi
 
 # Function to mount NFS on a worker
 mount_nfs() {
