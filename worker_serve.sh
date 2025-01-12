@@ -33,3 +33,4 @@ python -m EasyLM.worker_client \
     --llama.lora_dropout=0.1 \
     --llama.lora_attn=true \
     --llama.lora_mlp=false \
+    --coordinator_url='http://51.81.181.136:5010'
