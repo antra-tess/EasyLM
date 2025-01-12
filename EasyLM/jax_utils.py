@@ -89,7 +89,7 @@ class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
         return scores / jnp.clip(self.temperature, a_min=1e-8)
 
 
-def make_shard_and_gather_fns(partition_specs, in_shardings=None, dtype_specs=None):
+def make_shard_and_gather_fns(partition_specs, dtype_specs=None, in_shardings=None):
     """ Create pytree of sharding and gathering functions from pytree of
         partition specs.
     """
