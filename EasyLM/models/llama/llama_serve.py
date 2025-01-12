@@ -127,7 +127,7 @@ class ModelServer(LMServer):
                 params = StreamingCheckpointer.load_trainstate_checkpoint(
                     FLAGS.load_lora,
                     trainstate_target={'params': params},
-                    target_shape=full_shape,
+                    target_shape={'params': full_shape},
                     trainstate_shard_fns={'params': lora_shard_fns}  # Single wrap for lora_params mode
                 )
             
