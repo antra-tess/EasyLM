@@ -43,8 +43,8 @@ class CoordinatorServer:
             request_id = data['request_id']
             if request_id in self.active_requests:
                 self.active_requests[request_id]['responses'][sid] = data['response']
-                print(f"Received response from worker {sid}")
-                print(json.dumps(data, indent=2))
+                logging.info(f"Received response from worker {sid}")
+                logging.info(json.dumps(data, indent=2))
                 # Check if we have responses from all workers
                 if len(self.active_requests[request_id]['responses']) == len(self.connected_workers):
                     # All workers responded, resolve the future
@@ -110,8 +110,8 @@ class CoordinatorServer:
                         f"http://localhost:{self.port}/chat",
                         json={"prompt": user_message}
                     ).json()
-                    print("Response:")
-                    print(json.dumps(response, indent=2))
+                    logging.info("Response:")
+                    logging.info(json.dumps(response, indent=2))
                     if 'error' in response:
                         history[-1][1] = f"Error: {response['error']}"
                     else:
