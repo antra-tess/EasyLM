@@ -46,5 +46,5 @@ python -m EasyLM.test_inference \
     --llama.lora_alpha=32 \
     --llama.lora_dropout=0.1 \
     --llama.lora_attn=true \
-    --llama.lora_mlp=false \
+    --llama.lora_mlp=true \
 #a46dfdf701c6495882316a472776dc28
