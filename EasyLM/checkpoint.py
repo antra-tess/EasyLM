@@ -164,7 +164,6 @@ class StreamingCheckpointer(object):
                             logging.info(f"Available shard_fns keys: {list(shard_fns.keys())}")
                         raise
                 if jax.process_index() == 0:
-                    from tqdm import tqdm
                     pbar.update(len(value))
                 flattend_train_state[key] = tensor
                 if jax.process_index() == 0:
