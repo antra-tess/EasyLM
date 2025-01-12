@@ -251,9 +251,13 @@ class StreamingCheckpointer(object):
             trainstate_target_str = None
             if trainstate_target is not None:
                 trainstate_target_str = type(trainstate_target).__name__
+                if isinstance(trainstate_target, dict):
+                    trainstate_target_str += "[" + trainstate_target.keys().__str__() + "]"
             trainstate_shard_fns_str = None
             if trainstate_shard_fns is not None:
                 trainstate_shard_fns_str = type(trainstate_shard_fns).__name__
+                if isinstance(trainstate_shard_fns, dict):
+                    trainstate_shard_fns_str += "[" + trainstate_shard_fns.keys().__str__() + "]"
             logging.info(f"Loading {load_type} from {load_path}, target: {trainstate_target_str}, shard_fns: {trainstate_shard_fns_str}, disallow_trainstate: {disallow_trainstate}")
 
         if load_type == 'trainstate':
