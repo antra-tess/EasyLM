@@ -105,6 +105,12 @@ class CoordinatorServer:
                         value='simulect',
                         label='Simulating User'
                     )
+                    channel_history = gr.Textbox(
+                        placeholder='Paste previous channel history here (XML format)...',
+                        label='Channel History',
+                        lines=5,
+                        value=''
+                    )
                     msg = gr.Textbox(
                         placeholder='Type your message here...',
                         label='Your message (as another user)',
@@ -125,7 +131,7 @@ class CoordinatorServer:
             def format_history(history):
                 return "\n".join(msg for msg in history)
             
-            def user(user_message, username, history, simulated_user):
+            def user(user_message, username, history, simulated_user, channel_history):
                 if not user_message.strip():
                     return "", history, history
                 
@@ -133,8 +139,11 @@ class CoordinatorServer:
                 formatted_msg = format_message(username, user_message)
                 new_history = history + [formatted_msg]
                 
-                # Prepare prompt with full history
-                prompt = format_history(new_history)
+                # Prepare prompt with channel history and current conversation
+                if channel_history.strip():
+                    prompt = channel_history.strip() + "\n" + format_history(new_history)
+                else:
+                    prompt = format_history(new_history)
                 
                 try:
                     # Get model response
@@ -176,13 +185,13 @@ class CoordinatorServer:
             
             msg.submit(
                 user,
-                [msg, username, state, simulated_user],
+                [msg, username, state, simulated_user, channel_history],
                 [msg, chatbot, state]
             )
             
             send.click(
                 user,
-                [msg, username, state, simulated_user],
+                [msg, username, state, simulated_user, channel_history],
                 [msg, chatbot, state]
             )
             
