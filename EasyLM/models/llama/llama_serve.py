@@ -242,7 +242,7 @@ class ModelServer(LMServer):
             else:
                 shape_dtype = jax.eval_shape(lambda: tree)
                 if jax.process_index() == 0:
-                    logginginfo(f"Parameter: {path} with shape {shape_dtype.shape} and sharding {tree.sharding}")
+                    logging.info(f"Parameter: {path} with shape {shape_dtype.shape} and sharding {tree.sharding}")
         print_params_tree(params)
 
         with self.mesh:
