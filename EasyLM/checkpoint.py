@@ -187,7 +187,7 @@ class StreamingCheckpointer(object):
 
         # Create a copy of train_state with all target keys
         full_state = {}
-        flattened_shape = flatten_dict(to_state_dict(target_shape))
+        flattened_shape = flatten_dict(target_shape)
         flattened_target = flatten_dict(to_state_dict(target))
         flattened_state = flatten_dict(train_state)
         
@@ -236,8 +236,6 @@ class StreamingCheckpointer(object):
     def load_trainstate_checkpoint(cls, load_from, trainstate_target=None,
                                    trainstate_shard_fns=None,
                                    disallow_trainstate=False, target_shape=None):
-        if target_shape is None:
-            target_shape = trainstate_target
 
         if trainstate_shard_fns is not None:
             #print("trainstate_shard_fns: ", trainstate_shard_fns)
