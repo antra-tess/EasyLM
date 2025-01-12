@@ -400,8 +400,8 @@ class ModelServer(LMServer):
         except Exception as e:
             if jax.process_index() == 0:
                 logging.error(f"Error generating text: {e}")
-                import traceback
-                traceback.print_exc()
+                #import traceback
+                #traceback.print_exc()
             output_text = ['']
         return output_text
 
