@@ -215,9 +215,9 @@ class StreamingCheckpointer(object):
                     logging.info(f"Kept key {key} from target")
                 kept += 1
 
-        for key in flattened_state.keys():
-            if key not in flattened_target:
-                raise ValueError(f"Loaded key {key} not found in target shape")
+        # for key in flattened_state.keys():
+        #     if key not in flattened_target:
+        #         raise ValueError(f"Loaded key {key} not found in target shape")
         if jax.process_index() == 0:
             logging.info(f"Restored {counter} keys from train_state, kept {kept} keys from target")
         
