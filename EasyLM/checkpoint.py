@@ -202,6 +202,12 @@ class StreamingCheckpointer(object):
                 if jax.process_index() == 0:
                     logging.info(f"Kept key {key} from target")
                 kept += 1
+        for key in flattened_state.keys():
+            if key not in flattened_target:
+                full_state[key] = flattened_state[key]
+                if jax.process_index() == 0:
+                    logging.info(f"Restored key {key} not in target")
+                counter += 1
         if jax.process_index() == 0:
             logging.info(f"Restored {counter} keys from train_state, kept {kept} keys from target")
         
