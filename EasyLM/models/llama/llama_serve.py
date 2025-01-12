@@ -126,7 +126,7 @@ class ModelServer(LMServer):
                 # Load checkpoint with sharding functions
                 params = StreamingCheckpointer.load_trainstate_checkpoint(
                     FLAGS.load_lora,
-                    trainstate_target=params,
+                    trainstate_target={'params': params},
                     trainstate_shard_fns={'params': lora_shard_fns}  # Single wrap for lora_params mode
                 )
             
@@ -139,7 +139,6 @@ class ModelServer(LMServer):
                             logging.info(f"  Mean: {jnp.mean(value)}")
                             logging.info(f"  First 10 values: {value.flatten()[:10]}")
 
-        #params = base_params
 
         model_ps = match_partition_rules(
             combined_rules, params
