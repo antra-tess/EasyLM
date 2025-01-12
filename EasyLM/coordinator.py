@@ -112,10 +112,10 @@ class CoordinatorServer:
                     ).json()
                     logging.info("Response:")
                     logging.info(json.dumps(response, indent=2))
-                    if 'error' in response:
-                        history[-1][1] = f"Error: {response['error']}"
-                    else:
-                        history[-1][1] = response['response']
+                    # if 'error' in response:
+                    #     history[-1][1] = f"Error: {response['error']}"
+                    # else:
+                    history[-1][1] = response
                 except Exception as e:
                     history[-1][1] = f"Error: {str(e)}"
                 return history
