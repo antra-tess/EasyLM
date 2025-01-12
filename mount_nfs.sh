@@ -5,9 +5,9 @@ WORKER_IPS=$(gcloud compute tpus tpu-vm list --zone=$MOUNT_ZONE --filter="name~'
 
 # if disk is 'disk2' then ip is 10.96.49.202 else ip is 10.127.194.242
 if [ "$DISK" == "disk2" ]; then
-    DISK_IP="10.96.49.202"
+    DISK_PATH="10.96.49.202:/ftshare"
 else
-    DISK_IP="10.127.194.242"
+    DISK_PATH="10.127.194.242:/disk3"
 
 # Function to mount NFS on a worker
 mount_nfs() {
@@ -29,7 +29,7 @@ mount_nfs() {
             fi
 
             # Mount the NFS share
-            sudo mount -t nfs $DISK_IP:/ftshare /mnt/$DISK
+            sudo mount -t nfs $DISK_PATH /mnt/$DISK
         fi
 
         # Always ensure proper permissions
