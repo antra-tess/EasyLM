@@ -77,7 +77,7 @@ if __name__ == '__main__':
     def main(argv):
         logging.basicConfig(level=logging.INFO)
         
-        server = ModelServer(FLAGS.lm_server)
+        server = ModelServer()
         
         # Start worker client
         client = WorkerClient(FLAGS.coordinator_url, server)
