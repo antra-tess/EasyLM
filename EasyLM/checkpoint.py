@@ -226,7 +226,7 @@ class StreamingCheckpointer(object):
         if jax.process_index() == 0:
             logging.info(f"Restored {counter} keys from train_state, kept {kept} keys from target")
         
-        return from_state_dict(target, unflatten_dict(full_state))
+        return from_state_dict(target_shape, unflatten_dict(full_state))
 
     @staticmethod
     def load_flax_checkpoint(path, target=None, shard_fns=None):
