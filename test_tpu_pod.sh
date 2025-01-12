@@ -13,6 +13,6 @@ git push antra
 # Copy script and run on all workers
 echo "Starting test on all workers..."
 gcloud compute tpus tpu-vm scp $INFER_SCRIPT $INFER_NAME:~/$INFER_SCRIPT --zone=$INFER_ZONE --worker=all
-gcloud compute tpus tpu-vm ssh $INFER_NAME --zone=$INFER_ZONE --worker=all --command="cd ~/EasyLM && git fetch && git reset --hard HEAD && git checkout main && git pull && chmod +x ~/$INFER_SCRIPT && export HF_TOKEN='${HF_TOKEN}' && ~/$INFER_SCRIPT"
+gcloud compute tpus tpu-vm ssh $INFER_NAME --zone=$INFER_ZONE --worker=all --command="cd ~/EasyLM && git fetch && git reset --hard HEAD && git checkout main && git pull && chmod +x ~/$INFER_SCRIPT && export INFER_DISK='${INFER_DISK} && export HF_TOKEN='${HF_TOKEN}' && ~/$INFER_SCRIPT"
 
 echo "TPU pod test deployment complete!"
