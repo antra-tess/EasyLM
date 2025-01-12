@@ -193,16 +193,16 @@ class StreamingCheckpointer(object):
         flattened_target = flatten_dict(to_state_dict(target))
         flattened_state = flatten_dict(train_state)
         if jax.process_index() == 0:
-            logging.info("flattened_target: ", flattened_target)
-            logging.info("flattened_state: ", flattened_state)
-            logging.info("flattened_shape: ", flattened_shape)
+            logging.info(f"flattened_target: {flattened_target}")
+            logging.info(f"flattened_state: {flattened_state}")
+            logging.info(f"flattened_shape: {flattened_shape}")
 
         # Copy all available keys from train_state
         counter = 0
         kept = 0
         for key in flattened_shape.keys():
             if jax.process_index() == 0:
-                logging.info("key: ", key)
+                logging.info(f"key: {key}")
             if key in flattened_state:
                 full_state[key] = flattened_state[key]
                 if jax.process_index() == 0:
