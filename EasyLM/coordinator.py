@@ -93,40 +93,104 @@ class CoordinatorServer:
         )
         
     def create_chat_interface(self):
-        with gr.Blocks(analytics_enabled=False, title='Distributed LLM Chat') as chat_ui:
-            chatbot = gr.Chatbot(label='Chat history')
-            msg = gr.Textbox(placeholder='Type your message here...', show_label=False)
-            with gr.Row():
-                send = gr.Button('Send')
-                clear = gr.Button('Clear')
+        with gr.Blocks(analytics_enabled=False, title='Multi-User Chat Simulation') as chat_ui:
+            # State for maintaining chat history
+            state = gr.State([])
             
-            def user(user_message, history):
-                return "", history + [[user_message, None]]
+            with gr.Row():
+                chatbot = gr.Chatbot(label='Chat history', height=500)
+                with gr.Column():
+                    simulated_user = gr.Dropdown(
+                        choices=['simulect'],
+                        value='simulect',
+                        label='Simulating User'
+                    )
+                    msg = gr.Textbox(
+                        placeholder='Type your message here...',
+                        label='Your message (as another user)',
+                        show_label=True
+                    )
+                    username = gr.Textbox(
+                        placeholder='Your username',
+                        label='Your username',
+                        value='user'
+                    )
+                    with gr.Row():
+                        send = gr.Button('Send')
+                        clear = gr.Button('Clear')
+            
+            def format_message(username, text):
+                return f'<msg username="{username}">{text}</msg>'
+            
+            def format_history(history):
+                return "\n".join(msg for msg in history)
+            
+            def user(user_message, username, history, simulated_user):
+                if not user_message.strip():
+                    return "", history, history
                 
-            def bot(history):
-                user_message = history[-1][0]
+                # Format and add user message
+                formatted_msg = format_message(username, user_message)
+                new_history = history + [formatted_msg]
+                
+                # Prepare prompt with full history
+                prompt = format_history(new_history)
+                
                 try:
+                    # Get model response
                     response = requests.post(
                         f"http://localhost:{self.port}/chat",
-                        json={"prompt": user_message}
+                        json={"prompt": prompt}
                     ).json()
+                    
                     logging.info("Response:")
                     logging.info(json.dumps(response, indent=2))
-                    # if 'error' in response:
-                    #     history[-1][1] = f"Error: {response['error']}"
-                    # else:
-                    history[-1][1] = response
+                    
+                    # Extract just the response text, removing any XML tags
+                    if isinstance(response, str):
+                        # If response contains a complete message tag for wrong user, discard it
+                        if f'username="' in response and f'username="{simulated_user}"' not in response:
+                            response = ""
+                        else:
+                            # Clean up response if needed
+                            response = response.replace('</msg>', '').strip()
+                    
+                    # Format model's response
+                    if response:
+                        formatted_response = format_message(simulated_user, response)
+                        new_history.append(formatted_response)
+                    
+                    # Update chatbot display
+                    chat_display = []
+                    for msg in new_history:
+                        if 'username="' in msg and '">' in msg and '</msg>' in msg:
+                            username = msg.split('username="')[1].split('"')[0]
+                            content = msg.split('">')[1].split('</msg>')[0]
+                            chat_display.append([f"{username}: {content}", None])
+                    
+                    return "", chat_display, new_history
+                    
                 except Exception as e:
-                    history[-1][1] = f"Error: {str(e)}"
-                return history
+                    logging.error(f"Error in chat: {str(e)}")
+                    return "", history, history
             
-            msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False).then(
-                bot, chatbot, chatbot
+            msg.submit(
+                user,
+                [msg, username, state, simulated_user],
+                [msg, chatbot, state]
             )
-            send.click(user, [msg, chatbot], [msg, chatbot], queue=False).then(
-                bot, chatbot, chatbot
+            
+            send.click(
+                user,
+                [msg, username, state, simulated_user],
+                [msg, chatbot, state]
             )
-            clear.click(lambda: None, None, chatbot, queue=False)
+            
+            clear.click(
+                lambda: ([], []),
+                None,
+                [state, chatbot]
+            )
             
         return chat_ui
         
