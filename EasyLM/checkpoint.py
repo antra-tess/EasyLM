@@ -165,9 +165,7 @@ class StreamingCheckpointer(object):
                         raise
                 if jax.process_index() == 0:
                     from tqdm import tqdm
-                    loaded_size += len(value)
-                    #pbar = tqdm(total=total_size, unit='B', unit_scale=True, desc="Loading checkpoint")
-                    pbar.update(loaded_size)
+                    pbar.update(len(value))
                 flattend_train_state[key] = tensor
                 if jax.process_index() == 0:
                     pbar.update(unpacker.tell() - pbar.n)  # Update to current position
