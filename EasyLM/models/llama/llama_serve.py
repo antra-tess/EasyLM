@@ -71,17 +71,6 @@ class ModelServer(LMServer):
                 param_dtype=get_float_dtype_by_name(FLAGS.param_dtype),
             )
 
-            # # Initialize model parameters first
-            # def init_fn(rng):
-            #     rng_generator = JaxRNG(rng)
-            #     return hf_model.module.init(
-            #         input_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int16),
-            #         position_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int16),
-            #         attention_mask=jnp.ones((4, FLAGS.seq_length), dtype=jnp.int16),
-            #         rngs=rng_generator(LLaMAConfigurator.rng_keys()),
-            #     )
-            #
-
             full_shape = hf_model.params_shape_tree
 
             # Filter for base parameters (no LoRA)
@@ -116,8 +105,6 @@ class ModelServer(LMServer):
             base_shard_fns, _ = make_shard_and_gather_fns(
                 base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
             )
-
-            #params = init_fn(next_rng())
 
             # Load checkpoint with sharding functions
             params = StreamingCheckpointer.load_trainstate_checkpoint(
@@ -247,15 +234,21 @@ class ModelServer(LMServer):
             return output, rng_generator()
         self.forward_greedy_generate = forward_greedy_generate
 
-
-        shard_fns, _ = make_shard_and_gather_fns(
-            model_ps, dtype_specs=get_float_dtype_by_name(FLAGS.param_dtype), loop=True,
-        )
+        def print_params_tree(tree, path=''):
+            if isinstance(tree, dict):
+                for key, value in tree.items():
+                    new_path = f"{path}/{key}" if path else key
+                    print_params_tree(value, new_path)
+            else:
+                shape_dtype = jax.eval_shape(lambda: tree)
+                if jax.process_index() == 0:
+                    logginginfo(f"Parameter: {path} with shape {shape_dtype.shape} and sharding {tree.sharding}")
+        print_params_tree(params)
 
         with self.mesh:
             logging.info("Sharding parameters across mesh...")
-            self.params = tree_apply(shard_fns, params)
-            #self.params = params
+            #self.params = tree_apply(shard_fns, params)
+            self.params = params
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
