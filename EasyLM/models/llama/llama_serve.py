@@ -247,10 +247,15 @@ class ModelServer(LMServer):
             return output, rng_generator()
         self.forward_greedy_generate = forward_greedy_generate
 
+
+        shard_fns, _ = make_shard_and_gather_fns(
+            model_ps, model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+        )
+
         with self.mesh:
             logging.info("Sharding parameters across mesh...")
-            #self.params = tree_apply(shard_fns, params)
-            self.params = params
+            self.params = tree_apply(shard_fns, params)
+            #self.params = params
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
