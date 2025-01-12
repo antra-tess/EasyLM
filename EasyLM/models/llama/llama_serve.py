@@ -120,7 +120,7 @@ class ModelServer(LMServer):
             #params = init_fn(next_rng())
 
             # Load checkpoint with sharding functions
-            _, params = StreamingCheckpointer.load_trainstate_checkpoint(
+            params = StreamingCheckpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint,
                 trainstate_target=None,
                 trainstate_shard_fns={'params': base_shard_fns},
@@ -137,7 +137,7 @@ class ModelServer(LMServer):
                 )
 
                 # Load checkpoint with sharding functions
-                _, params = StreamingCheckpointer.load_trainstate_checkpoint(
+                params = StreamingCheckpointer.load_trainstate_checkpoint(
                     FLAGS.load_lora,
                     trainstate_target=params,
                     trainstate_shard_fns={'params': lora_shard_fns}  # Single wrap for lora_params mode
