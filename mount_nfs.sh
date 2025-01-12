@@ -22,7 +22,7 @@ mount_nfs() {
         sudo mkdir -p /mnt/$DISK
 
         # Check if already mounted to avoid duplicate mounts
-        if ! mount | grep -q '/mnt/$DISK'; then
+        if ! mount | grep -q '/mnt/"$DISK"'; then
             # Install NFS client if not already installed
             if ! command -v mount.nfs &> /dev/null; then
                 sudo apt-get update
