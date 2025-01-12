@@ -4,7 +4,7 @@
 set -eu
 
 # Set coordinator IP (default to localhost if not specified)
-export COORDINATOR_IP="${COORDINATOR_IP:-localhost}"
+export COORDINATOR_IP="${COORDINATOR_IP:-"51.81.181.136"}"
 echo "Using coordinator IP: ${COORDINATOR_IP}"
 
 echo "Starting TPU pod serving deployment..."
