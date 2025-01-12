@@ -123,6 +123,7 @@ class CoordinatorServer:
                     )
                     with gr.Row():
                         send = gr.Button('Send')
+                        undo = gr.Button('Undo Last')
                         clear = gr.Button('Clear')
             
             def format_message(username, text):
@@ -199,9 +200,21 @@ class CoordinatorServer:
                 [msg, chatbot, state]
             )
             
+            def undo_last(history, chat_history):
+                if len(history) >= 2:  # Remove last user message and model response
+                    history = history[:-2]
+                    chat_history = chat_history[:-2]
+                return history, chat_history
+
             clear.click(
                 lambda: ([], []),
                 None,
+                [state, chatbot]
+            )
+            
+            undo.click(
+                undo_last,
+                [state, chatbot],
                 [state, chatbot]
             )
             
