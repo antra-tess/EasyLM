@@ -206,8 +206,8 @@ class StreamingCheckpointer(object):
         counter = 0
         kept = 0
         for key in flattened_shape.keys():
-            if jax.process_index() == 0:
-                logging.info(f"key: {key}")
+            # if jax.process_index() == 0:
+            #     logging.info(f"key: {key}")
             if key in flattened_state:
                 full_state[key] = flattened_state[key]
                 if jax.process_index() == 0:
