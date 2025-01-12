@@ -55,7 +55,11 @@ class ModelServer(LMServer):
         logging.info("Loading model checkpoint and initializing model...")
         model_start = time.time()
         logging.info("Param dtype: {}".format(FLAGS.param_dtype))
-        with jax.default_device(jax.devices("cpu")[0]):
+        logging.info("Setting up JAX mesh and compiling serving functions...")
+        mesh_start = time.time()
+        self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
+
+        with self.mesh:
             logging.info(f"Loading base checkpoint from {FLAGS.load_checkpoint}")
             # Create model to get parameter shapes
             hf_model = FlaxLLaMAForCausalLM(
@@ -243,9 +247,6 @@ class ModelServer(LMServer):
             return output, rng_generator()
         self.forward_greedy_generate = forward_greedy_generate
 
-        logging.info("Setting up JAX mesh and compiling serving functions...")
-        mesh_start = time.time()
-        self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
         with self.mesh:
             logging.info("Sharding parameters across mesh...")
             self.params = tree_apply(shard_fns, params)
