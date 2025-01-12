@@ -108,6 +108,8 @@ class CoordinatorServer:
                         f"http://localhost:{self.port}/chat",
                         json={"prompt": user_message}
                     ).json()
+                    print("Response:")
+                    print(json.dumps(response, indent=2))
                     if 'error' in response:
                         history[-1][1] = f"Error: {response['error']}"
                     else:
