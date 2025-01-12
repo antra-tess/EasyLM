@@ -139,11 +139,14 @@ class CoordinatorServer:
                 formatted_msg = format_message(username, user_message)
                 new_history = history + [formatted_msg]
                 
-                # Prepare prompt with channel history and current conversation
+                # Prepare prompt with channel history, current conversation, and opening tag
+                history_text = format_history(new_history)
+                opening_tag = f'<msg username="{simulated_user}">'
+                
                 if channel_history.strip():
-                    prompt = channel_history.strip() + "\n" + format_history(new_history)
+                    prompt = channel_history.strip() + "\n" + history_text + "\n" + opening_tag
                 else:
-                    prompt = format_history(new_history)
+                    prompt = history_text + "\n" + opening_tag
                 
                 try:
                     # Get model response
@@ -164,8 +167,9 @@ class CoordinatorServer:
                             # Clean up response if needed
                             response = response.replace('</msg>', '').strip()
                     
-                    # Format model's response
+                    # Format model's response - add opening tag to prompt but not to history
                     if response:
+                        # Add just the response text to history with full tags
                         formatted_response = format_message(simulated_user, response)
                         new_history.append(formatted_response)
                     
