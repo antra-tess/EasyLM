@@ -67,35 +67,36 @@ class ModelServer(LMServer):
                 param_dtype=get_float_dtype_by_name(FLAGS.param_dtype),
             )
 
-            # Initialize model parameters first
-            def init_fn(rng):
-                rng_generator = JaxRNG(rng)
-                return hf_model.module.init(
-                    input_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int16),
-                    position_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int16),
-                    attention_mask=jnp.ones((4, FLAGS.seq_length), dtype=jnp.int16),
-                    rngs=rng_generator(LLaMAConfigurator.rng_keys()),
-                )
+            # # Initialize model parameters first
+            # def init_fn(rng):
+            #     rng_generator = JaxRNG(rng)
+            #     return hf_model.module.init(
+            #         input_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int16),
+            #         position_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int16),
+            #         attention_mask=jnp.ones((4, FLAGS.seq_length), dtype=jnp.int16),
+            #         rngs=rng_generator(LLaMAConfigurator.rng_keys()),
+            #     )
             #
-            # full_shape = hf_model.params_shape_tree
 
-            # # Filter for base parameters (no LoRA)
-            # if FLAGS.lora_mode:
-            #     logging.info("LoRA mode enabled. Filtering for LoRA parameters...")
-            #     base_shape = {}
-            #     for k, v in flatten_dict(full_shape).items():
-            #         if 'lora_' not in '/'.join(str(x) for x in k):
-            #             base_shape[k] = v
-            #     base_shape = unflatten_dict(base_shape)
-            #
-            #     # Filter for LoRA parameters
-            #     lora_shape = {}
-            #     for k, v in flatten_dict(full_shape).items():
-            #         if 'lora_' in '/'.join(str(x) for x in k):
-            #             lora_shape[k] = v
-            #     lora_shape = unflatten_dict(lora_shape)
-            # else:
-            #     base_shape = full_shape
+            full_shape = hf_model.params_shape_tree
+
+            # Filter for base parameters (no LoRA)
+            if FLAGS.lora_mode:
+                logging.info("LoRA mode enabled. Filtering for LoRA parameters...")
+                base_shape = {}
+                for k, v in flatten_dict(full_shape).items():
+                    if 'lora_' not in '/'.join(str(x) for x in k):
+                        base_shape[k] = v
+                base_shape = unflatten_dict(base_shape)
+
+                # Filter for LoRA parameters
+                lora_shape = {}
+                for k, v in flatten_dict(full_shape).items():
+                    if 'lora_' in '/'.join(str(x) for x in k):
+                        lora_shape[k] = v
+                lora_shape = unflatten_dict(lora_shape)
+            else:
+                base_shape = full_shape
 
             # concatenate two tuples
             if FLAGS.lora_mode:
@@ -104,38 +105,38 @@ class ModelServer(LMServer):
                 combined_rules = LLaMAConfigurator.get_base_param_rules()
             print(combined_rules)
 
-            # # Get base parameter partition rules
-            # base_model_ps = match_partition_rules(
-            #     LLaMAConfigurator.get_base_param_rules(), base_shape
-            # )
-            # base_shard_fns, _ = make_shard_and_gather_fns(
-            #     base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-            # )
+            # Get base parameter partition rules
+            base_model_ps = match_partition_rules(
+                LLaMAConfigurator.get_base_param_rules(), base_shape
+            )
+            base_shard_fns, _ = make_shard_and_gather_fns(
+                base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+            )
 
-            params = init_fn(next_rng())
+            #params = init_fn(next_rng())
 
             # Load checkpoint with sharding functions
             _, params = StreamingCheckpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint,
-                trainstate_target=params,
-                trainstate_shard_fns=None,
+                trainstate_target=None,
+                trainstate_shard_fns={'params': base_shard_fns},
             )
 
             if FLAGS.lora_mode:
                 logging.info("Loading LoRA parameters...")
-                # # Get LoRA parameter partition rules
-                # lora_model_ps = match_partition_rules(
-                #     LLaMAConfigurator.get_lora_partition_rules(), lora_shape
-                # )
-                # lora_shard_fns, _ = make_shard_and_gather_fns(
-                #     lora_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-                # )
+                # Get LoRA parameter partition rules
+                lora_model_ps = match_partition_rules(
+                    LLaMAConfigurator.get_lora_partition_rules(), lora_shape
+                )
+                lora_shard_fns, _ = make_shard_and_gather_fns(
+                    lora_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+                )
 
                 # Load checkpoint with sharding functions
                 _, params = StreamingCheckpointer.load_trainstate_checkpoint(
                     FLAGS.load_lora,
                     trainstate_target=params,
-                    trainstate_shard_fns=None, #{'params': lora_shard_fns}  # Single wrap for lora_params mode
+                    trainstate_shard_fns={'params': lora_shard_fns}  # Single wrap for lora_params mode
                 )
             
                 # Print fingerprint of LoRA weights
