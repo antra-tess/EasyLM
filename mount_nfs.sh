@@ -3,6 +3,12 @@
 # Get the list of TPU worker IPs
 WORKER_IPS=$(gcloud compute tpus tpu-vm list --zone=$MOUNT_ZONE --filter="name~'$MOUNT_NAME'" --format="csv[no-heading](networkEndpoints[].ipAddress)")
 
+# if disk is 'disk2' then ip is 10.96.49.202 else ip is 10.127.194.242
+if [ "$DISK" == "disk2" ]; then
+    DISK_IP="10.96.49.202"
+else
+    DISK_IP="10.127.194.242"
+
 # Function to mount NFS on a worker
 mount_nfs() {
     local worker_ip=$1
