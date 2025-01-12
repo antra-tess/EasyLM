@@ -43,6 +43,8 @@ class CoordinatorServer:
             request_id = data['request_id']
             if request_id in self.active_requests:
                 self.active_requests[request_id]['responses'][sid] = data['response']
+                print(f"Received response from worker {sid}")
+                print(json.dumps(data, indent=2))
                 # Check if we have responses from all workers
                 if len(self.active_requests[request_id]['responses']) == len(self.connected_workers):
                     # All workers responded, resolve the future
