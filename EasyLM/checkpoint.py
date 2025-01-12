@@ -106,7 +106,10 @@ class StreamingCheckpointer(object):
             )
 
     @staticmethod
-    def load_checkpoint(path, target=None, shard_fns=None, remove_dict_prefix=None, restore_state=True, require_sharding=True):
+    def load_checkpoint(path, target=None, target_shape=None, shard_fns=None, remove_dict_prefix=None, restore_state=True, require_sharding=True):
+        if target_shape is None:
+            target_shape = target
+
         if jax.process_index() == 0:
             logging.info(f"Loading checkpoint from {path}")
             if shard_fns is not None:
@@ -233,7 +236,9 @@ class StreamingCheckpointer(object):
     @classmethod
     def load_trainstate_checkpoint(cls, load_from, trainstate_target=None,
                                    trainstate_shard_fns=None,
-                                   disallow_trainstate=False):
+                                   disallow_trainstate=False, target_shape=None):
+        if target_shape is None:
+            target_shape = trainstate_target
 
         if trainstate_shard_fns is not None:
             #print("trainstate_shard_fns: ", trainstate_shard_fns)
@@ -271,6 +276,7 @@ class StreamingCheckpointer(object):
             train_state = cls.load_checkpoint(
                 path=load_path,
                 target=trainstate_target,
+                target_shape=target_shape,
                 shard_fns=trainstate_shard_fns,
             )
         elif load_type == 'trainstate_params':
@@ -282,6 +288,7 @@ class StreamingCheckpointer(object):
             restored_params = cls.load_checkpoint(
                 path=load_path,
                 target=params_target,
+                target_shape=target_shape,
                 shard_fns=params_shard_fns,
                 remove_dict_prefix=('params', 'params'),
             )
@@ -295,6 +302,7 @@ class StreamingCheckpointer(object):
             restored_params = cls.load_checkpoint(
                 path=load_path,
                 target=params_target,
+                target_shape=target_shape,
                 shard_fns=params_shard_fns,
                 restore_state=True,
             )
@@ -309,6 +317,7 @@ class StreamingCheckpointer(object):
             restored_params = cls.load_checkpoint(
                 path=load_path,
                 target=params_target,
+                target_shape=target_shape,
                 shard_fns=params_shard_fns,  # Use params sharding directly
                 restore_state=True
             )
@@ -326,6 +335,7 @@ class StreamingCheckpointer(object):
             restored_params = cls.load_checkpoint(
                 path=load_path,
                 target=params_target,
+                target_shape=target_shape,
                 shard_fns=None,  # No sharding required
                 restore_state=True,
                 require_sharding=False  # Skip sharding requirement check
