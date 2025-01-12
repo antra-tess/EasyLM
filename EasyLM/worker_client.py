@@ -1,5 +1,6 @@
 import os
-os.environ["JAX_COMPILATION_CACHE_DIR"] = "/mnt/disk3/jax_cache"
+infer_disk = os.environ.get("INFER_DISK")
+os.environ["JAX_COMPILATION_CACHE_DIR"] = f"/mnt/{infer_disk}/jax_cache"
 
 import logging
 import asyncio
