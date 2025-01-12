@@ -461,18 +461,18 @@ class ModelServer(LMServer):
 
         return all_outputs
 
-# def main(argv):
-#     logging.info("Starting LLaMA serving initialization...")
-#     start_time = time.time()
-#
-#     #FLAGS, FLAGS_DEF = create_llama_flags()
-#
-#     logging.info("Initializing model server...")
-#     server = ModelServer()
-#     logging.info(f"Total initialization time: {time.time() - start_time:.1f}s")
-#     logging.info("Starting server...")
-#     server.run()
+def main(argv):
+    logging.info("Starting LLaMA serving initialization...")
+    start_time = time.time()
 
-#
-# if __name__ == "__main__":
-#     mlxu.run(main)
+    #FLAGS, FLAGS_DEF = create_llama_flags()
+
+    logging.info("Initializing model server...")
+    server = ModelServer()
+    logging.info(f"Total initialization time: {time.time() - start_time:.1f}s")
+    logging.info("Starting server...")
+    server.run()
+
+
+if __name__ == "__main__":
+    mlxu.run(main)
