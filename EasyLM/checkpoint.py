@@ -132,6 +132,7 @@ class StreamingCheckpointer(object):
         counter = 0
         # Get file size without seeking
         total_size = os.path.getsize(path)
+        loaded_size = 0
 
         with mlxu.open_file(path) as fin:
             # 83886080 bytes = 80 MB, which is 16 blocks on GCS
@@ -148,11 +149,11 @@ class StreamingCheckpointer(object):
                         continue
 
                 tensor = from_bytes(None, value)
-                if jax.process_index() == 0 and 'lora_' in '/'.join(str(x) for x in key):
-                    logging.info(f"Loaded LoRA tensor {'/'.join(str(x) for x in key)}:")
-                    logging.info(f"  Shape: {tensor.shape}")
-                    logging.info(f"  Mean: {jnp.mean(tensor)}")
-                    logging.info(f"  First 10 values: {tensor.flatten()[:10]}")
+                # if jax.process_index() == 0 and 'lora_' in '/'.join(str(x) for x in key):
+                #     logging.info(f"Loaded LoRA tensor {'/'.join(str(x) for x in key)}:")
+                #     logging.info(f"  Shape: {tensor.shape}")
+                #     logging.info(f"  Mean: {jnp.mean(tensor)}")
+                #     logging.info(f"  First 10 values: {tensor.flatten()[:10]}")
                 if shard_fns is not None:
                     counter += 1
                     try:
@@ -164,8 +165,9 @@ class StreamingCheckpointer(object):
                         raise
                 if jax.process_index() == 0:
                     from tqdm import tqdm
-                    pbar = tqdm(total=len(flattend_train_state), desc="Loading checkpoint")
-                    pbar.update(1)
+                    loaded_size += len(value)
+                    #pbar = tqdm(total=total_size, unit='B', unit_scale=True, desc="Loading checkpoint")
+                    pbar.update(loaded_size)
                 flattend_train_state[key] = tensor
                 if jax.process_index() == 0:
                     pbar.update(unpacker.tell() - pbar.n)  # Update to current position
