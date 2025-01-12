@@ -123,6 +123,7 @@ class CoordinatorServer:
                     )
                     with gr.Row():
                         send = gr.Button('Send')
+                        generate = gr.Button('Generate Next')
                         undo = gr.Button('Undo Last')
                         clear = gr.Button('Clear')
             
@@ -212,10 +213,72 @@ class CoordinatorServer:
                 [state, chatbot]
             )
             
+            def generate_next(history, simulated_user, channel_history):
+                if not history:
+                    return "", history, history
+                    
+                # Prepare prompt with channel history, current conversation, and opening tag
+                history_text = format_history(history)
+                opening_tag = f'<msg username="{simulated_user}">'
+                
+                if channel_history.strip():
+                    prompt = channel_history.strip() + "\n" + history_text + "\n" + opening_tag
+                else:
+                    prompt = history_text + "\n" + opening_tag
+                
+                try:
+                    # Get model response
+                    response = requests.post(
+                        f"http://localhost:{self.port}/chat",
+                        json={"prompt": prompt}
+                    ).json()
+                    
+                    logging.info("Response:")
+                    logging.info(json.dumps(response, indent=2))
+                    
+                    # Extract just the response text, removing any XML tags
+                    if isinstance(response, str):
+                        # If response contains a complete message tag for wrong user, discard it
+                        if f'username="' in response and f'username="{simulated_user}"' not in response:
+                            response = ""
+                        else:
+                            # Clean up response if needed
+                            # Remove any complete message tags
+                            if '<msg' in response and '</msg>' in response:
+                                response = response.split('">')[1].split('</msg>')[0]
+                    
+                    # Format model's response - add opening tag to prompt but not to history
+                    if response:
+                        # Add just the response text to history with full tags
+                        formatted_response = format_message(simulated_user, response)
+                        new_history = history + [formatted_response]
+                    else:
+                        new_history = history
+                    
+                    # Update chatbot display
+                    chat_display = []
+                    for msg in new_history:
+                        if 'username="' in msg and '">' in msg and '</msg>' in msg:
+                            username = msg.split('username="')[1].split('"')[0]
+                            content = msg.split('">')[1].split('</msg>')[0]
+                            chat_display.append([f"{username}: {content}", None])
+                    
+                    return "", chat_display, new_history
+                    
+                except Exception as e:
+                    logging.error(f"Error in chat: {str(e)}")
+                    return "", history, history
+
             undo.click(
                 undo_last,
                 [state, chatbot],
                 [state, chatbot]
+            )
+            
+            generate.click(
+                generate_next,
+                [state, simulated_user, channel_history],
+                [msg, chatbot, state]
             )
             
         return chat_ui
