@@ -247,7 +247,7 @@ class StreamingCheckpointer(object):
             assert load_type != 'trainstate', 'Loading full trainstate is not allowed!'
         train_state = None
         restored_params = None
-        if jac.process_index() == 0:
+        if jax.process_index() == 0:
             trainstate_target_str = None
             if trainstate_target is not None:
                 trainstate_target_str = type(trainstate_target).__name__
