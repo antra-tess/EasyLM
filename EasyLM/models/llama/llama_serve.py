@@ -249,7 +249,7 @@ class ModelServer(LMServer):
 
 
         shard_fns, _ = make_shard_and_gather_fns(
-            model_ps, dtype_specs=get_float_dtype_by_name(FLAGS.param_dtype), in_shardings=model_ps
+            model_ps, dtype_specs=get_float_dtype_by_name(FLAGS.param_dtype), loop=True,
         )
 
         with self.mesh:
