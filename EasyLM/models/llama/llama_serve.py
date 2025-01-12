@@ -245,9 +245,9 @@ class ModelServer(LMServer):
                     logging.info(f"Parameter: {path} with shape {shape_dtype.shape} and sharding {tree.sharding}")
         print_params_tree(params)
 
-        shard_fns, _ = make_shard_and_gather_fns(
-            model_ps, get_float_dtype_by_name(FLAGS.param_dtype), loop=True
-        )
+        # shard_fns, _ = make_shard_and_gather_fns(
+        #     model_ps, get_float_dtype_by_name(FLAGS.param_dtype), loop=True
+        # )
 
         with self.mesh:
             logging.info("Sharding parameters across mesh...")
