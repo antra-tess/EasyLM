@@ -185,6 +185,8 @@ class StreamingCheckpointer(object):
                 logging.info("Loaded state without restoring target state")
             return train_state
 
+        if 'params' not in target:
+            target = {'params': target}
         # Create a copy of train_state with all target keys
         full_state = {}
         flattened_shape = flatten_dict(target_shape)
