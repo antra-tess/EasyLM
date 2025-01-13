@@ -41,13 +41,15 @@ class CoordinatorServer:
             self.worker_info[sid] = data
             
             # Update Gradio display
-            worker_info_text = "\n".join([
+            worker_info_text = "<pre>" + "\n".join([
                 f"Worker {i+1}: {info.get('lora_path', 'No LoRA info')}"
                 for i, (_, info) in enumerate(self.worker_info.items())
-            ])
-            if not worker_info_text:
-                worker_info_text = "No workers connected"
-            await self.sio.emit('update_worker_info', worker_info_text)
+            ]) + "</pre>"
+            if not self.worker_info:
+                worker_info_text = "<pre>No workers connected</pre>"
+            
+            # Update all connected clients through Gradio
+            await worker_info_box.update(value=worker_info_text, _js=True)
             
             # Do warmup generations after first worker connects
             if not self.warmup_done and len(self.connected_workers) > 0:
@@ -143,10 +145,9 @@ class CoordinatorServer:
                             value='simulect',
                             label='Simulating User'
                         )
-                        worker_info_box = gr.Textbox(
+                        worker_info_box = gr.HTML(
                             label='Worker LoRA Info',
-                            value='No workers connected',
-                            interactive=False
+                            value='<pre>No workers connected</pre>',
                         )
                     channel_history = gr.Textbox(
                         placeholder='Paste previous channel history here (XML format)...',
