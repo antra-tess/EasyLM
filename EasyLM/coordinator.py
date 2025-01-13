@@ -175,7 +175,7 @@ class CoordinatorServer:
             
             @self.sio.on('update_worker_info')
             async def update_worker_info(text):
-                worker_info_box.update(value=text)
+                self.worker_info_box.update(value=text)
                 
             def format_message(username, text):
                 return f'<msg username="{username}">{text}</msg>'
