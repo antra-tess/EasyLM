@@ -98,10 +98,10 @@ class CoordinatorServer:
             if not self.warmup_done:
                 return {"error": "System is warming up, please try again in a moment"}
                 
-            # Check if any workers have pending requests
-            if any(sid in request['responses'] for request in self.active_requests.values() 
-                  for sid in self.connected_workers):
-                return {"error": "Workers are busy, please try again later"}
+            # Wait for any pending requests to complete before proceeding
+            while any(sid in request['responses'] for request in self.active_requests.values() 
+                     for sid in self.connected_workers):
+                await asyncio.sleep(1)  # Check every second
 
             # Create new request with UUID
             request_id = str(uuid.uuid4())
