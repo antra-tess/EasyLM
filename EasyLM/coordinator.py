@@ -3,6 +3,7 @@ from typing import Dict, List, Optional
 import asyncio
 import json
 import requests
+import uuid
 
 import socketio
 import gradio as gr
@@ -25,7 +26,6 @@ class CoordinatorServer:
         self.sio_app = socketio.ASGIApp(self.sio, self.app)
         self.connected_workers = set()
         self.active_requests = {}
-        self.request_counter = 0
         self.warmup_done = False
         
         # Set up socketio event handlers
@@ -79,9 +79,8 @@ class CoordinatorServer:
             if not self.warmup_done:
                 return {"error": "System is warming up, please try again in a moment"}
                 
-            # Create new request
-            request_id = self.request_counter
-            self.request_counter += 1
+            # Create new request with UUID
+            request_id = str(uuid.uuid4())
             future = asyncio.Future()
             self.active_requests[request_id] = {
                 'future': future,
