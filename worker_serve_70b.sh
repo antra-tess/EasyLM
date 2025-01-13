@@ -14,7 +14,7 @@ cd ~/EasyLM
 
 # Run worker client
 python -m EasyLM.worker_client \
-    --mesh_dim='1,-1,2' \
+    --mesh_dim='1,-1,4' \
     --dtype='bf16' \
     --llama.base_model='llama31_70b' \
     --param_dtype='bf16' \

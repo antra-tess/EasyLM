@@ -28,7 +28,7 @@ cd ~/EasyLM
 
 # Run test inference
 python -m EasyLM.test_inference \
-    --mesh_dim='1,-1,2' \
+    --mesh_dim='1,-1,4' \
     --dtype='bf16' \
     --llama.base_model='llama31_70b' \
     --param_dtype='bf16' \
