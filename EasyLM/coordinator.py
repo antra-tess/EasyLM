@@ -33,6 +33,23 @@ class CoordinatorServer:
             logging.info(f"Worker {sid} connected")
             self.connected_workers.add(sid)
             
+            # Do warmup generations after first worker connects
+            if not self.warmup_done and len(self.connected_workers) > 0:
+                logging.info("Performing warmup generations...")
+                warmup_text = "<msg username=\"user\">Hello</msg>\n<msg username=\"simulect\">"
+                for _ in range(2):  # Two warmup runs
+                    try:
+                        response = await self.sio.emit('inference_request', {
+                            'request_id': -1,  # Special request ID for warmup
+                            'prompt': warmup_text,
+                            'context': '',
+                            'temperature': None
+                        })
+                        logging.info("Warmup generation successful")
+                    except Exception as e:
+                        logging.error(f"Warmup generation failed: {str(e)}")
+                self.warmup_done = True
+            
         @self.sio.event
         async def disconnect(sid):
             logging.info(f"Worker {sid} disconnected")
