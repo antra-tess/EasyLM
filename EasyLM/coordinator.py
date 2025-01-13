@@ -101,6 +101,8 @@ class CoordinatorServer:
                     self.active_requests[request_id]['future'].set_result(
                         first_response['response']
                     )
+                    # Clean up completed request
+                    del self.active_requests[request_id]
                     
         # Set up HTTP endpoints
         @self.app.post("/chat")
