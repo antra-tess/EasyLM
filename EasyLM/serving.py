@@ -301,6 +301,8 @@ class LMServer(object):
         
         if jax.process_index() == 0:
             logging.info(f"Generated response: {response}")
+        else:
+            logging.info(f"Generated response on non-master process.")
             
         context = context + response + self.config.chat_lm_suffix
         return response, context
