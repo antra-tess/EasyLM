@@ -52,7 +52,7 @@ class CoordinatorServer:
             
             # Update all connected clients through Gradio if interface exists
             if self.worker_info_box is not None:
-                await gr.Textbox.update(value=worker_info_text)
+                await self.worker_info_box.update(value=worker_info_text)
             
             # Do warmup generations after first worker connects
             if not self.warmup_done and len(self.connected_workers) > 0:
@@ -185,8 +185,8 @@ class CoordinatorServer:
                         clear = gr.Button('Clear')
             
             @self.sio.on('update_worker_info')
-            async def update_worker_info(text):
-                await gr.Textbox.update(value=text)
+            def update_worker_info(text):
+                return self.worker_info_box.update(value=text)
                 
             def format_message(username, text):
                 return f'<msg username="{username}">{text}</msg>'
