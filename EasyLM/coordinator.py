@@ -26,6 +26,7 @@ class CoordinatorServer:
         self.connected_workers = set()
         self.active_requests = {}
         self.request_counter = 0
+        self.warmup_done = False
         
         # Set up socketio event handlers
         @self.sio.event
