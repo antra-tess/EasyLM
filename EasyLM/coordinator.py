@@ -40,6 +40,15 @@ class CoordinatorServer:
             logging.info(f"Worker {sid} info: {data}")
             self.worker_info[sid] = data
             
+            # Update Gradio display
+            worker_info_text = "\n".join([
+                f"Worker {i+1}: {info.get('lora_path', 'No LoRA info')}"
+                for i, (_, info) in enumerate(self.worker_info.items())
+            ])
+            if not worker_info_text:
+                worker_info_text = "No workers connected"
+            await self.sio.emit('update_worker_info', worker_info_text)
+            
             # Do warmup generations after first worker connects
             if not self.warmup_done and len(self.connected_workers) > 0:
                 logging.info("Performing warmup generations...")
@@ -128,11 +137,17 @@ class CoordinatorServer:
                 with open('simulects.json', 'r') as f:
                     simulects = json.load(f)
                 with gr.Column():
-                    simulated_user = gr.Dropdown(
-                        choices=simulects,
-                        value='simulect',
-                        label='Simulating User'
-                    )
+                    with gr.Row():
+                        simulated_user = gr.Dropdown(
+                            choices=simulects,
+                            value='simulect',
+                            label='Simulating User'
+                        )
+                        worker_info_box = gr.Textbox(
+                            label='Worker LoRA Info',
+                            value='No workers connected',
+                            interactive=False
+                        )
                     channel_history = gr.Textbox(
                         placeholder='Paste previous channel history here (XML format)...',
                         label='Channel History',
@@ -155,6 +170,10 @@ class CoordinatorServer:
                         undo = gr.Button('Undo Last')
                         clear = gr.Button('Clear')
             
+            @self.sio.on('update_worker_info')
+            async def update_worker_info(text):
+                worker_info_box.update(value=text)
+                
             def format_message(username, text):
                 return f'<msg username="{username}">{text}</msg>'
             
