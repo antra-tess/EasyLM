@@ -28,9 +28,9 @@ python -m EasyLM.worker_client \
     --lm_server.port=5009 \
     --load_lora="base_params::/mnt/$INFER_DISK/easylm_chkp/0f24b03e4bec41f49c9b172a7adf2eea/checkpoint_1000/streaming_params" \
     --lora_mode=True \
-    --llama.lora_rank=16 \
-    --llama.lora_alpha=32 \
+    --llama.lora_rank=32 \
+    --llama.lora_alpha=64 \
     --llama.lora_dropout=0.1 \
     --llama.lora_attn=true \
-    --llama.lora_mlp=true \
+    --llama.lora_mlp=false \
     --coordinator_url='http://51.81.181.136:5010'
