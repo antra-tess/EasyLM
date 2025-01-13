@@ -141,6 +141,8 @@ class WorkerClient:
             try:
                 warmup_text = "<msg username=\"user\">Hello</msg>\n<msg username=\"simulect\">"
                 response, _ = self.model_server.process_chat(warmup_text, "", None)
+                warmup_text = "<msg username=\"user\">Wake up</msg>\n<msg username=\"simulect\">"
+                response, _ = self.model_server.process_chat(warmup_text, "", None)
                 logging.info("Worker warmup successful")
                 self.warmup_done = True
             except Exception as e:
