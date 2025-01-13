@@ -76,16 +76,13 @@ class WorkerClient:
         """Handle inference request in background task."""
         request_id = data['request_id']
         try:
-            # Run inference in thread pool with timeout
-            response, _ = await asyncio.wait_for(
-                asyncio.get_event_loop().run_in_executor(
-                    self.executor,
-                    self.model_server.process_chat,
-                    data['prompt'],
-                    data['context'],
-                    data.get('temperature', None)
-                ),
-                timeout=120.0  # 2 minute timeout matching coordinator
+            # Run inference in thread pool without timeout
+            response, _ = await asyncio.get_event_loop().run_in_executor(
+                self.executor,
+                self.model_server.process_chat,
+                data['prompt'],
+                data['context'],
+                data.get('temperature', None)
             )
             
             # Send response if still connected
