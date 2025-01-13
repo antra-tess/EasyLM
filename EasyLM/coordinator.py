@@ -193,8 +193,14 @@ class CoordinatorServer:
                     worker_info_text = "No workers connected"
                 return gr.update(value=worker_info_text)
                 
-            # Poll for worker info updates every 5 seconds
-            chat_ui.load(update_worker_info, None, self.worker_info_box, every=5)
+            # Add refresh button with periodic updates
+            refresh = gr.Button("Refresh Worker Status")
+            refresh.click(
+                update_worker_info,
+                None,
+                self.worker_info_box,
+                every=5
+            )
                 
             def format_message(username, text):
                 return f'<msg username="{username}">{text}</msg>'
