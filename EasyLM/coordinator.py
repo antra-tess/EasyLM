@@ -25,6 +25,7 @@ class CoordinatorServer:
         self.app = FastAPI()
         self.sio_app = socketio.ASGIApp(self.sio, self.app)
         self.connected_workers = set()
+        self.worker_info = {}  # Track info about each worker
         self.active_requests = {}
         self.warmup_done = False
         
@@ -33,6 +34,11 @@ class CoordinatorServer:
         async def connect(sid, environ):
             logging.info(f"Worker {sid} connected")
             self.connected_workers.add(sid)
+            
+        @self.sio.event
+        async def worker_info(sid, data):
+            logging.info(f"Worker {sid} info: {data}")
+            self.worker_info[sid] = data
             
             # Do warmup generations after first worker connects
             if not self.warmup_done and len(self.connected_workers) > 0:

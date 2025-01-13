@@ -43,6 +43,10 @@ class WorkerClient:
         @self.sio.event
         async def connect():
             logging.info(f"Connected to coordinator at {coordinator_url}")
+            # Send LoRA checkpoint info
+            await self.sio.emit('worker_info', {
+                'lora_path': os.environ.get('LOAD_LORA', 'No LoRA loaded')
+            })
             # Start heartbeat when connected
             if self.heartbeat_task is None:
                 self.heartbeat_task = asyncio.create_task(self._heartbeat())
