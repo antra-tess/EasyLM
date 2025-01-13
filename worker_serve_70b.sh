@@ -26,7 +26,7 @@ python -m EasyLM.worker_client \
     --top_k=150 \
     --top_p=0.99 \
     --lm_server.port=5009 \
-    --load_lora="base_params::/mnt/$INFER_DISK/easylm_chkp/0f24b03e4bec41f49c9b172a7adf2eea/checkpoint_1000/streaming_params" \
+    --load_lora="base_params::/mnt/$INFER_DISK/easylm_chkp/c67b8e2d8fab409a82fece05a6f1297a/checkpoint_1500/streaming_params" \
     --lora_mode=True \
     --llama.lora_rank=32 \
     --llama.lora_alpha=64 \

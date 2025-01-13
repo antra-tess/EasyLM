@@ -25,7 +25,7 @@ sudo mkdir -p /tmp/tpu_logs && sudo chown -R $USER:$USER /tmp/tpu_logs && sudo c
 echo "HF_TOKEN is${HF_TOKEN:+ set}${HF_TOKEN:-" not set"}"
 
 cd ~/EasyLM
-
+#0f24b03e4bec41f49c9b172a7adf2eea imago
 # Run test inference
 python -m EasyLM.test_inference \
     --mesh_dim='1,-1,8' \
@@ -39,8 +39,8 @@ python -m EasyLM.test_inference \
     --do_sample=True \
     --top_k=150 \
     --top_p=0.99 \
-    --lm_server.port=5009 \
-    --load_lora="base_params::/mnt/$INFER_DISK/easylm_chkp/0f24b03e4bec41f49c9b172a7adf2eea/checkpoint_1000/streaming_params" \
+    --lm_server.port=5009 \ #
+    --load_lora="base_params::/mnt/$INFER_DISK/easylm_chkp/c67b8e2d8fab409a82fece05a6f1297a/checkpoint_1500/streaming_params" \
     --lora_mode=True \
     --llama.lora_rank=32 \
     --llama.lora_alpha=64 \
