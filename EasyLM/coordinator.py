@@ -158,8 +158,8 @@ class CoordinatorServer:
             # State for maintaining chat history
             state = gr.State([])
             
-            with gr.Row():
-                chatbot = gr.Chatbot(label='Chat history', height=500)
+            with gr.Row(equal_height=True):
+                chatbot = gr.Chatbot(label='Chat history', height=800)
                 with open('simulects.json', 'r') as f:
                     simulects = json.load(f)
                 with gr.Column():
