@@ -34,8 +34,8 @@ python -m EasyLM.test_inference \
     --param_dtype='bf16' \
     --tokenizer='meta-llama/Llama-3.1-70B' \
     --load_checkpoint='base_params::/mnt/disk2/llama-3.1-70b' \
-    --input_length=1024 \
-    --seq_length=1024 \
+    --input_length=768 \
+    --seq_length= 1536 \
     --do_sample=True \
     --top_k=150 \
     --top_p=0.99 \
