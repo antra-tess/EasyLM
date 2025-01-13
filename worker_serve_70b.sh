@@ -20,8 +20,8 @@ python -m EasyLM.worker_client \
     --param_dtype='bf16' \
     --tokenizer='meta-llama/Llama-3.1-70B' \
     --load_checkpoint="base_params::/mnt/$INFER_DISK/llama-3.1-70b" \
-    --input_length = 768 \
-    --seq_length = 1536 \
+    --input_length=768 \
+    --seq_length=1536 \
     --do_sample=True \
     --top_k=150 \
     --top_p=0.99 \
