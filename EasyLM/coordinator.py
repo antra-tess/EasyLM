@@ -80,15 +80,29 @@ class CoordinatorServer:
         async def inference_response(sid, data):
             request_id = data['request_id']
             if request_id in self.active_requests:
-                self.active_requests[request_id]['responses'][sid] = data['response']
+                # Store full response data, not just the response text
+                self.active_requests[request_id]['responses'][sid] = data
                 logging.info(f"Received response from worker {sid}")
                 logging.info(json.dumps(data, indent=2))
+                
                 # Check if we have responses from all workers
                 if len(self.active_requests[request_id]['responses']) == len(self.connected_workers):
-                    # All workers responded, resolve the future
+                    # Check if any worker had an error
+                    for worker_response in self.active_requests[request_id]['responses'].values():
+                        if worker_response.get('status') != 'success':
+                            logging.error(f"Worker error: {worker_response.get('error', 'Unknown error')}")
+                            self.active_requests[request_id]['future'].set_result(
+                                {"error": "One or more workers failed"}
+                            )
+                            return
+                            
+                    # All workers succeeded, get first response
+                    first_response = next(iter(self.active_requests[request_id]['responses'].values()))
                     self.active_requests[request_id]['future'].set_result(
-                        self.active_requests[request_id]['responses']
+                        first_response['response']
                     )
+                    # Clean up completed request
+                    del self.active_requests[request_id]
                     
         # Set up HTTP endpoints
         @self.app.post("/chat")
@@ -125,10 +139,9 @@ class CoordinatorServer:
             
             # Wait for responses from all workers
             try:
-                responses = await asyncio.wait_for(future, timeout=120.0)  # 2 minutes
-                # All responses should be identical since workers run same code
-                # Just return the first one
-                return responses[next(iter(responses))]
+                response = await asyncio.wait_for(future, timeout=120.0)  # 2 minutes
+                # Response is already the text from first worker
+                return response
             except asyncio.TimeoutError:
                 del self.active_requests[request_id]
                 return {"error": "Request timed out"}
