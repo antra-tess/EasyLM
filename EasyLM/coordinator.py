@@ -183,10 +183,18 @@ class CoordinatorServer:
                         generate = gr.Button('Generate Next')
                         undo = gr.Button('Undo Last')
                         clear = gr.Button('Clear')
+                        
+            # Poll for worker info updates every 5 seconds
+            self.worker_info_box.every(5, update_worker_info)
             
-            @self.sio.on('update_worker_info')
-            def update_worker_info(text):
-                return self.worker_info_box.update(value=gr.update(value=text))
+            def update_worker_info():
+                worker_info_text = "\n".join([
+                    f"Worker {i+1}: {info.get('lora_path', 'No LoRA info')}"
+                    for i, (_, info) in enumerate(self.worker_info.items())
+                ])
+                if not self.worker_info:
+                    worker_info_text = "No workers connected"
+                return gr.update(value=worker_info_text)
                 
             def format_message(username, text):
                 return f'<msg username="{username}">{text}</msg>'
