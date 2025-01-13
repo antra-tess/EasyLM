@@ -199,7 +199,6 @@ class CoordinatorServer:
                 update_worker_info,
                 None,
                 self.worker_info_box,
-                every=5
             )
                 
             def format_message(username, text):
