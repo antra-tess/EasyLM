@@ -43,12 +43,12 @@ class CoordinatorServer:
             self.worker_info[sid] = data
             
             # Update Gradio display
-            worker_info_text = "<pre>" + "\n".join([
+            worker_info_text = "\n".join([
                 f"Worker {i+1}: {info.get('lora_path', 'No LoRA info')}"
                 for i, (_, info) in enumerate(self.worker_info.items())
-            ]) + "</pre>"
+            ])
             if not self.worker_info:
-                worker_info_text = "<pre>No workers connected</pre>"
+                worker_info_text = "No workers connected"
             
             # Update all connected clients through Gradio if interface exists
             if self.worker_info_box is not None:
@@ -156,9 +156,11 @@ class CoordinatorServer:
                             value='simulect',
                             label='Simulating User'
                         )
-                        self.worker_info_box = gr.HTML(
+                        self.worker_info_box = gr.Textbox(
                             label='Worker LoRA Info',
-                            value='<pre>No workers connected</pre>',
+                            value='No workers connected',
+                            interactive=False,
+                            lines=5
                         )
                     channel_history = gr.Textbox(
                         placeholder='Paste previous channel history here (XML format)...',
