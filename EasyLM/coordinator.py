@@ -194,7 +194,7 @@ class CoordinatorServer:
                 return gr.update(value=worker_info_text)
                 
             # Poll for worker info updates every 5 seconds
-            chat_ui.load(update_worker_info, None, self.worker_info_box, every=5)
+            self.worker_info_box.update(every=5, value=update_worker_info)
                 
             def format_message(username, text):
                 return f'<msg username="{username}">{text}</msg>'
