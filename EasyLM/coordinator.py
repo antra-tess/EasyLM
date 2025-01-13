@@ -74,6 +74,9 @@ class CoordinatorServer:
         async def chat(request: InferenceRequest):
             if not self.connected_workers:
                 return {"error": "No workers connected"}
+            
+            if not self.warmup_done:
+                return {"error": "System is warming up, please try again in a moment"}
                 
             # Create new request
             request_id = self.request_counter
