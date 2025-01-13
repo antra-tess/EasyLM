@@ -75,6 +75,16 @@ class CoordinatorServer:
         async def disconnect(sid):
             logging.info(f"Worker {sid} disconnected")
             self.connected_workers.remove(sid)
+            if sid in self.worker_info:
+                del self.worker_info[sid]
+            
+            # Clean up any requests this worker was handling
+            for request_id, request in list(self.active_requests.items()):
+                if sid in request['responses']:
+                    # If this was the last worker we were waiting for, resolve with error
+                    if len(request['responses']) == len(self.connected_workers):
+                        request['future'].set_result({"error": "Worker disconnected during processing"})
+                        del self.active_requests[request_id]
             
         @self.sio.event
         async def inference_response(sid, data):
