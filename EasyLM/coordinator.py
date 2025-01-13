@@ -101,7 +101,7 @@ class CoordinatorServer:
                 chatbot = gr.Chatbot(label='Chat history', height=500)
                 with gr.Column():
                     simulated_user = gr.Dropdown(
-                        choices=['simulect'],
+                        choices=['simulect', 'repligate'],
                         value='simulect',
                         label='Simulating User'
                     )
