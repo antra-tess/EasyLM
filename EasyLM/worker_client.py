@@ -72,13 +72,16 @@ class WorkerClient:
         """Handle inference request in background task."""
         request_id = data['request_id']
         try:
-            # Run inference in thread pool to avoid blocking event loop
-            response, _ = await asyncio.get_event_loop().run_in_executor(
-                self.executor,
-                self.model_server.process_chat,
-                data['prompt'],
-                data['context'],
-                data.get('temperature', None)
+            # Run inference in thread pool with timeout
+            response, _ = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    self.executor,
+                    self.model_server.process_chat,
+                    data['prompt'],
+                    data['context'],
+                    data.get('temperature', None)
+                ),
+                timeout=120.0  # 2 minute timeout matching coordinator
             )
             
             # Send response if still connected
@@ -90,6 +93,15 @@ class WorkerClient:
                 })
             else:
                 logging.error(f"Cannot send response for {request_id} - disconnected")
+                
+        except asyncio.TimeoutError:
+            logging.error(f"Inference timeout for request {request_id}")
+            if self.sio.connected:
+                await self.sio.emit('inference_response', {
+                    'request_id': request_id,
+                    'error': "Inference timeout - request took too long",
+                    'status': 'timeout'
+                })
                 
         except Exception as e:
             logging.error(f"Error processing request {request_id}: {str(e)}")
