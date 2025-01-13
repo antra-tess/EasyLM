@@ -15,7 +15,9 @@ import mlxu
 from transformers import AutoTokenizer
 import socketio
 
-jax.config.update("jax_compilation_cache_dir", "/mnt/disk3/jax_cache")
+import os
+infer_disk = os.environ.get("INFER_DISK")
+jax.config.update("jax_compilation_cache_dir", f"/mnt/{infer_disk}/jax_cache")
 
 from EasyLM.models.llama.llama_config import create_llama_flags
 create_llama_flags()
