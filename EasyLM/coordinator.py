@@ -28,6 +28,7 @@ class CoordinatorServer:
         self.worker_info = {}  # Track info about each worker
         self.active_requests = {}
         self.warmup_done = False
+        self.worker_info_box = None  # Will be set when Gradio interface is created
         
         # Set up socketio event handlers
         @self.sio.event
@@ -48,8 +49,9 @@ class CoordinatorServer:
             if not self.worker_info:
                 worker_info_text = "<pre>No workers connected</pre>"
             
-            # Update all connected clients through Gradio
-            await worker_info_box.update(value=worker_info_text, _js=True)
+            # Update all connected clients through Gradio if interface exists
+            if self.worker_info_box is not None:
+                await self.worker_info_box.update(value=worker_info_text, _js=True)
             
             # Do warmup generations after first worker connects
             if not self.warmup_done and len(self.connected_workers) > 0:
@@ -145,7 +147,7 @@ class CoordinatorServer:
                             value='simulect',
                             label='Simulating User'
                         )
-                        worker_info_box = gr.HTML(
+                        self.worker_info_box = gr.HTML(
                             label='Worker LoRA Info',
                             value='<pre>No workers connected</pre>',
                         )
