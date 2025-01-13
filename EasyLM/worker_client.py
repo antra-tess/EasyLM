@@ -40,6 +40,7 @@ class WorkerClient:
         self.executor = ThreadPoolExecutor(max_workers=1)
         self.lock = threading.Lock()
         self.heartbeat_task = None
+        self.warmup_done = False
         
         # Set up socketio event handlers
         @self.sio.event
@@ -135,6 +136,17 @@ class WorkerClient:
             
     async def run(self):
         """Connect to coordinator and handle requests."""
+        if not self.warmup_done:
+            logging.info("Performing worker warmup inference...")
+            try:
+                warmup_text = "<msg username=\"user\">Hello</msg>\n<msg username=\"simulect\">"
+                response, _ = self.model_server.process_chat(warmup_text, "", None)
+                logging.info("Worker warmup successful")
+                self.warmup_done = True
+            except Exception as e:
+                logging.error(f"Worker warmup failed: {str(e)}")
+                return
+
         while True:
             try:
                 await self.sio.connect(self.coordinator_url)
