@@ -97,7 +97,7 @@ class CoordinatorServer:
             
             # Wait for responses from all workers
             try:
-                responses = await asyncio.wait_for(future, timeout=30.0)
+                responses = await asyncio.wait_for(future, timeout=120.0)  # 2 minutes
                 # All responses should be identical since workers run same code
                 # Just return the first one
                 return responses[next(iter(responses))]
