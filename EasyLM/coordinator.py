@@ -99,9 +99,11 @@ class CoordinatorServer:
             
             with gr.Row():
                 chatbot = gr.Chatbot(label='Chat history', height=500)
+                with open('simulects.json', 'r') as f:
+                    simulects = json.load(f)
                 with gr.Column():
                     simulated_user = gr.Dropdown(
-                        choices=['simulect', 'repligate'],
+                        choices=simulects,
                         value='simulect',
                         label='Simulating User'
                     )
