@@ -50,9 +50,9 @@ class CoordinatorServer:
             if not self.worker_info:
                 worker_info_text = "No workers connected"
             
-            # Update all connected clients through Gradio if interface exists
-            if self.worker_info_box is not None:
-                await self.worker_info_box.update(value=gr.update(value=worker_info_text))
+            # # Update all connected clients through Gradio if interface exists
+            # if self.worker_info_box is not None:
+            #     await self.worker_info_box.update(value=gr.update(value=worker_info_text))
             
             # Do warmup generations after first worker connects
             if not self.warmup_done and len(self.connected_workers) > 0:
