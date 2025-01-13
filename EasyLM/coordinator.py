@@ -224,9 +224,9 @@ class CoordinatorServer:
             )
             
             def undo_last(history, chat_history):
-                if len(history) >= 2:  # Remove last user message and model response
-                    history = history[:-2]
-                    chat_history = chat_history[:-2]
+                if len(history) >= 1:  # Remove just the last message
+                    history = history[:-1]
+                    chat_history = chat_history[:-1]
                 return history, chat_history
 
             clear.click(
