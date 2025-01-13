@@ -33,14 +33,14 @@ python -m EasyLM.test_inference \
     --llama.base_model='llama31_70b' \
     --param_dtype='bf16' \
     --tokenizer='meta-llama/Llama-3.1-70B' \
-    --load_checkpoint='base_params_unsharded::/mnt/disk2/llama-3.1-70b' \
+    --load_checkpoint='base_params::/mnt/disk2/llama-3.1-70b' \
     --input_length=1024 \
     --seq_length=2048 \
     --do_sample=True \
     --top_k=150 \
     --top_p=0.99 \
     --lm_server.port=5009 \
-    --load_lora='base_params_unsharded::/mnt/disk2/easylm_chkp/0f24b03e4bec41f49c9b172a7adf2eea/checkpoint_1000/streaming_params' \
+    --load_lora='base_params::/mnt/disk2/easylm_chkp/0f24b03e4bec41f49c9b172a7adf2eea/checkpoint_1000/streaming_params' \
     --lora_mode=True \
     --llama.lora_rank=32 \
     --llama.lora_alpha=64 \
