@@ -45,7 +45,7 @@ class WorkerClient:
             logging.info(f"Connected to coordinator at {coordinator_url}")
             # Send LoRA checkpoint info
             await self.sio.emit('worker_info', {
-                'lora_path': os.environ.get('LOAD_LORA', 'No LoRA loaded')
+                'lora_path': FLAGS.load_lora if FLAGS.lora_mode else 'No LoRA loaded'
             })
             # Start heartbeat when connected
             if self.heartbeat_task is None:
