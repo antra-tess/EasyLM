@@ -27,21 +27,10 @@ class FlashAttentionTest(parameterized.TestCase):
             mesh_sharding = jax.sharding.NamedSharding(
                 self.mesh, PS(('dp',), None, 'mp', None)
             )
-            query = jax.make_array_from_callback(
-                query.shape, 
-                mesh_sharding,
-                lambda idx: query[idx]
-            )
-            key = jax.make_array_from_callback(
-                key_tensor.shape,
-                mesh_sharding,
-                lambda idx: key_tensor[idx]
-            )
-            value = jax.make_array_from_callback(
-                value.shape,
-                mesh_sharding,
-                lambda idx: value[idx]
-            )
+            # Use device_put with explicit sharding
+            query = jax.device_put(query, mesh_sharding)
+            key = jax.device_put(key_tensor, mesh_sharding)
+            value = jax.device_put(value, mesh_sharding)
             
         return query, key, value
 
