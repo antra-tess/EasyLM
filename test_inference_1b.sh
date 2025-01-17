@@ -2,18 +2,32 @@
 
 set -eu
 
-echo "Starting serving on worker..."
+echo "Starting test inference on worker..."
 
 # Fix TPU logs permissions first
 sudo mkdir -p /tmp/tpu_logs && sudo chown -R $USER:$USER /tmp/tpu_logs && sudo chmod 755 /tmp/tpu_logs
 
-echo "WANDB_API_KEY is${WANDB_API_KEY:+ set}${WANDB_API_KEY:-" not set"}"
 echo "HF_TOKEN is${HF_TOKEN:+ set}${HF_TOKEN:-" not set"}"
 
 cd ~/EasyLM
 
-# Run worker client
-python -m EasyLM.worker_client \
+# Run test inference
+#python -m EasyLM.test_inference
+#!/bin/bash
+
+set -eu
+
+echo "Starting test inference on worker..."
+
+# Fix TPU logs permissions first
+sudo mkdir -p /tmp/tpu_logs && sudo chown -R $USER:$USER /tmp/tpu_logs && sudo chmod 755 /tmp/tpu_logs
+
+echo "HF_TOKEN is${HF_TOKEN:+ set}${HF_TOKEN:-" not set"}"
+
+cd ~/EasyLM
+
+# Run test inference
+python -m EasyLM.test_inference \
     --mesh_dim='1,-1,1' \
     --dtype='bf16' \
     --llama.base_model='llama32_1b' \
@@ -33,4 +47,4 @@ python -m EasyLM.worker_client \
     --llama.lora_dropout=0.1 \
     --llama.lora_attn=true \
     --llama.lora_mlp=true \
-    --coordinator_url='http://51.81.181.136:5010'
+#a46dfdf701c6495882316a472776dc28

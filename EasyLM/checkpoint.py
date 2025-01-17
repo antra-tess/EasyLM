@@ -106,7 +106,10 @@ class StreamingCheckpointer(object):
             )
 
     @staticmethod
-    def load_checkpoint(path, target=None, shard_fns=None, remove_dict_prefix=None, restore_state=True, require_sharding=True):
+    def load_checkpoint(path, target=None, target_shape=None, shard_fns=None, remove_dict_prefix=None, restore_state=True, require_sharding=True):
+        if target_shape is None:
+            target_shape = target
+
         if jax.process_index() == 0:
             logging.info(f"Loading checkpoint from {path}")
             if shard_fns is not None:
@@ -132,6 +135,7 @@ class StreamingCheckpointer(object):
         counter = 0
         # Get file size without seeking
         total_size = os.path.getsize(path)
+        loaded_size = 0
 
         with mlxu.open_file(path) as fin:
             # 83886080 bytes = 80 MB, which is 16 blocks on GCS
@@ -148,11 +152,11 @@ class StreamingCheckpointer(object):
                         continue
 
                 tensor = from_bytes(None, value)
-                if jax.process_index() == 0 and 'lora_' in '/'.join(str(x) for x in key):
-                    logging.info(f"Loaded LoRA tensor {'/'.join(str(x) for x in key)}:")
-                    logging.info(f"  Shape: {tensor.shape}")
-                    logging.info(f"  Mean: {jnp.mean(tensor)}")
-                    logging.info(f"  First 10 values: {tensor.flatten()[:10]}")
+                # if jax.process_index() == 0 and 'lora_' in '/'.join(str(x) for x in key):
+                #     logging.info(f"Loaded LoRA tensor {'/'.join(str(x) for x in key)}:")
+                #     logging.info(f"  Shape: {tensor.shape}")
+                #     logging.info(f"  Mean: {jnp.mean(tensor)}")
+                #     logging.info(f"  First 10 values: {tensor.flatten()[:10]}")
                 if shard_fns is not None:
                     counter += 1
                     try:
@@ -163,9 +167,7 @@ class StreamingCheckpointer(object):
                             logging.info(f"Available shard_fns keys: {list(shard_fns.keys())}")
                         raise
                 if jax.process_index() == 0:
-                    from tqdm import tqdm
-                    pbar = tqdm(total=len(flattend_train_state), desc="Loading checkpoint")
-                    pbar.update(1)
+                    pbar.update(len(value))
                 flattend_train_state[key] = tensor
                 if jax.process_index() == 0:
                     pbar.update(unpacker.tell() - pbar.n)  # Update to current position
@@ -176,27 +178,6 @@ class StreamingCheckpointer(object):
         if require_sharding and counter == 0:
             raise ValueError(f"No tensor sharding was applied {path}")
 
-
-        # if target is not None:
-        #     flattened_target = flatten_dict(
-        #         to_state_dict(target), keep_empty_nodes=True
-        #     )
-        #     for key, value in flattened_target.items():
-        #         if 'lora_' in str(key):
-        #             # Initialize LoRA parameters with zeros
-        #             # Handle both actual arrays and ShapeDtypeStruct
-        #             if hasattr(value, 'shape') and hasattr(value, 'dtype'):
-        #                 flattend_train_state[key] = jnp.zeros(value.shape, dtype=value.dtype)
-        #             else:
-        #                 pass
-        #             continue
-        #         if key not in flattend_train_state and value is empty_node:
-        #             flattend_train_state[key] = value
-        #
-        # else:
-        #     #logging.info(f"target is None, not initializing LoRA parameters")
-        #     pass
-
         train_state = unflatten_dict(flattend_train_state)
 
         if target is None or not restore_state:
@@ -204,15 +185,29 @@ class StreamingCheckpointer(object):
                 logging.info("Loaded state without restoring target state")
             return train_state
 
+        if 'params' in train_state:
+            train_state = train_state['params']
+        if 'params' in target:
+            target = target['params']
+        if 'params' in target_shape:
+            target_shape = target_shape['params']
+
         # Create a copy of train_state with all target keys
         full_state = {}
+        flattened_shape = flatten_dict(target_shape)
         flattened_target = flatten_dict(to_state_dict(target))
         flattened_state = flatten_dict(train_state)
-        
+        if jax.process_index() == 0:
+            logging.info(f"flattened_target: {flattened_target}")
+            logging.info(f"flattened_state: {flattened_state}")
+            logging.info(f"flattened_shape: {flattened_shape}")
+
         # Copy all available keys from train_state
         counter = 0
         kept = 0
-        for key in flattened_target.keys():
+        for key in flattened_shape.keys():
+            # if jax.process_index() == 0:
+            #     logging.info(f"key: {key}")
             if key in flattened_state:
                 full_state[key] = flattened_state[key]
                 if jax.process_index() == 0:
@@ -224,10 +219,14 @@ class StreamingCheckpointer(object):
                 if jax.process_index() == 0:
                     logging.info(f"Kept key {key} from target")
                 kept += 1
+
+        # for key in flattened_state.keys():
+        #     if key not in flattened_target:
+        #         raise ValueError(f"Loaded key {key} not found in target shape")
         if jax.process_index() == 0:
             logging.info(f"Restored {counter} keys from train_state, kept {kept} keys from target")
         
-        return from_state_dict(target, unflatten_dict(full_state))
+        return from_state_dict(target_shape, unflatten_dict(full_state))
 
     @staticmethod
     def load_flax_checkpoint(path, target=None, shard_fns=None):
@@ -249,7 +248,7 @@ class StreamingCheckpointer(object):
     @classmethod
     def load_trainstate_checkpoint(cls, load_from, trainstate_target=None,
                                    trainstate_shard_fns=None,
-                                   disallow_trainstate=False):
+                                   disallow_trainstate=False, target_shape=None):
 
         if trainstate_shard_fns is not None:
             #print("trainstate_shard_fns: ", trainstate_shard_fns)
@@ -269,11 +268,25 @@ class StreamingCheckpointer(object):
             assert load_type != 'trainstate', 'Loading full trainstate is not allowed!'
         train_state = None
         restored_params = None
+        if jax.process_index() == 0:
+            trainstate_target_str = None
+            if trainstate_target is not None:
+                trainstate_target_str = type(trainstate_target).__name__
+                if isinstance(trainstate_target, dict):
+                    trainstate_target_str += "[" + trainstate_target.keys().__str__() + "]"
+            trainstate_shard_fns_str = None
+            if trainstate_shard_fns is not None:
+                trainstate_shard_fns_str = type(trainstate_shard_fns).__name__
+                if isinstance(trainstate_shard_fns, dict):
+                    trainstate_shard_fns_str += "[" + trainstate_shard_fns.keys().__str__() + "]"
+            logging.info(f"Loading {load_type} from {load_path}, target: {trainstate_target_str}, shard_fns: {trainstate_shard_fns_str}, disallow_trainstate: {disallow_trainstate}")
+
         if load_type == 'trainstate':
             # Load the entire train state in the streaming format
             train_state = cls.load_checkpoint(
                 path=load_path,
                 target=trainstate_target,
+                target_shape=target_shape,
                 shard_fns=trainstate_shard_fns,
             )
         elif load_type == 'trainstate_params':
@@ -285,6 +298,7 @@ class StreamingCheckpointer(object):
             restored_params = cls.load_checkpoint(
                 path=load_path,
                 target=params_target,
+                target_shape=target_shape,
                 shard_fns=params_shard_fns,
                 remove_dict_prefix=('params', 'params'),
             )
@@ -298,6 +312,7 @@ class StreamingCheckpointer(object):
             restored_params = cls.load_checkpoint(
                 path=load_path,
                 target=params_target,
+                target_shape=target_shape,
                 shard_fns=params_shard_fns,
                 restore_state=True,
             )
@@ -312,6 +327,7 @@ class StreamingCheckpointer(object):
             restored_params = cls.load_checkpoint(
                 path=load_path,
                 target=params_target,
+                target_shape=target_shape,
                 shard_fns=params_shard_fns,  # Use params sharding directly
                 restore_state=True
             )
@@ -329,6 +345,7 @@ class StreamingCheckpointer(object):
             restored_params = cls.load_checkpoint(
                 path=load_path,
                 target=params_target,
+                target_shape=target_shape,
                 shard_fns=None,  # No sharding required
                 restore_state=True,
                 require_sharding=False  # Skip sharding requirement check

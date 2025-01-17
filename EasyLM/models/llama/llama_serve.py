@@ -55,7 +55,11 @@ class ModelServer(LMServer):
         logging.info("Loading model checkpoint and initializing model...")
         model_start = time.time()
         logging.info("Param dtype: {}".format(FLAGS.param_dtype))
-        with jax.default_device(jax.devices("cpu")[0]):
+        logging.info("Setting up JAX mesh and compiling serving functions...")
+        mesh_start = time.time()
+        self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
+
+        with self.mesh:
             logging.info(f"Loading base checkpoint from {FLAGS.load_checkpoint}")
             # Create model to get parameter shapes
             hf_model = FlaxLLaMAForCausalLM(
@@ -67,35 +71,25 @@ class ModelServer(LMServer):
                 param_dtype=get_float_dtype_by_name(FLAGS.param_dtype),
             )
 
-            # Initialize model parameters first
-            def init_fn(rng):
-                rng_generator = JaxRNG(rng)
-                return hf_model.module.init(
-                    input_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int16),
-                    position_ids=jnp.zeros((4, FLAGS.seq_length), dtype=jnp.int16),
-                    attention_mask=jnp.ones((4, FLAGS.seq_length), dtype=jnp.int16),
-                    rngs=rng_generator(LLaMAConfigurator.rng_keys()),
-                )
-            #
-            # full_shape = hf_model.params_shape_tree
+            full_shape = hf_model.params_shape_tree
 
-            # # Filter for base parameters (no LoRA)
-            # if FLAGS.lora_mode:
-            #     logging.info("LoRA mode enabled. Filtering for LoRA parameters...")
-            #     base_shape = {}
-            #     for k, v in flatten_dict(full_shape).items():
-            #         if 'lora_' not in '/'.join(str(x) for x in k):
-            #             base_shape[k] = v
-            #     base_shape = unflatten_dict(base_shape)
-            #
-            #     # Filter for LoRA parameters
-            #     lora_shape = {}
-            #     for k, v in flatten_dict(full_shape).items():
-            #         if 'lora_' in '/'.join(str(x) for x in k):
-            #             lora_shape[k] = v
-            #     lora_shape = unflatten_dict(lora_shape)
-            # else:
-            #     base_shape = full_shape
+            # Filter for base parameters (no LoRA)
+            if FLAGS.lora_mode:
+                logging.info("LoRA mode enabled. Filtering for LoRA parameters...")
+                base_shape = {}
+                for k, v in flatten_dict(full_shape).items():
+                    if 'lora_' not in '/'.join(str(x) for x in k):
+                        base_shape[k] = v
+                base_shape = unflatten_dict(base_shape)
+
+                # Filter for LoRA parameters
+                lora_shape = {}
+                for k, v in flatten_dict(full_shape).items():
+                    if 'lora_' in '/'.join(str(x) for x in k):
+                        lora_shape[k] = v
+                lora_shape = unflatten_dict(lora_shape)
+            else:
+                base_shape = full_shape
 
             # concatenate two tuples
             if FLAGS.lora_mode:
@@ -104,50 +98,48 @@ class ModelServer(LMServer):
                 combined_rules = LLaMAConfigurator.get_base_param_rules()
             print(combined_rules)
 
-            # # Get base parameter partition rules
-            # base_model_ps = match_partition_rules(
-            #     LLaMAConfigurator.get_base_param_rules(), base_shape
-            # )
-            # base_shard_fns, _ = make_shard_and_gather_fns(
-            #     base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-            # )
-
-            params = init_fn(next_rng())
+            # Get base parameter partition rules
+            base_model_ps = match_partition_rules(
+                LLaMAConfigurator.get_base_param_rules(), base_shape
+            )
+            base_shard_fns, _ = make_shard_and_gather_fns(
+                base_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+            )
 
             # Load checkpoint with sharding functions
-            _, params = StreamingCheckpointer.load_trainstate_checkpoint(
+            params = StreamingCheckpointer.load_trainstate_checkpoint(
                 FLAGS.load_checkpoint,
-                trainstate_target=params,
-                trainstate_shard_fns=None,
+                trainstate_target=None,
+                trainstate_shard_fns={'params': base_shard_fns},
             )
 
             if FLAGS.lora_mode:
                 logging.info("Loading LoRA parameters...")
-                # # Get LoRA parameter partition rules
-                # lora_model_ps = match_partition_rules(
-                #     LLaMAConfigurator.get_lora_partition_rules(), lora_shape
-                # )
-                # lora_shard_fns, _ = make_shard_and_gather_fns(
-                #     lora_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
-                # )
+                # Get LoRA parameter partition rules
+                lora_model_ps = match_partition_rules(
+                    LLaMAConfigurator.get_lora_partition_rules(), lora_shape
+                )
+                lora_shard_fns, _ = make_shard_and_gather_fns(
+                    lora_model_ps, get_float_dtype_by_name(FLAGS.param_dtype)
+                )
 
                 # Load checkpoint with sharding functions
-                _, params = StreamingCheckpointer.load_trainstate_checkpoint(
+                params = StreamingCheckpointer.load_trainstate_checkpoint(
                     FLAGS.load_lora,
-                    trainstate_target=params,
-                    trainstate_shard_fns=None, #{'params': lora_shard_fns}  # Single wrap for lora_params mode
+                    trainstate_target={'params': params},
+                    target_shape={'params': full_shape},
+                    trainstate_shard_fns={'params': lora_shard_fns}  # Single wrap for lora_params mode
                 )
             
-                # Print fingerprint of LoRA weights
-                if jax.process_index() == 0:
-                    flattened = flatten_dict(params)
-                    for key, value in flattened.items():
-                        if 'lora_' in '/'.join(str(x) for x in key):
-                            logging.info(f"LoRA weight fingerprint for {key}:")
-                            logging.info(f"  Mean: {jnp.mean(value)}")
-                            logging.info(f"  First 10 values: {value.flatten()[:10]}")
-
-        #params = base_params
+                # # Print fingerprint of LoRA weights
+                # if jax.process_index() == 0:
+                #     flattened = flatten_dict(params)
+                #     for key, value in flattened.items():
+                #         if 'lora_' in '/'.join(str(x) for x in key):
+                #             logging.info(f"LoRA weight fingerprint for {key}:")
+                #             logging.info(f"  Mean: {jnp.mean(value)}")
+                #             logging.info(f"  First 10 values: {value.flatten()[:10]}")
+                #
 
         model_ps = match_partition_rules(
             combined_rules, params
@@ -242,12 +234,25 @@ class ModelServer(LMServer):
             return output, rng_generator()
         self.forward_greedy_generate = forward_greedy_generate
 
-        logging.info("Setting up JAX mesh and compiling serving functions...")
-        mesh_start = time.time()
-        self.mesh = LLaMAConfigurator.get_jax_mesh(FLAGS.mesh_dim)
+        def print_params_tree(tree, path=''):
+            if isinstance(tree, dict):
+                for key, value in tree.items():
+                    new_path = f"{path}/{key}" if path else key
+                    print_params_tree(value, new_path)
+            else:
+                shape_dtype = jax.eval_shape(lambda: tree)
+                if jax.process_index() == 0:
+                    logging.info(f"Parameter: {path} with shape {shape_dtype.shape} and sharding {tree.sharding}")
+        print_params_tree(params)
+
+        # shard_fns, _ = make_shard_and_gather_fns(
+        #     model_ps, get_float_dtype_by_name(FLAGS.param_dtype), loop=True
+        # )
+
         with self.mesh:
             logging.info("Sharding parameters across mesh...")
-            self.params = tree_apply(shard_fns, params)
+            #self.params = tree_apply(shard_fns, params)
+            self.params = params
             self.sharded_rng = next_rng()
             logging.info(f"Mesh setup complete. Took {time.time() - mesh_start:.1f}s")
 
@@ -384,17 +389,24 @@ class ModelServer(LMServer):
             input_tokens=input_tokens,
             attention_mask=input_mask,
         )
-        with self.mesh:
-            output, self.sharded_rng = self.forward_generate(
-                self.params, self.sharded_rng, batch, temperature
-            )
-            output = jax.device_get(output)
-        output_text = []
-        for text in list(self.tokenizer.batch_decode(output)):
-            if self.tokenizer.eos_token in text:
-                text = text.split(self.tokenizer.eos_token, maxsplit=1)[0]
-            output_text.append(text)
+        try:
+            with self.mesh:
+                output, self.sharded_rng = self.forward_generate(
+                    self.params, self.sharded_rng, batch, temperature
+                )
+                output = jax.device_get(output)
 
+            output_text = []
+            for text in list(self.tokenizer.batch_decode(output)):
+                if self.tokenizer.eos_token in text:
+                    text = text.split(self.tokenizer.eos_token, maxsplit=1)[0]
+                output_text.append(text)
+        except Exception as e:
+            if jax.process_index() == 0:
+                logging.error(f"Error generating text: {e}")
+                import traceback
+                traceback.print_exc()
+            output_text = ['']
         return output_text
 
     def greedy_until(self, prefix_text, until, max_length):
@@ -472,7 +484,7 @@ class ModelServer(LMServer):
 #     logging.info(f"Total initialization time: {time.time() - start_time:.1f}s")
 #     logging.info("Starting server...")
 #     server.run()
-
+#
 #
 # if __name__ == "__main__":
 #     mlxu.run(main)

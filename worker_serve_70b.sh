@@ -14,23 +14,23 @@ cd ~/EasyLM
 
 # Run worker client
 python -m EasyLM.worker_client \
-    --mesh_dim='1,-1,1' \
+    --mesh_dim='1,-1,8' \
     --dtype='bf16' \
-    --llama.base_model='llama32_1b' \
+    --llama.base_model='llama31_70b' \
     --param_dtype='bf16' \
-    --tokenizer='meta-llama/Llama-3.2-1B' \
-    --load_checkpoint="base_params::/mnt/$INFER_DISK/llama-3.2-1b.easylm" \
-    --input_length=1024 \
-    --seq_length=2048 \
+    --tokenizer='meta-llama/Llama-3.1-70B' \
+    --load_checkpoint="base_params::/mnt/$INFER_DISK/llama-3.1-70b" \
+    --input_length=768 \
+    --seq_length=1536 \
     --do_sample=True \
     --top_k=150 \
     --top_p=0.99 \
     --lm_server.port=5009 \
-    --load_lora="base_params::/mnt/$INFER_DISK/easylm_chkp/30bf244bf80c464d854f0c1addf55409/checkpoint_1000/streaming_params" \
+    --load_lora="base_params::/mnt/$INFER_DISK/easylm_chkp/c67b8e2d8fab409a82fece05a6f1297a/checkpoint_1500/streaming_params" \
     --lora_mode=True \
-    --llama.lora_rank=16 \
-    --llama.lora_alpha=32 \
+    --llama.lora_rank=32 \
+    --llama.lora_alpha=64 \
     --llama.lora_dropout=0.1 \
     --llama.lora_attn=true \
-    --llama.lora_mlp=true \
+    --llama.lora_mlp=false \
     --coordinator_url='http://51.81.181.136:5010'
