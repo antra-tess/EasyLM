@@ -21,6 +21,7 @@ from EasyLM.bpt import blockwise_ffn, blockwise_attn
 from EasyLM.jax_utils import (
     with_sharding_constraint, get_jax_mesh, get_gradient_checkpoint_policy
 )
+from EasyLM.attention.flash_attention import flash_attention
 
 
 class LLaMAConfigurator(object):
@@ -61,6 +62,10 @@ class LLaMAConfigurator(object):
         config.lora_attn = mlxu.config_placeholder(bool)
         config.lora_mlp = mlxu.config_placeholder(bool)
         config.lora_merge_weights = mlxu.config_placeholder(bool)
+        config.use_flash_attention = mlxu.config_placeholder(bool)
+        config.flash_platform = mlxu.config_placeholder(str)  # 'triton', 'pallas', or 'jax'
+        config.flash_block_q = mlxu.config_placeholder(int)  # block size for query
+        config.flash_block_k = mlxu.config_placeholder(int)  # block size for key
         return mlxu.update_config_dict(config, updates)
 
     @classmethod
@@ -106,6 +111,11 @@ class LLaMAConfigurator(object):
         config.lora_attn = True      # whether to apply LoRA to attention W_q, W_k, W_v, W_o
         config.lora_mlp = False      # optionally, also apply LoRA to MLP layers
         config.lora_merge_weights = False  # If True, merges LoRA into main weights at inference time
+
+        config.use_flash_attention = False 
+        config.flash_platform = 'triton'  # Default to triton since it's generally fastest
+        config.flash_block_q = 128  # Default block sizes from the paper
+        config.flash_block_k = 128
 
         updates = {
             'debug': dict(
@@ -587,6 +597,26 @@ class FlaxLLaMAAttention(nn.Module):
                 prevent_cse=True,
             )
             attn_output = with_sharding_constraint(attn_output, PS(("dp", "fsdp"), None, "mp", None))
+        elif self.config.use_flash_attention and not (self.has_variable("cache", "cached_key") or init_cache):
+            # Convert attention mask to bias
+            attention_bias = None
+            if attention_mask is not None:
+                attention_bias = jax.lax.select(
+                    attention_mask > 0,
+                    jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
+                    jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
+                )
+
+            attn_output = flash_attention(
+                query=xq,
+                key=xk,
+                value=xv,
+                bias=attention_bias,
+                causal=True,
+                chunk_size=self.config.flash_block_q
+            )
+            attn_weights = None
+
         else:
             query_length, key_length = xq.shape[1], xk.shape[1]
             with jax.ensure_compile_time_eval():
@@ -1238,8 +1268,8 @@ class LoRALinear(nn.Module):
             base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
         else:
             base_out = with_sharding_constraint(base_out, PS(("dp", "fsdp"), None, "mp"))
-            
-        
+
+
         y = base_out + delta
 
         # Add bias if present
