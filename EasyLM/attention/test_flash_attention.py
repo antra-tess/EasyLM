@@ -3,15 +3,14 @@ import jax.numpy as jnp
 import numpy as np
 from jax.sharding import Mesh, PartitionSpec as PS
 from absl.testing import absltest, parameterized
-from EasyLM.jax_utils import with_sharding_constraint
+from EasyLM.jax_utils import with_sharding_constraint, get_jax_mesh
 
 from EasyLM.attention.flash_attention import flash_attention
 
 class FlashAttentionTest(parameterized.TestCase):
     def setUp(self):
         # Set up mesh using LLaMAConfigurator's method
-        from EasyLM.models.llama.llama_model import LLaMAConfigurator
-        self.mesh = LLaMAConfigurator.get_jax_mesh((2, -1, 2))  # 2 dp, all remaining/fsdp, 2 mp
+        self.mesh = get_jax_mesh((2, -1, 2))  # 2 dp, all remaining/fsdp, 2 mp
         
     def get_attention_inputs(self, batch=1, seq_len=16, num_q_heads=8, num_kv_heads=4, head_dim=32):
         """Helper to create test inputs with proper sharding."""
