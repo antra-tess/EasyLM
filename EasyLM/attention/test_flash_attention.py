@@ -24,13 +24,10 @@ class FlashAttentionTest(parameterized.TestCase):
         
         # Apply sharding using make_array_from_callback
         with self.mesh:
-            mesh_sharding = jax.sharding.NamedSharding(
-                self.mesh, PS(('dp',), None, 'mp', None)
-            )
-            # Use device_put with explicit sharding
-            query = jax.device_put(query, mesh_sharding)
-            key = jax.device_put(key_tensor, mesh_sharding)
-            value = jax.device_put(value, mesh_sharding)
+            # Use with_sharding_constraint for multi-host compatibility
+            query = with_sharding_constraint(query, PS(("dp",), None, "mp", None))
+            key = with_sharding_constraint(key_tensor, PS(("dp",), None, "mp", None))
+            value = with_sharding_constraint(value, PS(("dp",), None, "mp", None))
             
         return query, key, value
 
