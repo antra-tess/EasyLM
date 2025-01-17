@@ -118,10 +118,11 @@ def flash_attention(
             l_new = l_inner * jnp.exp(m_inner - m_new) + scores.sum(-1, keepdims=True)
             # Reshape m_new for proper broadcasting
             scale = jnp.exp(m_inner - m_new)  # [batch, num_heads, chunk_size, 1]
-            # Reshape scale to (batch, num_heads, chunk_size, 1)
+            # Reshape scale to match o_inner dimensions
             scale = jnp.expand_dims(scale, axis=-1)  # Add dim for head_dim
+            scale = jnp.transpose(scale, (0, 2, 1, 3, 4))  # Reorder to (batch, num_heads, chunk_size, 1, 1)
             
-            o_new = (o_inner * scale + 
+            o_new = (o_inner * scale[..., 0] +  # Remove last dim after broadcast
                     jnp.einsum('bhqk,bkhd->bqhd', scores, v))
             
             # Apply sharding to intermediate results
