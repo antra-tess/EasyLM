@@ -86,11 +86,17 @@ class FlashAttentionTest(parameterized.TestCase):
             # Run reference
             ref_output = self.reference_attention(query, key, value)
             
-            # Compare
-            np.testing.assert_allclose(
-                flash_output, ref_output, 
-                rtol=1e-5, atol=1e-5
-            )
+            # Gather results from all devices for comparison
+            from jax.experimental.multihost_utils import process_allgather
+            
+            flash_gathered = process_allgather(flash_output)
+            ref_gathered = process_allgather(ref_output)
+            
+            if jax.process_index() == 0:  # Only compare on main process
+                np.testing.assert_allclose(
+                    flash_gathered, ref_gathered,
+                    rtol=1e-5, atol=1e-5
+                )
 
     def test_invalid_head_config(self):
         """Test that invalid head configurations raise error."""
