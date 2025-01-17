@@ -12,7 +12,7 @@ class FlashAttentionTest(parameterized.TestCase):
         # Set up mesh using LLaMAConfigurator's method
         self.mesh = get_jax_mesh("1,-1,1", ("dp", "fsdp", "mp"))
         
-    def get_attention_inputs(self, batch=1, seq_len=16, num_q_heads=8, num_kv_heads=4, head_dim=32):
+    def get_attention_inputs(self, batch=32, seq_len=16, num_q_heads=8, num_kv_heads=4, head_dim=32):
         """Helper to create test inputs with proper sharding."""
         key = jax.random.PRNGKey(0)
         k1, k2, k3 = jax.random.split(key, 3)
