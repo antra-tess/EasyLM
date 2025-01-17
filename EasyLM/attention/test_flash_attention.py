@@ -69,13 +69,13 @@ class FlashAttentionTest(parameterized.TestCase):
     )
     def test_flash_attention_matches_reference(self, seq_len, num_q_heads, num_kv_heads):
         """Test that flash attention matches reference implementation."""
-        query, key, value = self.get_attention_inputs(
-            seq_len=seq_len,
-            num_q_heads=num_q_heads,
-            num_kv_heads=num_kv_heads
-        )
-        
         with self.mesh:
+            query, key, value = self.get_attention_inputs(
+                seq_len=seq_len,
+                num_q_heads=num_q_heads,
+                num_kv_heads=num_kv_heads
+            )
+            
             # Run flash attention
             flash_output = flash_attention(
                 query=query,
