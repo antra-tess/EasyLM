@@ -10,7 +10,7 @@ from EasyLM.attention.flash_attention import flash_attention
 class FlashAttentionTest(parameterized.TestCase):
     def setUp(self):
         # Set up mesh using LLaMAConfigurator's method
-        self.mesh = get_jax_mesh((2, -1, 2), ("dp", "fsdp", "mp"))
+        self.mesh = get_jax_mesh("2,-1,2", ("dp", "fsdp", "mp"))
         
     def get_attention_inputs(self, batch=1, seq_len=16, num_q_heads=8, num_kv_heads=4, head_dim=32):
         """Helper to create test inputs with proper sharding."""
