@@ -528,10 +528,9 @@ class FlaxLLaMAAttention(nn.Module):
     ):
         xq, xk, xv = self.wq(hidden_states), self.wk(hidden_states), self.wv(hidden_states)
 
-        # Shard sequence dimension across FSDP devices to reduce memory
-        xq = with_sharding_constraint(xq, PS(("dp", "fsdp"), "fsdp", "mp"))
-        xk = with_sharding_constraint(xk, PS(("dp", "fsdp"), "fsdp", "mp"))
-        xv = with_sharding_constraint(xv, PS(("dp", "fsdp"), "fsdp", "mp"))
+        xq = with_sharding_constraint(xq, PS(("dp", "fsdp"), None, "mp"))
+        xk = with_sharding_constraint(xk, PS(("dp", "fsdp"), None, "mp"))
+        xv = with_sharding_constraint(xv, PS(("dp", "fsdp"), None, "mp"))
 
         xq = einops.rearrange(
             xq, 'b s (h d) -> b s h d',
@@ -587,8 +586,7 @@ class FlaxLLaMAAttention(nn.Module):
                 float32_logits=True,
                 prevent_cse=True,
             )
-            # Maintain sequence sharding through attention output
-            attn_output = with_sharding_constraint(attn_output, PS(("dp", "fsdp"), "fsdp", "mp", None))
+            attn_output = with_sharding_constraint(attn_output, PS(("dp", "fsdp"), None, "mp", None))
         else:
             query_length, key_length = xq.shape[1], xk.shape[1]
             with jax.ensure_compile_time_eval():
@@ -633,8 +631,7 @@ class FlaxLLaMAAttention(nn.Module):
                 dtype=jnp.promote_types(self.dtype, jnp.float32),
                 precision=self.precision,
             )
-            # Shard one sequence dimension across FSDP devices to reduce memory
-            attn_weights = with_sharding_constraint(attn_weights, PS(("dp", "fsdp"), "mp", "fsdp", None))
+            attn_weights = with_sharding_constraint(attn_weights, PS(("dp", "fsdp"), "mp", None, None))
             attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, xv, precision=self.precision)
 
         attn_output = einops.rearrange(attn_output, 'b s h d -> b s (h d)')

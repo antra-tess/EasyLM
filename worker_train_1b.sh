@@ -20,6 +20,9 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --llama.lora_dropout=0.1 \
     --llama.lora_attn=true \
     --llama.lora_mlp=true \
+    --llama.scan_attention=true \
+    --llama.scan_query_chunk_size=1024 \
+    --llama.scan_key_chunk_size=1024 \
     --tokenizer="meta-llama/Llama-3.2-1B" \
     --load_checkpoint='base_params::/mnt/disk2/llama-3.2-1b.easylm' \
     --train_dataset.type='json' \
