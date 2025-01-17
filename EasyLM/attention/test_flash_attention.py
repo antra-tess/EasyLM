@@ -19,14 +19,26 @@ class FlashAttentionTest(parameterized.TestCase):
         
         # Create inputs
         query = jax.random.normal(k1, (batch, seq_len, num_q_heads, head_dim))
-        key = jax.random.normal(k2, (batch, seq_len, num_kv_heads, head_dim))
+        key_tensor = jax.random.normal(k2, (batch, seq_len, num_kv_heads, head_dim))
         value = jax.random.normal(k3, (batch, seq_len, num_kv_heads, head_dim))
         
-        # Apply sharding
+        # Apply sharding using make_array_from_callback
         with self.mesh:
-            query = jax.device_put(query, PS(('dp',), None, 'mp', None))
-            key = jax.device_put(key, PS(('dp',), None, 'mp', None))
-            value = jax.device_put(value, PS(('dp',), None, 'mp', None))
+            query = jax.make_array_from_callback(
+                query.shape, 
+                PS(('dp',), None, 'mp', None),
+                lambda idx: query[idx]
+            )
+            key = jax.make_array_from_callback(
+                key_tensor.shape,
+                PS(('dp',), None, 'mp', None),
+                lambda idx: key_tensor[idx]
+            )
+            value = jax.make_array_from_callback(
+                value.shape,
+                PS(('dp',), None, 'mp', None),
+                lambda idx: value[idx]
+            )
             
         return query, key, value
 
