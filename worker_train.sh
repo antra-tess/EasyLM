@@ -21,8 +21,11 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_train \
     --train_dataset.type='json' \
     --train_dataset.text_processor.template="$(cat templates/borg_chat.yaml)" \
     --train_dataset.json_dataset.path="/mnt/disk2/simulect_conversations.jsonl" \
-    --train_dataset.json_dataset.seq_length=1024 \
+    --train_dataset.json_dataset.seq_length=2048 \
     --train_dataset.json_dataset.batch_size=64 \
+    --llama.scan_attention=true \
+    --llama.scan_query_chunk_size=1024 \
+    --llama.scan_key_chunk_size=1024 \
     --optimizer.type='adamw' \
     --optimizer.adamw_optimizer.lr=3e-4 \
     --optimizer.adamw_optimizer.end_lr=3e-5 \

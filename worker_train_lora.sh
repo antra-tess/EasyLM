@@ -12,21 +12,24 @@ echo "HF_TOKEN is${HF_TOKEN:+ set}${HF_TOKEN:-" not set"}"
 
 ## Run training
 cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
-    --mesh_dim='1,-1,1' \
+    --mesh_dim='1,-1,4' \
     --dtype='bf16' \
     --llama.base_model='llama31_8b' \
     --llama.lora_rank=8 \
     --llama.lora_alpha=16 \
     --llama.lora_dropout=0.1 \
     --llama.lora_attn=true \
-    --llama.lora_mlp=false \
+    --llama.lora_mlp=true \
+    --llama.scan_attention=true \
+    --llama.scan_query_chunk_size=1024 \
+    --llama.scan_key_chunk_size=1024 \
     --tokenizer="meta-llama/Meta-Llama-3.1-8B" \
     --load_checkpoint='base_params::/mnt/disk2/llama-3.1-8b' \
     --train_dataset.type='json' \
     --train_dataset.text_processor.template="$(cat templates/borg_chat.yaml)" \
     --train_dataset.json_dataset.path="/mnt/disk2/simulect_conversations.jsonl" \
-    --train_dataset.json_dataset.seq_length=1024 \
-    --train_dataset.json_dataset.batch_size=64 \
+    --train_dataset.json_dataset.seq_length=4096 \
+    --train_dataset.json_dataset.batch_size=32 \
     --optimizer.type='adamw' \
     --optimizer.adamw_optimizer.lr=5e-4 \
     --optimizer.adamw_optimizer.end_lr=1e-5 \

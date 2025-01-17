@@ -20,7 +20,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --train_dataset.type='json' \
     --train_dataset.text_processor.template="$(cat templates/borg_chat.yaml)" \
     --train_dataset.json_dataset.path="/mnt/disk2/repligate_conversations.jsonl" \
-    --train_dataset.json_dataset.seq_length=1024 \
+    --train_dataset.json_dataset.seq_length=2048 \
     --train_dataset.json_dataset.batch_size=64 \
     --optimizer.type='adamw' \
     --optimizer.adamw_optimizer.lr=1e-4 \
@@ -31,7 +31,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --llama.lora_alpha=64 \
     --llama.lora_dropout=0.1 \
     --llama.lora_attn=true \
-    --llama.lora_mlp=false \
+    --llama.lora_mlp=true \
     --optimizer.adamw_optimizer.end_lr=1e-5 \
     --optimizer.adamw_optimizer.lr_warmup_steps=75 \
     --optimizer.adamw_optimizer.lr_decay_steps=1000 \
