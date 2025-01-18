@@ -76,8 +76,8 @@ def flash_attention(
             v = value[:, idx_k]
             
             # Reshape to collapse scan dimensions
-            k = einops.rearrange(k, 'b n1 n2 c h d -> b c h d')
-            v = einops.rearrange(v, 'b n1 n2 c h d -> b c h d')
+            k = einops.rearrange(k, 'b n1 n2 c h d -> b (n1 n2 c) h d')
+            v = einops.rearrange(v, 'b n1 n2 c h d -> b (n1 n2 c) h d')
             
             # Now repeat for groups
             k = einops.repeat(k, 'b c h d -> b c (h g) d', g=num_groups)
