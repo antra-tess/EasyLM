@@ -144,7 +144,6 @@ def flash_attention_2d_blocked(
             v_chunk = value_blocked[:, k_block_idx]
 
             # Debug input values
-            debug_tensor(f"Query chunk (q={q_block_idx})", query_chunk)
             debug_tensor(f"Key chunk (k={k_block_idx})", k_chunk)
             debug_tensor(f"Value chunk (k={k_block_idx})", v_chunk)
 
