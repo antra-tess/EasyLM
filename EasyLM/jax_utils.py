@@ -423,7 +423,7 @@ def tree_apply(fns, tree):
     return jax.tree_util.tree_map(lambda fn, x: fn(x), fns, tree)
 
 
-def debug_sharded(array):
+def debug_sharded(name, array):
     """Helper for debugging sharded arrays that works inside jitted functions.
 
     Args:
