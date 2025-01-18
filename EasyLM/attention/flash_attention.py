@@ -86,9 +86,10 @@ def flash_attention(
             scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
 
             from EasyLM.jax_utils import debug_sharded
-            debug_sharded("Query", q)
-            debug_sharded("Key", k)
-            debug_sharded("Raw scores", scores)
+            from jax.experimental.multihost_utils import process_allgather
+            debug_sharded("Query", q, gather_fn=process_allgather)
+            debug_sharded("Key", k, gather_fn=process_allgather)
+            debug_sharded("Raw scores", scores, gather_fn=process_allgather)
 
             if bias is not None:
                 # Handle GQA bias if provided
@@ -121,7 +122,7 @@ def flash_attention(
 
             m_new = jnp.maximum(m_inner, scores.max(-1, keepdims=True))
             scores = jnp.exp(scores - m_new)
-            debug_sharded("Post-softmax scores", scores)
+            debug_sharded("Post-softmax scores", scores, gather_fn=process_allgather)
             l_new = l_inner * jnp.exp(m_inner - m_new) + scores.sum(-1, keepdims=True)
             # Reshape m_new for proper broadcasting
             scale = jnp.exp(m_inner - m_new)  # [batch, num_heads, chunk_size, 1]
@@ -173,6 +174,6 @@ def flash_attention(
 
     # Debug prints after all operations complete
     from EasyLM.jax_utils import debug_sharded
-    debug_sharded("Final output", output)
+    debug_sharded("Final output", output, gather_fn=process_allgather)
 
     return output
