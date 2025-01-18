@@ -307,7 +307,8 @@ def flash_attention(
             (m_init, l_init, o_init),
             jnp.arange(key.shape[1])
         )
-        o_normalized = o_final / l_final
+        l_final_t = jnp.transpose(l_final, (0, 2, 1, 3))  # -> [b, chunk_size, h, 1]
+        o_normalized = o_final / l_final_t
         return o_normalized
 
     # Process each query chunk independently
