@@ -163,27 +163,22 @@ class FlashAttentionTest(parameterized.TestCase):
             expected = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
             expected = expected.at[:, 1:3, :, :].set(1.0)
 
-            # Create jitted test function
-            @jax.jit
-            def _test_attention_pattern(query, key, value, expected):
-                output = flash_attention(
-                    query=query,
-                    key=key,
-                    value=value,
-                    causal=False,
-                    chunk_size=2
-                )
+            # Calculate diff on all processes
                 diff = jnp.abs(output - expected)
                 max_diff = jnp.max(diff)
 
-                # Debug prints inside jitted function
-                jax.debug.print("Output first row: {}", output[0, :, 0, 0])
-                jax.debug.print("Expected first row: {}", expected[0, :, 0, 0])
-                jax.debug.print("Max diff: {}", max_diff)
+            # Gather results for debugging
+            from jax.experimental.multihost_utils import process_allgather
+            output_gathered = process_allgather(output)
+            expected_gathered = process_allgather(expected)
+            max_diff_idx = jnp.argmax(jnp.abs(output_gathered - expected_gathered))
 
-                return output, max_diff
-
-            output, max_diff = _test_attention_pattern(query, key, value, expected)
+            jax.debug.print("Output shape: {}", output_gathered.shape)
+            jax.debug.print("First token: {}, Middle token: {}, Last token: {}",
+                          output_gathered[0, 0, 0, 0], output_gathered[0, 1, 0, 0], output_gathered[0, -1, 0, 0])
+            jax.debug.print("Max diff at index {}", max_diff_idx)
+            jax.debug.print("Output value at max diff: {}", output_gathered.flatten()[max_diff_idx])
+            jax.debug.print("Expected value at max diff: {}", expected_gathered.flatten()[max_diff_idx])
 
             assert jnp.all(max_diff < 1e-5), f"Attention pattern test failed with max difference {max_diff}"
 
