@@ -72,9 +72,24 @@ def flash_attention_2d_blocked(
         )
     num_groups = num_q_heads // num_kv_heads
 
+    # Precompute token positions [0, 1, 2, ..., seq_len-1]
+    all_positions = jnp.arange(seq_len, dtype=jnp.int32)
+
     # Scale the queries by sqrt(head_dim)
     scale = jnp.sqrt(jnp.array(head_dim, dtype=query.dtype))
     query = query / scale
+
+    # Helper function for dynamic slicing of key/value blocks
+    def get_kv_chunk(blocked_array, k_idx):
+        # k_idx is traced integer. We slice axis=1 (the n_k dimension)
+        chunk = jax.lax.dynamic_slice_in_dim(
+            blocked_array,
+            start_index=k_idx,
+            slice_size=1,
+            axis=1
+        )
+        # Squeeze out the block dimension: [b, 1, kc, heads, d] -> [b, kc, heads, d]
+        return jnp.squeeze(chunk, axis=1)
 
     # Reshape the sequences into 2D blocks: [b, n_q, q_chunk, heads, dim], [b, n_k, k_chunk, heads, dim]
     # where n_q = seq_len // q_chunk_size, n_k = seq_len // kv_chunk_size (assuming divisibility)
@@ -140,12 +155,17 @@ def flash_attention_2d_blocked(
             """
             (m_curr, l_curr, o_curr) = carry
 
-            k_chunk = key_blocked[:, k_block_idx]  # [batch, k_chunk_size, num_kv_heads, head_dim]
-            v_chunk = value_blocked[:, k_block_idx]
+            # Slice out the actual chunk of K/V using dynamic slice
+            k_chunk = get_kv_chunk(key_blocked, k_block_idx)  # [batch, k_chunk_size, num_kv_heads, head_dim]
+            v_chunk = get_kv_chunk(value_blocked, k_block_idx)
 
             # Debug input values
             debug_tensor(f"Key chunk (k={k_block_idx})", k_chunk)
             debug_tensor(f"Value chunk (k={k_block_idx})", v_chunk)
+
+            # Get correct position offsets for this block
+            k_offset = k_block_idx * kv_chunk_size
+            local_k_positions = all_positions[k_offset:k_offset + kv_chunk_size]
 
             # GQA: expand key/value heads to match q_heads = num_kv_heads * num_groups
             k_chunk = einops.repeat(
@@ -206,12 +226,13 @@ def flash_attention_2d_blocked(
                 scores = scores + bias_block
 
             if causal:
-                # Build a causal mask for these sub-blocks:
-                q_positions = q_block_idx * q_chunk_size + jnp.arange(q_chunk_size)
-                k_positions = k_block_idx * kv_chunk_size + jnp.arange(kv_chunk_size)
-                # For each (q, k), mask if q < k
-                # shape [qc, kc]
-                causal_mask = q_positions[:, None] < k_positions[None, :]
+                # Get query positions for this block
+                q_offset = q_block_idx * q_chunk_size
+                local_q_positions = all_positions[q_offset:q_offset + q_chunk_size]
+                
+                # Build causal mask using correct absolute positions
+                # shape [qc, kc] where True means position should be masked
+                causal_mask = local_q_positions[:, None] < local_k_positions[None, :]
                 scores = jnp.where(
                     causal_mask[None, :, None, :],
                     jnp.finfo(scores.dtype).min,
