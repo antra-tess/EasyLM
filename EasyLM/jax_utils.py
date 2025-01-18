@@ -423,7 +423,7 @@ def tree_apply(fns, tree):
     return jax.tree_util.tree_map(lambda fn, x: fn(x), fns, tree)
 
 
-def debug_sharded(name, array):
+def debug_sharded(name, array, gather_fn):
     """Helper for debugging sharded arrays that works inside jitted functions.
 
     Args:
@@ -431,14 +431,14 @@ def debug_sharded(name, array):
         array: The sharded array to debug
     """
     # Use jax.debug.print with named format arguments
+    gathered = gather_fn(array)
     jax.debug.print(
         "\n=== \nShape: {shape}\nValues: {values}\nStats: mean={mean} max={max} min={min}",
-        shape=array.shape,
-        values=array.reshape(-1)[:4],
-        mean=array.mean(),
-        max=array.max(),
-        min=array.min(),
+        shape=gathered.shape,
+        values=gathered.reshape(-1)[:4],
+        mean=gathered.mean(),
+        max=gathered.max(),
+        min=gathered.min(),
 #        name=jnp.array([ord(c) for c in name], dtype=jnp.int32)  # Convert string to array of ASCII codes
     )
-    return array
 
