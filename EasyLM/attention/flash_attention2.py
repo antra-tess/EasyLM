@@ -243,14 +243,42 @@ def flash_attention_2d_blocked(
         # Done scanning over all k-chunks -> normalize final output block
         # l_inner shape [B, QH, qc, 1], reorder for broadcast
         l_bcast = einops.rearrange(l_inner, 'b h qc 1 -> b qc h 1')
+        jax.debug.print("Normalization factor stats - Mean: {}, Max: {}, Min: {}", 
+                       jnp.mean(l_bcast), jnp.max(l_bcast), jnp.min(l_bcast))
+        
         # o_inner: [B, qc, QH, D]
         o_block = o_inner / (l_bcast + 1e-9)
+        jax.debug.print("Output block stats - Mean: {}, Max: {}, Min: {}", 
+                       jnp.mean(o_block), jnp.max(o_block), jnp.min(o_block))
+        
+        # Debug first/middle/last token in block
+        jax.debug.print("Block tokens [first, middle, last]: [{}, {}, {}]",
+                       o_block[0, 0, 0, 0], 
+                       o_block[0, o_block.shape[1]//2, 0, 0],
+                       o_block[0, -1, 0, 0])
+        
         out_chunks.append(o_block)
 
     # Combine all q-chunks back
     # out_chunks is a list of length n_q_chunks,
     # each shape [B, q_chunk_size, QH, D]
     output = jnp.concatenate(out_chunks, axis=1)  # reassemble along seq dimension
+    jax.debug.print("Combined output shape: {}", output.shape)
+    
+    # Debug final output statistics
+    jax.debug.print("Final output stats - Mean: {}, Max: {}, Min: {}", 
+                   jnp.mean(output), jnp.max(output), jnp.min(output))
+    
+    # Debug attention patterns across sequence
+    jax.debug.print("Attention pattern check:")
+    jax.debug.print("First token outputs - Mean: {}, Max: {}, Min: {}", 
+                   jnp.mean(output[:, 0]), jnp.max(output[:, 0]), jnp.min(output[:, 0]))
+    jax.debug.print("Middle token outputs - Mean: {}, Max: {}, Min: {}", 
+                   jnp.mean(output[:, output.shape[1]//2]), 
+                   jnp.max(output[:, output.shape[1]//2]), 
+                   jnp.min(output[:, output.shape[1]//2]))
+    jax.debug.print("Last token outputs - Mean: {}, Max: {}, Min: {}", 
+                   jnp.mean(output[:, -1]), jnp.max(output[:, -1]), jnp.min(output[:, -1]))
 
     # Finally, restore shape [batch, seq_len, QH, D]
     output = with_sharding_constraint(
