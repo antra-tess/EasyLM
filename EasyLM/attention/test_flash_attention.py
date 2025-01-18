@@ -161,9 +161,6 @@ class FlashAttentionTest(parameterized.TestCase):
             diff = jnp.abs(output - expected)
             max_diff = jnp.max(diff)
             assert jnp.all(max_diff < 1e-5), f"Attention pattern test failed with max difference {max_diff}"
-                    flash_gathered, ref_gathered,
-                    rtol=1e-5, atol=1e-5
-                )
 
     def test_invalid_head_config(self):
         """Test that invalid head configurations raise error."""
