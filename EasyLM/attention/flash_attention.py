@@ -112,9 +112,12 @@ def flash_attention(
                 scores = scores + bias_block
 
             if causal:
-                q_pos = idx_n * chunk_size + jnp.arange(chunk_size)
-                k_pos = idx_k * chunk_size + jnp.arange(chunk_size)
-                causal_mask = q_pos[:, None] < k_pos[None, :]
+                # Pre-compute positions using static arrays
+                with jax.ensure_compile_time_eval():
+                    q_pos = jnp.arange(chunk_size)
+                    k_pos = jnp.arange(chunk_size)
+                    causal_mask = (idx_n * chunk_size + q_pos[:, None]) < (idx_k * chunk_size + k_pos[None, :])
+                
                 scores = jnp.where(
                     causal_mask[None, None, :, :],
                     jnp.finfo(scores.dtype).min,
