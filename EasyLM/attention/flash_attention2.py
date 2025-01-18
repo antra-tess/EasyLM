@@ -289,10 +289,9 @@ def flash_attention_2d_blocked(
             sum_scores = jnp.sum(scores_shifted, axis=-1, keepdims=True)
             l_new = l_curr * exp_factor + sum_scores  # [b, qc, heads, 1]
 
-            # Since scores_shifted is [b, qc, heads, kc] and v_chunk is [b, kc, heads, d],
-            # we want out_block in [b, qc, heads, d].
-            # new pattern:    'bqhk,bkh(d)-> bqhd'
-            out_block = jnp.einsum("bqhk,bkhd->bqhd", scores_shifted, v_chunk)
+            # Since scores_shifted is [b, h, q, k] and v_chunk is [b, k, h, d],
+            # we want out_block in [b, h, q, d] to match bhqk layout
+            out_block = jnp.einsum("bhqk,bkhd->bhqd", scores_shifted, v_chunk)
 
 
             # We must multiply existing o_curr by exp_factor, which is shaped [b, qc, heads, 1]
