@@ -423,6 +423,33 @@ def tree_apply(fns, tree):
     return jax.tree_util.tree_map(lambda fn, x: fn(x), fns, tree)
 
 
+def create_debug_gather_fn(mesh=None, partition_spec=None):
+    """Create a gather function for debug printing that handles sharded arrays.
+    
+    Args:
+        mesh: Optional JAX mesh to use for gathering
+        partition_spec: Optional partition spec for output
+    
+    Returns:
+        Function that gathers a sharded array for debug printing
+    """
+    # Convert float tensors to same dtype
+    def to_dtype(tensor):
+        return tensor
+
+    # Create gather function using pjit
+    jax_gather_fn = pjit(
+        to_dtype,
+        in_shardings=partition_spec,
+        out_shardings=None  # Gather to single device
+    )
+
+    def gather_fn(tensor):
+        return jax.device_get(jax_gather_fn(tensor))
+
+    return gather_fn
+
+
 def debug_sharded(name, array, gather_fn):
     """Helper for debugging sharded arrays that works inside jitted functions.
 
