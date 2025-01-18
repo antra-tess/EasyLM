@@ -327,27 +327,24 @@ def flash_attention_2d_blocked(
     # Map over all q-blocks. This yields shape [n_q, b, qc, heads, d]
     all_q_outputs = jax.lax.map(process_all_q_chunks, jnp.arange(n_q))
 
-    # Rearrange back to [b, (n_q * qc) = seq_len, heads, d]
-    output = einops.rearrange(
-        all_q_outputs,
-        "nq b qc h d -> b (nq qc) h d",
-        nq=n_q,
-        qc=q_chunk_size
-    )
-
     # Debug final output before reshaping
     debug_tensor("Final output before reshape", all_q_outputs)
 
-    # Rearrange back to [b, (n_q * qc) = seq_len, heads, d]
+    # First transpose to get [b, h, n_q, qc, d]
+    output = jnp.transpose(all_q_outputs, (1, 2, 0, 3, 4))
+
+    # Then merge n_q and qc dimensions to get [b, h, seq_len, d]
     output = einops.rearrange(
-        all_q_outputs,
-        "nq b qc h d -> b (nq qc) h d",
+        output,
+        "b h nq qc d -> b h (nq qc) d",
         nq=n_q,
         qc=q_chunk_size
     )
 
-    # Finally, apply a last with_sharding_constraint so the final output has the standard shape
-    # consistent with your original: PS(("dp", "fsdp"), None, "mp", None)
+    # Finally transpose to match expected output shape [b, seq_len, h, d]
+    output = jnp.transpose(output, (0, 2, 1, 3))
+
+    # Apply final sharding constraint
     output = with_sharding_constraint(output, PS(("dp", "fsdp"), None, "mp", None))
 
     # Debug final reshaped output
