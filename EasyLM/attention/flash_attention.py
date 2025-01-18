@@ -249,7 +249,7 @@ def flash_attention(
             # Max/sum over key_chunk_size dimension (last dim)
             m_new = jnp.maximum(m_inner, scores.max(-1, keepdims=True))  # [batch, heads, chunk_size, 1]
             scores = jnp.exp(scores - m_new)
-            scores_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), "mp", None, None))
+            scores_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, None, None))
             debug_tensor(f"Post-softmax scores (Q{idx_n}->K{idx_k})", scores, gather_fn=scores_gather_fn)
             l_new = l_inner * jnp.exp(m_inner - m_new) + scores.sum(-1, keepdims=True)  # [batch, heads, chunk_size, 1]
             # Reshape m_new for proper broadcasting
