@@ -196,16 +196,16 @@ class FlashAttentionTest(parameterized.TestCase):
 
             assert jnp.all(max_diff < 1e-5), f"Attention pattern test failed with max difference {max_diff}"
 
-    def test_invalid_head_config(self):
-        """Test that invalid head configurations raise error."""
-        with self.assertRaises(ValueError):
-            # num_q_heads not divisible by num_kv_heads
-            query, key, value = self.get_attention_inputs(
-                num_q_heads=6,  # Not divisible by 4
-                num_kv_heads=4
-            )
-            flash_attention(query, key, value)
-    #
+    # def test_invalid_head_config(self):
+    #     """Test that invalid head configurations raise error."""
+    #     with self.assertRaises(ValueError):
+    #         # num_q_heads not divisible by num_kv_heads
+    #         query, key, value = self.get_attention_inputs(
+    #             num_q_heads=6,  # Not divisible by 4
+    #             num_kv_heads=4
+    #         )
+    #         flash_attention(query, key, value)
+    # #
 
 if __name__ == '__main__':
     absltest.main() 

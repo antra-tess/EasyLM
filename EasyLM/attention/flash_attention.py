@@ -38,6 +38,8 @@ def flash_attention(
     Returns:
         Output tensor with shape [batch, seq_len, num_q_heads, head_dim]
     """
+    jax.debug.print("Starting Flash Attention")
+
     batch_size, seq_len, num_q_heads, head_dim = query.shape
     _, _, num_kv_heads, _ = key.shape
 
