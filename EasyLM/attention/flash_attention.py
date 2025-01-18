@@ -176,9 +176,9 @@ def flash_attention(
     output = einops.rearrange(output, 'n b c h d -> b (n c) h d')
     output = with_sharding_constraint(output, PS(("dp", "fsdp"), None, "mp", None))
     
-    # Debug prints after all operations complete
-    output_gathered = process_allgather(output)
-    jax.debug.print("Output shape: {shape}", shape=output_gathered.shape)
-    jax.debug.print("First token values: {values}", values=output_gathered[0, :4, 0, 0])
+    # # Debug prints after all operations complete
+    # output_gathered = process_allgather(output)
+    # jax.debug.print("Output shape: {shape}", shape=output_gathered.shape)
+    # jax.debug.print("First token values: {values}", values=output_gathered[0, :4, 0, 0])
     
     return output
