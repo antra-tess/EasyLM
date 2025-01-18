@@ -186,9 +186,9 @@ def flash_attention(
                    l_shape=init_l.shape,
                    o_shape=init_o.shape)
 
-    # Scan over query chunks
+    # Scan over query chunks with pjitted function
     _, output = jax.lax.scan(
-        chunk_scanner,
+        lambda carry, idx: chunk_scanner(*carry, idx),
         (init_m, init_l, init_o),
         jnp.arange(query.shape[1])
     )
