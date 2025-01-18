@@ -112,20 +112,27 @@ def flash_attention(
         if bias is not None:
             # Handle GQA bias if provided
             if bias.shape[1] == num_q_heads:
+                # Slice the bias for current chunks
                 bias_block = jax.lax.dynamic_slice(
                     bias,
                     (0, 0, idx_n * chunk_size, idx_k * chunk_size),
                     (bias.shape[0], bias.shape[1], chunk_size, chunk_size)
                 )
+                # Transpose to match scores shape [batch, heads, chunk_size, key_chunk_size]
+                bias_block = jnp.transpose(bias_block, (0, 1, 2, 3))
             elif bias.shape[1] == num_kv_heads:
+                # Slice the bias for current chunks
                 bias_block = jax.lax.dynamic_slice(
                     bias,
                     (0, 0, idx_n * chunk_size, idx_k * chunk_size),
                     (bias.shape[0], bias.shape[1], chunk_size, chunk_size)
                 )
+                # Repeat for each query group and transpose
                 bias_block = einops.repeat(
                     bias_block, 'b h q k -> b (h g) q k', g=num_groups
                 )
+                # Transpose to match scores shape [batch, heads, chunk_size, key_chunk_size]
+                bias_block = jnp.transpose(bias_block, (0, 1, 2, 3))
             scores = scores + bias_block
 
         if causal:
