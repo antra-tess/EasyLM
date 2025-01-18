@@ -245,20 +245,26 @@ def flash_attention(
                     scores
                 )
 
-            # Max/sum over key_chunk_size dimension (last dim)
-            m_new = jnp.maximum(m_inner, scores.max(-1, keepdims=True))  # [batch, heads, chunk_size, 1]
-            scores = jnp.exp(scores - m_new)
+            # Compute max scores per query to maintain stability
+            # scores shape: [batch, heads, q_chunk, k_chunk]
+            m_new = jnp.maximum(m_inner, scores.max(-1, keepdims=True))  # [batch, heads, q_chunk, 1]
+            
+            # Apply stable softmax per query
+            scores = jnp.exp(scores - m_new)  # Broadcast per query
             scores_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, None, None))
             debug_tensor(f"Post-softmax scores (Q{idx_n}->K{idx_k})", scores, gather_fn=scores_gather_fn)
-            l_new = l_inner * jnp.exp(m_inner - m_new) + scores.sum(-1, keepdims=True)  # [batch, heads, chunk_size, 1]
-            # Reshape m_new for proper broadcasting
-            scale = jnp.exp(m_inner - m_new)  # [batch, heads, chunk_size, 1]
-            # Reshape scale to match o_inner dimensions
-            scale = jnp.expand_dims(scale, axis=-1)  # Add dim for head_dim
-            scale = jnp.transpose(scale, (0, 2, 1, 3, 4))  # Reorder to (batch, num_heads, chunk_size, 1, 1)
-
-            o_new = (o_inner * scale[..., 0] +  # Remove last dim after broadcast
-                     jnp.einsum('bhck,bkhd->bchd', scores, v))
+            
+            # Update running sums per query
+            l_new = l_inner * jnp.exp(m_inner - m_new) + scores.sum(-1, keepdims=True)  # [batch, heads, q_chunk, 1]
+            
+            # Compute scale factor for output update
+            scale = jnp.exp(m_inner - m_new)  # [batch, heads, q_chunk, 1]
+            # Reshape scale to match o_inner dimensions [batch, q_chunk, heads, head_dim]
+            scale = jnp.transpose(scale, (0, 2, 1, 3))  # [batch, q_chunk, heads, 1]
+            
+            # Update output with proper broadcasting
+            o_new = (o_inner * scale + 
+                    jnp.einsum('bhqk,bkhd->bqhd', scores, v))
 
             # Apply sharding to intermediate results
             o_new = with_sharding_constraint(o_new, PS(("dp", "fsdp"), None, "mp", None))
@@ -288,17 +294,19 @@ def flash_attention(
         q = with_sharding_constraint(q, PS(("dp", "fsdp"), None, "mp", None))
 
         # Initialize fresh partial sums for this query chunk
+        # Shape: [batch, heads, q_chunk, 1] for m and l to track per-query maxes/sums
         m_init = with_sharding_constraint(
             jnp.full((batch_size, num_q_heads, chunk_size, 1), -jnp.inf),
-            PS(("dp", "fsdp"), "mp", None, None)
+            PS(("dp", "fsdp"), None, None, None)
         )
         l_init = with_sharding_constraint(
             jnp.zeros((batch_size, num_q_heads, chunk_size, 1)),
-            PS(("dp", "fsdp"), "mp", None, None)
+            PS(("dp", "fsdp"), None, None, None)
         )
+        # Shape: [batch, q_chunk, heads, head_dim] for output accumulation
         o_init = with_sharding_constraint(
             jnp.zeros((batch_size, chunk_size, num_q_heads, head_dim)),
-            PS(("dp", "fsdp"), None, "mp", None)
+            PS(("dp", "fsdp"), None, None, None)
         )
 
         # Scan over key chunks with fresh partial sums
