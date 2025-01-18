@@ -458,11 +458,17 @@ def debug_tensor(name, array, gather_fn=None):
         array: The array to debug
         gather_fn: Optional function to gather sharded array
     """
-    def print_tensor_info(name, shape, values, stats):
+    from functools import partial
+    
+    # Create callback with name already included
+    def print_tensor_info(shape, values, stats):
         print(f"\n=== {name} ===")
         print(f"Shape: {shape}")
         print(f"First few values: {values}")
         print(f"Stats: mean={stats[0]:.6f}, max={stats[1]:.6f}, min={stats[2]:.6f}")
+    
+    # Create partial that includes the name
+    tensor_printer = partial(print_tensor_info)
 
     # Gather array if needed
     if gather_fn is not None:
@@ -474,5 +480,5 @@ def debug_tensor(name, array, gather_fn=None):
     stats = (array.mean(), array.max(), array.min())
     
     # Use callback to print during computation
-    jax.debug.callback(print_tensor_info, name, shape, values, stats)
+    jax.debug.callback(tensor_printer, shape, values, stats)
 
