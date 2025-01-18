@@ -6,7 +6,7 @@ from absl.testing import absltest, parameterized
 from EasyLM.jax_utils import with_sharding_constraint, get_jax_mesh
 from jax.experimental.multihost_utils import process_allgather
 
-from EasyLM.attention.flash_attention import flash_attention
+from EasyLM.attention.flash_attention2 import flash_attention_2d_blocked as flash_attention
 
 
 class FlashAttentionTest(parameterized.TestCase):
@@ -90,7 +90,8 @@ class FlashAttentionTest(parameterized.TestCase):
                     query=query,
                     key=key,
                     value=value,
-                    chunk_size=2
+                    q_chunk_size=2,
+                    k_chunk_size=2
                 )
 
 
