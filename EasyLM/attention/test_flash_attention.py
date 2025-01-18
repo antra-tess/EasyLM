@@ -98,6 +98,73 @@ class FlashAttentionTest(parameterized.TestCase):
                     rtol=1e-5, atol=1e-5
                 )
 
+    @parameterized.parameters(
+        {"causal": True},
+        {"causal": False}
+    )
+    def test_causal_masking(self, causal):
+        """Test that causal masking properly blocks future tokens."""
+        with self.mesh:
+            # Create inputs where later tokens should strongly attend to earlier ones
+            query = jnp.ones((1, 4, 1, 1))  # Simple 4-token sequence
+            key = value = jnp.ones((1, 4, 1, 1))
+            
+            # Make later tokens have strong attention to earlier ones
+            value = value * jnp.arange(1, 5).reshape(1, 4, 1, 1)
+            
+            # Run attention with and without causal mask
+            output = flash_attention(
+                query=query,
+                key=key,
+                value=value,
+                causal=causal,
+                chunk_size=2
+            )
+            
+            if causal:
+                # Each token should only see values up to its position
+                expected = jnp.array([[[[1.]], [[1.5]], [[2.]], [[2.5]]]])
+            else:
+                # All tokens should see all values (average = 2.5)
+                expected = jnp.ones((1, 4, 1, 1)) * 2.5
+            
+            diff = jnp.abs(output - expected)
+            max_diff = jnp.max(diff)
+            assert jnp.all(max_diff < 1e-5), f"Causal masking test failed with max difference {max_diff}"
+
+    def test_attention_patterns(self):
+        """Test specific attention patterns."""
+        with self.mesh:
+            # Create a sequence where middle tokens should attend strongly to first token
+            batch_size, seq_len, num_heads, head_dim = 1, 4, 1, 1
+            query = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
+            key = value = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
+            
+            # Set up pattern: first token has value 1, others 0
+            value = value.at[:, 0, :, :].set(1.0)
+            # Middle tokens have strong attention to first token
+            query = query.at[:, 1:3, :, :].set(1.0)
+            key = key.at[:, 0, :, :].set(1.0)
+            
+            output = flash_attention(
+                query=query,
+                key=key,
+                value=value,
+                causal=False,
+                chunk_size=2
+            )
+            
+            # Middle tokens should have value close to 1, others close to 0
+            expected = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
+            expected = expected.at[:, 1:3, :, :].set(1.0)
+            
+            diff = jnp.abs(output - expected)
+            max_diff = jnp.max(diff)
+            assert jnp.all(max_diff < 1e-5), f"Attention pattern test failed with max difference {max_diff}"
+                    flash_gathered, ref_gathered,
+                    rtol=1e-5, atol=1e-5
+                )
+
     def test_invalid_head_config(self):
         """Test that invalid head configurations raise error."""
         with self.assertRaises(ValueError):
