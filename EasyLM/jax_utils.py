@@ -438,7 +438,7 @@ def debug_sharded(name, array):
         mean=array.mean(),
         max=array.max(),
         min=array.min(),
-        name=jnp.array([ord(c) for c in name], dtype=jnp.int32)  # Convert string to array of ASCII codes
+#        name=jnp.array([ord(c) for c in name], dtype=jnp.int32)  # Convert string to array of ASCII codes
     )
     return array
 
