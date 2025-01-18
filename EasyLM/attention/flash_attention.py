@@ -1,3 +1,5 @@
+import logging
+
 import jax
 import jax.numpy as jnp
 import einops
@@ -58,6 +60,8 @@ def flash_attention(
     value = with_sharding_constraint(value, PS(("dp", "fsdp"), None, None, "mp", None))
 
     def chunk_scanner(carry, idx_n):
+        logging.info(f"Chunk scanner starts for chunk {idx_n}")
+        jax.debug.print("Chunk scanner starts")
         m, l, o = carry  # max_so_far, l_acc, output_acc
 
         # Get current query chunk and maintain sharding
