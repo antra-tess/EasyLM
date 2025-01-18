@@ -95,7 +95,9 @@ def flash_attention(
         v = with_sharding_constraint(v, PS(("dp", "fsdp"), None, "mp", None))
 
         # Compute attention scores for this block
-        scores = jnp.einsum('bqhd,bkhd->bhqk', query, k)
+        # query_chunk shape: [batch, chunk_size, num_heads, head_dim]
+        # k shape: [batch, chunk_size, num_heads, head_dim]
+        scores = jnp.einsum('bchd,bkhd->bhck', query_chunk, k)
         scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
 
         from EasyLM.jax_utils import debug_sharded, create_debug_gather_fn
