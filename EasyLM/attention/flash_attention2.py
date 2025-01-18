@@ -156,14 +156,26 @@ def flash_attention_2d_blocked(
 
             # *** CHANGED ***: row-wise stable softmax
             # `scores` is [B, QH, qc, kc]
+            # Debug raw attention scores
+            jax.debug.print("Raw scores stats - Mean: {}, Max: {}, Min: {}", 
+                           jnp.mean(scores), jnp.max(scores), jnp.min(scores))
+
             # We want to update each query row's running max in `m_inner`.
             # `m_inner` is [B, QH, qc, 1], so we do a max over last dim (k).
             # That yields shape [B, QH, qc, 1].
             max_block = jnp.max(scores, axis=-1, keepdims=True)  # per row
             m_new = jnp.maximum(m_inner, max_block)  # shape [B, QH, qc, 1]
 
+            # Debug max values to verify per-query stability
+            jax.debug.print("Max values per query chunk - Max: {}, Min: {}", 
+                           jnp.max(m_new), jnp.min(m_new))
+
             # Exponentiate shifted by the new max
             scores = jnp.exp(scores - m_new)  # broadcast sub per row
+
+            # Debug softmax outputs
+            jax.debug.print("Post-softmax stats - Mean: {}, Max: {}, Min: {}", 
+                           jnp.mean(scores), jnp.max(scores), jnp.min(scores))
 
             # *** CHANGED ***: accumulate the stable sums
             # l_inner is [B, QH, qc, 1]
