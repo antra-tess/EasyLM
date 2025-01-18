@@ -85,11 +85,10 @@ def flash_attention(
             scores = jnp.einsum('bqhd,bkhd->bhqk', q, k)
             scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
 
-            # Debug prints for attention computation
-            jax.debug.print("Query shape: {shape}", shape=q.shape)
-            jax.debug.print("Key shape: {shape}", shape=k.shape)
-            jax.debug.print("Raw scores shape: {shape}", shape=scores.shape)
-            jax.debug.print("Raw scores values: {values}", values=scores)
+            from EasyLM.jax_utils import debug_sharded
+            debug_sharded("Query", q)
+            debug_sharded("Key", k)
+            debug_sharded("Raw scores", scores)
 
             if bias is not None:
                 # Handle GQA bias if provided
@@ -122,7 +121,7 @@ def flash_attention(
 
             m_new = jnp.maximum(m_inner, scores.max(-1, keepdims=True))
             scores = jnp.exp(scores - m_new)
-            jax.debug.print("Post-softmax scores: {scores}", scores=scores)
+            debug_sharded("Post-softmax scores", scores)
             l_new = l_inner * jnp.exp(m_inner - m_new) + scores.sum(-1, keepdims=True)
             # Reshape m_new for proper broadcasting
             scale = jnp.exp(m_inner - m_new)  # [batch, num_heads, chunk_size, 1]
