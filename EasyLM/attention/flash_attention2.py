@@ -245,7 +245,7 @@ def flash_attention_2d_blocked(
                     scores,
                 )
 
-            # Debug raw scores before masking
+            # Compute raw scores and apply causal masking if needed
             debug_tensor(f"Raw scores before mask (q={q_block_idx}, k={k_block_idx})", scores)
 
             if causal:
@@ -260,17 +260,18 @@ def flash_attention_2d_blocked(
                 # Build causal mask using correct absolute positions
                 # shape [qc, kc] where True means position should be masked
                 causal_mask = local_q_positions[:, None] < local_k_positions[None, :]
+                # Expand mask to [1, 1, qc, kc] for broadcasting with [b, h, qc, kc]
+                causal_mask = causal_mask[None, None, :, :]
                 scores = jnp.where(
-                    causal_mask[None, :, None, :],
+                    causal_mask,
                     jnp.finfo(scores.dtype).min,
                     scores,
                 )
                 
-                # Debug scores after masking
-                debug_tensor(f"Scores after mask (q={q_block_idx}, k={k_block_idx})", scores)
+                debug_tensor(f"Scores after causal mask (q={q_block_idx}, k={k_block_idx})", scores)
 
-            # 1) Compute local block max
-            block_max = jnp.max(scores, axis=-1, keepdims=True)  # [b, heads, qc, 1]
+            # Now proceed with stable softmax using global max
+            block_max = jnp.max(scores, axis=-1, keepdims=True)  # [b, h, qc, 1]
             debug_tensor(f"Block max (q={q_block_idx}, k={k_block_idx})", block_max)
 
             # 2) Update global max - this is what we'll use for shifting
