@@ -106,8 +106,9 @@ class FlashAttentionTest(parameterized.TestCase):
         """Test that causal masking properly blocks future tokens."""
         with self.mesh:
             # Create inputs where later tokens should strongly attend to earlier ones
-            query = jnp.ones((1, 4, 1, 1))  # Simple 4-token sequence
-            key = value = jnp.ones((1, 4, 1, 1))
+            batch_size, seq_len, num_heads, head_dim = 32, 4, 4, 32  # Match mesh dimensions: fsdp=8, mp=4
+            query = jnp.ones((batch_size, seq_len, num_heads, head_dim))
+            key = value = jnp.ones((batch_size, seq_len, num_heads, head_dim))
             
             # Make later tokens have strong attention to earlier ones
             value = value * jnp.arange(1, 5).reshape(1, 4, 1, 1)
@@ -123,10 +124,13 @@ class FlashAttentionTest(parameterized.TestCase):
             
             if causal:
                 # Each token should only see values up to its position
-                expected = jnp.array([[[[1.]], [[1.5]], [[2.]], [[2.5]]]])
+                expected = jnp.broadcast_to(
+                    jnp.array([[[[1.]], [[1.5]], [[2.]], [[2.5]]]]),
+                    (batch_size, seq_len, num_heads, head_dim)
+                )
             else:
                 # All tokens should see all values (average = 2.5)
-                expected = jnp.ones((1, 4, 1, 1)) * 2.5
+                expected = jnp.ones((batch_size, seq_len, num_heads, head_dim)) * 2.5
             
             diff = jnp.abs(output - expected)
             max_diff = jnp.max(diff)
