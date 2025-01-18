@@ -59,10 +59,18 @@ def flash_attention(
     key = with_sharding_constraint(key, PS(("dp", "fsdp"), None, None, "mp", None))
     value = with_sharding_constraint(value, PS(("dp", "fsdp"), None, None, "mp", None))
 
-    def chunk_scanner(carry, idx_n):
-        logging.info(f"Chunk scanner tracing starts")
-        jax.debug.print("Chunk scanner starts")
-        m, l, o = carry  # max_so_far, l_acc, output_acc
+    # Define chunk scanner with pjit
+    @partial(jax.jit,
+            in_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for carry m
+                         PS(("dp", "fsdp"), "mp", None, None),  # for carry l
+                         PS(("dp", "fsdp"), None, "mp", None),  # for carry o
+                         None),  # for idx_n
+            out_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for new m
+                         PS(("dp", "fsdp"), "mp", None, None),  # for new l
+                         PS(("dp", "fsdp"), None, "mp", None)))  # for new o
+    def chunk_scanner(m, l, o, idx_n):
+        # Simple debug print with just the index
+        jax.debug.print("Chunk scanner idx: {idx}", idx=idx_n)
 
         # Get current query chunk and maintain sharding
         q = query[:, idx_n]  # [batch, chunk_size, num_q_heads, head_dim]
