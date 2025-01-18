@@ -196,6 +196,13 @@ def flash_attention(
                 'b c h d -> b c (h g) d', g=num_groups
             )
 
+            # Debug prints to track computation
+            query_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, "mp", None))
+            scores_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), "mp", None, None))
+            
+            debug_tensor(f"Query chunk {idx_n}", q, gather_fn=query_gather_fn)
+            debug_tensor(f"Key chunk {idx_k}", k, gather_fn=query_gather_fn)
+
             # Apply sharding after repeat
             k = with_sharding_constraint(k, PS(("dp", "fsdp"), None, "mp", None))
             v = with_sharding_constraint(v, PS(("dp", "fsdp"), None, "mp", None))
@@ -203,15 +210,7 @@ def flash_attention(
             # Compute attention scores for this block
             scores = jnp.einsum('bqhd,bkhd->bhqk', q, k)
             scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
-
-            from EasyLM.jax_utils import debug_tensor, create_debug_gather_fn
-            # Create gather functions with appropriate partition specs
-            query_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, "mp", None))
-            scores_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), "mp", None, None))
-            
-            debug_tensor("Query", q, gather_fn=query_gather_fn)
-            debug_tensor("Key", k, gather_fn=query_gather_fn)  # Same spec as query
-            debug_tensor("Raw scores", scores, gather_fn=scores_gather_fn)
+            debug_tensor(f"Raw scores (Q{idx_n}->K{idx_k})", scores, gather_fn=scores_gather_fn)
 
             if bias is not None:
                 # Handle GQA bias if provided
