@@ -56,6 +56,7 @@ def flash_attention(
     key = with_sharding_constraint(key, PS(("dp", "fsdp"), None, None, "mp", None))
     value = with_sharding_constraint(value, PS(("dp", "fsdp"), None, None, "mp", None))
 
+    @jax.jit
     def chunk_scanner(carry, idx_n):
         m, l, o = carry  # max_so_far, l_acc, output_acc
         
@@ -63,6 +64,7 @@ def flash_attention(
         q = query[:, idx_n]  # [batch, chunk_size, num_q_heads, head_dim]
         q = with_sharding_constraint(q, PS(("dp", "fsdp"), None, "mp", None))
         
+        @jax.jit
         def kv_chunk_scanner(carry, idx_k):
             m_inner, l_inner, o_inner = carry
             
