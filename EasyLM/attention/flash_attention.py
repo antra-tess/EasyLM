@@ -85,11 +85,11 @@ def flash_attention(
             scores = jnp.einsum('bqhd,bkhd->bhqk', q, k)
             scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
 
-            from EasyLM.jax_utils import debug_sharded
-            from jax.experimental.multihost_utils import process_allgather
-            debug_sharded("Query", q, gather_fn=process_allgather)
-            debug_sharded("Key", k, gather_fn=process_allgather)
-            debug_sharded("Raw scores", scores, gather_fn=process_allgather)
+            from EasyLM.jax_utils import debug_sharded, create_debug_gather_fn
+            gather_fn = create_debug_gather_fn()
+            debug_sharded("Query", q, gather_fn=gather_fn)
+            debug_sharded("Key", k, gather_fn=gather_fn)
+            debug_sharded("Raw scores", scores, gather_fn=gather_fn)
 
             if bias is not None:
                 # Handle GQA bias if provided
