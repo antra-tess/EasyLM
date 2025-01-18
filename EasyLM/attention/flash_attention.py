@@ -319,9 +319,9 @@ def flash_attention(
     output = einops.rearrange(output, 'n b c h d -> b (n c) h d')
     output = with_sharding_constraint(output, PS(("dp", "fsdp"), None, "mp", None))
 
-    # Debug prints after all operations complete
+    # Debug final attention output
     from EasyLM.jax_utils import debug_tensor, create_debug_gather_fn
     output_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, "mp", None))
-    debug_tensor("Final output", output, gather_fn=output_gather_fn)
+    debug_tensor("Flash attention output [expect: first/last=0.0, middle=1.0]", output, gather_fn=output_gather_fn)
 
     return output
