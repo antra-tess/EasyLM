@@ -6,7 +6,6 @@ import jax.numpy as jnp
 import einops
 from typing import Optional
 from jax.sharding import PartitionSpec as PS
-from jax.experimental.pjit import pjit
 from EasyLM.jax_utils import with_sharding_constraint
 
 
@@ -65,15 +64,6 @@ def flash_attention(
     key = with_sharding_constraint(key, PS(("dp", "fsdp"), None, None, "mp", None))
     value = with_sharding_constraint(value, PS(("dp", "fsdp"), None, None, "mp", None))
 
-    # Define kv chunk scanner with pjit
-    # @partial(pjit,
-    #          in_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for m_inner
-    #                        PS(("dp", "fsdp"), "mp", None, None),  # for l_inner
-    #                        PS(("dp", "fsdp"), None, "mp", None),  # for o_inner
-    #                        None),  # for idx_k
-    #          out_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for new m
-    #                         PS(("dp", "fsdp"), "mp", None, None),  # for new l
-    #                         PS(("dp", "fsdp"), None, "mp", None)))  # for new o
     def kv_chunk_scanner(query_chunk, m_inner, l_inner, o_inner, idx_k, idx_n):
         from EasyLM.jax_utils import debug_tensor, create_debug_gather_fn
         
@@ -166,16 +156,6 @@ def flash_attention(
 
         return (m_new, l_new, o_new), None
 
-    # Define chunk scanner with pjit
-    # @partial(pjit,
-    #         in_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for carry m
-    #                      PS(("dp", "fsdp"), "mp", None, None),  # for carry l
-    #                      PS(("dp", "fsdp"), None, "mp", None),  # for carry o
-    #                      None),  # for idx_n
-    #         out_shardings=((PS(("dp", "fsdp"), "mp", None, None),  # for new m
-    #                       PS(("dp", "fsdp"), "mp", None, None),  # for new l
-    #                       PS(("dp", "fsdp"), None, "mp", None)),  # for new o
-    #                      PS(("dp", "fsdp"), None, "mp", None)))  # for output o
     def chunk_scanner(m, l, o, idx_n):
         # Simple debug print with just the index
         jax.debug.print("Chunk scanner idx: {idx}", idx=idx_n)
