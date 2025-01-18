@@ -226,11 +226,14 @@ def flash_attention(
                 scores = scores + bias_block
 
             if causal:
-                q_pos = idx_n * chunk_size + jnp.arange(chunk_size)
-                k_pos = idx_k * chunk_size + jnp.arange(chunk_size)
+                # Calculate positions in the original sequence
+                q_pos = idx_n * chunk_size + jnp.arange(chunk_size)  # [chunk_size]
+                k_pos = idx_k * chunk_size + jnp.arange(chunk_size)  # [chunk_size]
+                # Create mask: [chunk_size, key_chunk_size]
                 causal_mask = q_pos[:, None] < k_pos[None, :]
+                # Broadcast to scores shape: [batch, heads, chunk_size, key_chunk_size]
                 scores = jnp.where(
-                    causal_mask[None, None, :, :],
+                    causal_mask[None, None, :, :],  # Add batch and heads dims
                     jnp.finfo(scores.dtype).min,
                     scores
                 )
