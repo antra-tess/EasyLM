@@ -141,9 +141,9 @@ def flash_attention(
             
             return (m_new, l_new, o_new), None
 
-        # Use static indices for inner scan
+        # Create replicated indices for inner scan
         num_kv_chunks = key.shape[1]
-        kv_indices = jax.lax.iota(jnp.int32, num_kv_chunks)
+        kv_indices = jax.device_put(jnp.arange(num_kv_chunks), jax.sharding.NamedSharding(self.mesh, None))
         
         # Scan over key/value chunks
         (m_new, l_new, o_new), _ = jax.lax.scan(
@@ -168,9 +168,9 @@ def flash_attention(
         PS(("dp", "fsdp"), None, "mp", None)
     )
     
-    # Use static indices for scan
+    # Create replicated indices using device_put with None sharding
     num_chunks = query.shape[1]
-    indices = jax.lax.iota(jnp.int32, num_chunks)
+    indices = jax.device_put(jnp.arange(num_chunks), jax.sharding.NamedSharding(self.mesh, None))
     
     # Scan over query chunks
     _, output = jax.lax.scan(
