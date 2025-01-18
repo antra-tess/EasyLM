@@ -468,4 +468,5 @@ def debug_sharded(name, array, gather_fn):
         min=gathered.min(),
 #        name=jnp.array([ord(c) for c in name], dtype=jnp.int32)  # Convert string to array of ASCII codes
     )
+    print(f"Debugging sharded array: {name}")
 
