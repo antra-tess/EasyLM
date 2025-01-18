@@ -163,9 +163,13 @@ def flash_attention_2d_blocked(
             debug_tensor(f"Key chunk (k={k_block_idx})", k_chunk)
             debug_tensor(f"Value chunk (k={k_block_idx})", v_chunk)
 
-            # Get correct position offsets for this block
+            # Get correct position offsets for this block using dynamic_slice
             k_offset = k_block_idx * kv_chunk_size
-            local_k_positions = all_positions[k_offset:k_offset + kv_chunk_size]
+            local_k_positions = jax.lax.dynamic_slice(
+                all_positions,
+                (k_offset,),
+                (kv_chunk_size,)
+            )
 
             # GQA: expand key/value heads to match q_heads = num_kv_heads * num_groups
             k_chunk = einops.repeat(
@@ -226,9 +230,13 @@ def flash_attention_2d_blocked(
                 scores = scores + bias_block
 
             if causal:
-                # Get query positions for this block
+                # Get query positions for this block using dynamic_slice
                 q_offset = q_block_idx * q_chunk_size
-                local_q_positions = all_positions[q_offset:q_offset + q_chunk_size]
+                local_q_positions = jax.lax.dynamic_slice(
+                    all_positions,
+                    (q_offset,),
+                    (q_chunk_size,)
+                )
                 
                 # Build causal mask using correct absolute positions
                 # shape [qc, kc] where True means position should be masked
