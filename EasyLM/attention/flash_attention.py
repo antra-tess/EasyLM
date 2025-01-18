@@ -87,10 +87,15 @@ def flash_attention(
             scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
             
             # Debug prints for attention computation
-            jax.debug.print("Block scores shape: {shape}", shape=scores.shape)
-            jax.debug.print("Query block [0,1] (middle token): {q}", q=q[0, 1])
-            jax.debug.print("Key block [0,0] (first token): {k}", k=k[0, 0])
-            jax.debug.print("Raw scores for middle token: {scores}", scores=scores[0, :, 1])
+            from jax.experimental.multihost_utils import process_allgather
+            scores_gathered = process_allgather(scores)
+            q_gathered = process_allgather(q)
+            k_gathered = process_allgather(k)
+            
+            jax.debug.print("Block scores shape: {shape}", shape=scores_gathered.shape)
+            jax.debug.print("Query block [0,1] (middle token): {q}", q=q_gathered[0, 1])
+            jax.debug.print("Key block [0,0] (first token): {k}", k=k_gathered[0, 0])
+            jax.debug.print("Raw scores for middle token: {scores}", scores_gathered[0, :, 1])
             
             if bias is not None:
                 # Handle GQA bias if provided
@@ -123,7 +128,8 @@ def flash_attention(
 
             m_new = jnp.maximum(m_inner, scores.max(-1, keepdims=True))
             scores = jnp.exp(scores - m_new)
-            jax.debug.print("Post-softmax scores for middle token: {softmax}", softmax=scores[0, :, 1])
+            scores_gathered = process_allgather(scores)
+            jax.debug.print("Post-softmax scores for middle token: {softmax}", softmax=scores_gathered[0, :, 1])
             l_new = l_inner * jnp.exp(m_inner - m_new) + scores.sum(-1, keepdims=True)
             # Reshape m_new for proper broadcasting
             scale = jnp.exp(m_inner - m_new)  # [batch, num_heads, chunk_size, 1]
