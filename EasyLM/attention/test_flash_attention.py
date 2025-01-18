@@ -91,7 +91,7 @@ class FlashAttentionTest(parameterized.TestCase):
                     key=key,
                     value=value,
                     q_chunk_size=2,
-                    k_chunk_size=2
+                    kv_chunk_size=2
                 )
 
 
