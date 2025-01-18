@@ -142,15 +142,11 @@ def flash_attention(
             
             return (m_new, l_new, o_new), None
 
-        # Create replicated indices for inner scan
-        num_kv_chunks = key.shape[1]
-        kv_indices = jax.device_put(jnp.arange(num_kv_chunks), jax.sharding.NamedSharding(mesh, None))
-        
-        # Scan over key/value chunks
+        # Use scan length parameter for inner scan
         (m_new, l_new, o_new), _ = jax.lax.scan(
             kv_chunk_scanner,
             (m, l, o),
-            kv_indices
+            length=key.shape[1]  # Number of key/value chunks
         )
         
         return (m_new, l_new, o_new), o_new
@@ -169,15 +165,11 @@ def flash_attention(
         PS(("dp", "fsdp"), None, "mp", None)
     )
     
-    # Create replicated indices using device_put with None sharding
-    num_chunks = query.shape[1]
-    indices = jax.device_put(jnp.arange(num_chunks), jax.sharding.NamedSharding(mesh, None))
-    
-    # Scan over query chunks
+    # Use scan length parameter instead of indices
     _, output = jax.lax.scan(
         chunk_scanner,
         (init_m, init_l, init_o),
-        indices
+        length=query.shape[1]  # Number of chunks
     )
     
     # Reshape output back to original sequence length and maintain sharding
