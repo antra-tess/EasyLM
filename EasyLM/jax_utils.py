@@ -480,5 +480,5 @@ def debug_tensor(name, array, gather_fn=None):
     stats = (array.mean(), array.max(), array.min())
     
     # Use callback to print during computation
-    jax.debug.callback(tensor_printer, shape, values, stats, ordered=True)
+    jax.debug.callback(tensor_printer, shape, values, stats)
 
