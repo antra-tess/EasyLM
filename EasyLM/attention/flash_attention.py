@@ -157,9 +157,10 @@ def flash_attention(
                          PS(("dp", "fsdp"), "mp", None, None),  # for carry l
                          PS(("dp", "fsdp"), None, "mp", None),  # for carry o
                          None),  # for idx_n
-            out_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for new m
-                         PS(("dp", "fsdp"), "mp", None, None),  # for new l
-                         PS(("dp", "fsdp"), None, "mp", None)))  # for new o
+            out_shardings=((PS(("dp", "fsdp"), "mp", None, None),  # for new m
+                          PS(("dp", "fsdp"), "mp", None, None),  # for new l
+                          PS(("dp", "fsdp"), None, "mp", None)),  # for new o
+                         PS(("dp", "fsdp"), None, "mp", None)))  # for output o
     def chunk_scanner(m, l, o, idx_n):
         # Simple debug print with just the index
         jax.debug.print("Chunk scanner idx: {idx}", idx=idx_n)
