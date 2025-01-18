@@ -421,6 +421,7 @@ def debug_sharded(name, array):
     # Use jax.debug.print with raw values
     jax.debug.print(
         "\n=== {} ===\nShape: {}\nValues: {}\nStats: mean={} max={} min={}",
+        name,
         array.shape,
         array.reshape(-1)[:4],
         array.mean(),
