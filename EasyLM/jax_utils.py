@@ -462,7 +462,7 @@ def debug_tensor(name, array, gather_fn=None):
     
     # Create callback with name already included
     def print_tensor_info(shape, values, stats):
-        print(f"\n=-- {name} --=")
+        print(f"\n=-- {name}[{jax.process_index()}] --=")
         print(f"Shape: {shape}")
         print(f"First few values: {values}")
         print(f"Stats: mean={stats[0]:.6f}, max={stats[1]:.6f}, min={stats[2]:.6f}")
