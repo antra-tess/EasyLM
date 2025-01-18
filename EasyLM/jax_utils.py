@@ -450,30 +450,29 @@ def create_debug_gather_fn(mesh=None, partition_spec=None):
     return gather_fn
 
 
-def debug_sharded(name, array, gather_fn):
-    """Helper for debugging sharded arrays that works inside jitted functions.
-
+def debug_tensor(name, array, gather_fn=None):
+    """Helper for debugging tensors that works inside scanned/jitted functions.
+    
     Args:
-        name: String name/description of the array
-        array: The sharded array to debug
-        gather_fn: Function to gather sharded array
+        name: String name/description of array
+        array: The array to debug
+        gather_fn: Optional function to gather sharded array
     """
-    from functools import partial
-    # Create format string with name already included
-    debug_print = partial(
-        jax.debug.print,
-        f"\n=== {name} ===\nShape: {{shape}}\nValues: {{values}}\nStats: mean={{mean}} max={{max}} min={{min}}"
-    )
+    def print_tensor_info(name, shape, values, stats):
+        print(f"\n=== {name} ===")
+        print(f"Shape: {shape}")
+        print(f"First few values: {values}")
+        print(f"Stats: mean={stats[0]:.6f}, max={stats[1]:.6f}, min={stats[2]:.6f}")
+
+    # Gather array if needed
+    if gather_fn is not None:
+        array = gather_fn(array)
     
-    # Gather array first
-    gathered = gather_fn(array)
+    # Get array info
+    shape = array.shape
+    values = array.reshape(-1)[:4]
+    stats = (array.mean(), array.max(), array.min())
     
-    # Now we only need to pass JAX arrays
-    debug_print(
-        shape=gathered.shape,
-        values=gathered.reshape(-1)[:4],
-        mean=gathered.mean(),
-        max=gathered.max(),
-        min=gathered.min()
-    )
+    # Use callback to print during computation
+    jax.debug.callback(print_tensor_info, name, shape, values, stats)
 
