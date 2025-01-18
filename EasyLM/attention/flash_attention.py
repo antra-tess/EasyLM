@@ -145,6 +145,9 @@ def flash_attention(
 
             return (m_new, l_new, o_new), None
 
+        # Debug the scan length
+        jax.debug.print("Inner scan length: {length}", length=key.shape[1])
+        
         # Scan over key/value chunks
         (m_new, l_new, o_new), _ = jax.lax.scan(
             kv_chunk_scanner,
