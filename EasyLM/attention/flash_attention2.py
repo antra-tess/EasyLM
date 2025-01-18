@@ -126,26 +126,24 @@ def flash_attention_2d_blocked(
         accumulate over all key-chunks in a stable manner.
         """
         # q_chunk: [b, qc, q_heads, d]
-        # We'll track partial sums: m, l, o for the entire q_chunk
-        #   m: [b, qc, q_heads, 1]
-        #   l: [b, qc, q_heads, 1]
-        #   o: [b, qc, q_heads, d]
+        # We'll track partial sums with shape [b, h, q, 1] for m and l
+        # and [b, h, q, d] for o to match bhqk layout
         m_init = jnp.full(
-            (batch_size, q_chunk_size, num_q_heads, 1),
+            (batch_size, num_q_heads, q_chunk_size, 1),
             -jnp.inf,
             dtype=q_chunk.dtype,
         )
         l_init = jnp.zeros(
-            (batch_size, q_chunk_size, num_q_heads, 1), dtype=q_chunk.dtype
+            (batch_size, num_q_heads, q_chunk_size, 1), dtype=q_chunk.dtype
         )
         o_init = jnp.zeros(
-            (batch_size, q_chunk_size, num_q_heads, head_dim),
+            (batch_size, num_q_heads, q_chunk_size, head_dim),
             dtype=q_chunk.dtype,
         )
 
-        m_init = with_sharding_constraint(m_init, PS(("dp", "fsdp"), None, "mp", None))
-        l_init = with_sharding_constraint(l_init, PS(("dp", "fsdp"), None, "mp", None))
-        o_init = with_sharding_constraint(o_init, PS(("dp", "fsdp"), None, "mp", None))
+        m_init = with_sharding_constraint(m_init, PS(("dp", "fsdp"), "mp", None, None))
+        l_init = with_sharding_constraint(l_init, PS(("dp", "fsdp"), "mp", None, None))
+        o_init = with_sharding_constraint(o_init, PS(("dp", "fsdp"), "mp", None, None))
 
         def attend_to_k_chunk(carry, k_block_idx: int):
             """
