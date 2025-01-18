@@ -136,7 +136,7 @@ class FlashAttentionTest(parameterized.TestCase):
         """Test specific attention patterns."""
         with self.mesh:
             # Create a sequence where middle tokens should attend strongly to first token
-            batch_size, seq_len, num_heads, head_dim = 32, 4, 1, 1  # Batch size divisible by fsdp=8
+            batch_size, seq_len, num_heads, head_dim = 32, 4, 4, 32  # Match mesh dimensions: fsdp=8, mp=4
             query = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
             key = value = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
             
