@@ -252,6 +252,8 @@ def flash_attention(
             # Apply stable softmax per query
             scores = jnp.exp(scores - m_new)  # Broadcast per query
             scores_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, None, None))
+            # Debug per-query shifts
+            debug_tensor(f"Max scores per query (Q{idx_n}->K{idx_k})", m_new, gather_fn=scores_gather_fn)
             debug_tensor(f"Post-softmax scores (Q{idx_n}->K{idx_k})", scores, gather_fn=scores_gather_fn)
             
             # Update running sums per query
@@ -315,8 +317,11 @@ def flash_attention(
             (m_init, l_init, o_init),
             jnp.arange(key.shape[1])
         )
-        l_final_t = jnp.transpose(l_final, (0, 2, 1, 3))  # -> [b, chunk_size, h, 1]
-        o_normalized = o_final / l_final_t
+        # Normalize final output with proper broadcasting
+        # l_final shape: [batch, heads, q_chunk, 1]
+        # o_final shape: [batch, q_chunk, heads, head_dim]
+        l_final_t = jnp.transpose(l_final, (0, 2, 1, 3))  # -> [batch, q_chunk, heads, 1]
+        o_normalized = o_final / l_final_t  # Broadcasting over head_dim
         return o_normalized
 
     # Process each query chunk independently
