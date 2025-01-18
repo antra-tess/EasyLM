@@ -170,11 +170,15 @@ def flash_attention(
     output = einops.rearrange(output, 'n b c h d -> b (n c) h d')
     output = with_sharding_constraint(output, PS(("dp", "fsdp"), None, "mp", None))
     
-    # Debug prints after scan completes
-    from jax.experimental.multihost_utils import process_allgather
-    output_gathered = process_allgather(output)
+    # Reshape output back to original sequence length and maintain sharding
+    output = einops.rearrange(output, 'n b c h d -> b (n c) h d')
+    output = with_sharding_constraint(output, PS(("dp", "fsdp"), None, "mp", None))
     
-    jax.debug.print("Output shape: {shape}", shape=output_gathered.shape)
-    jax.debug.print("First token values: {values}", values=output_gathered[0, :4, 0, 0])
+    # Debug prints after all operations complete
+    if jax.process_index() == 0:  # Only gather on main process
+        from jax.experimental.multihost_utils import process_allgather
+        output_gathered = process_allgather(output)
+        jax.debug.print("Output shape: {shape}", shape=output_gathered.shape)
+        jax.debug.print("First token values: {values}", values=output_gathered[0, :4, 0, 0])
     
     return output
