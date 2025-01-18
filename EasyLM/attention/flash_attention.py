@@ -138,11 +138,15 @@ def flash_attention(
             
             return (m_new, l_new, o_new), None
 
+        # Use static indices for inner scan
+        num_kv_chunks = key.shape[1]
+        kv_indices = jax.lax.iota(jnp.int32, num_kv_chunks)
+        
         # Scan over key/value chunks
         (m_new, l_new, o_new), _ = jax.lax.scan(
             kv_chunk_scanner,
             (m, l, o),
-            jnp.arange(key.shape[1])
+            kv_indices
         )
         
         return (m_new, l_new, o_new), o_new
@@ -161,11 +165,15 @@ def flash_attention(
         PS(("dp", "fsdp"), None, "mp", None)
     )
     
+    # Use static indices for scan
+    num_chunks = query.shape[1]
+    indices = jax.lax.iota(jnp.int32, num_chunks)
+    
     # Scan over query chunks
     _, output = jax.lax.scan(
         chunk_scanner,
         (init_m, init_l, init_o),
-        jnp.arange(query.shape[1])
+        indices
     )
     
     # Reshape output back to original sequence length and maintain sharding
