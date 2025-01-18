@@ -415,18 +415,23 @@ def debug_sharded(name, array):
     """Helper for debugging sharded arrays that works inside jitted functions.
     
     Args:
-        name: String name/description of the array
+        name: String name/description of array
         array: The sharded array to debug
     """
-    # Use jax.debug.print with named format arguments
-    jax.debug.print(
-        "\n=== {name} ===\nShape: {shape}\nValues: {values}\nStats: mean={mean} max={max} min={min}",
+    from functools import partial
+    # Create format string with name already included
+    debug_print = partial(
+        jax.debug.print,
+        f"\n=== {name} ===\nShape: {{shape}}\nValues: {{values}}\nStats: mean={{mean}} max={{max}} min={{min}}"
+    )
+    
+    # Now we only need to pass JAX arrays
+    debug_print(
         shape=array.shape,
         values=array.reshape(-1)[:4],
         mean=array.mean(),
         max=array.max(),
-        min=array.min(),
-        name=jnp.array([ord(c) for c in name], dtype=jnp.int32)  # Convert string to array of ASCII codes
+        min=array.min()
     )
     return array
 
