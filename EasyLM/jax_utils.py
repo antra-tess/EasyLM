@@ -456,17 +456,24 @@ def debug_sharded(name, array, gather_fn):
     Args:
         name: String name/description of the array
         array: The sharded array to debug
+        gather_fn: Function to gather sharded array
     """
-    # Use jax.debug.print with named format arguments
+    from functools import partial
+    # Create format string with name already included
+    debug_print = partial(
+        jax.debug.print,
+        f"\n=== {name} ===\nShape: {{shape}}\nValues: {{values}}\nStats: mean={{mean}} max={{max}} min={{min}}"
+    )
+    
+    # Gather array first
     gathered = gather_fn(array)
-    jax.debug.print(
-        "\n=== \nShape: {shape}\nValues: {values}\nStats: mean={mean} max={max} min={min}",
+    
+    # Now we only need to pass JAX arrays
+    debug_print(
         shape=gathered.shape,
         values=gathered.reshape(-1)[:4],
         mean=gathered.mean(),
         max=gathered.max(),
-        min=gathered.min(),
-#        name=jnp.array([ord(c) for c in name], dtype=jnp.int32)  # Convert string to array of ASCII codes
+        min=gathered.min()
     )
-    print(f"Debugging sharded array: {name}")
 
