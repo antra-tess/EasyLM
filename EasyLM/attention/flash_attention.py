@@ -161,6 +161,11 @@ def flash_attention(
 
         return (m_new, l_new, o_new), o_new
 
+    # Debug prints to verify scan setup
+    jax.debug.print("Query shape before scan: {shape}", shape=query.shape)
+    jax.debug.print("Number of chunks to process: {n}", n=query.shape[1])
+    jax.debug.print("Chunk size: {size}", size=chunk_size)
+    
     # Initialize carry with appropriate sharding
     init_m = with_sharding_constraint(
         jnp.full((batch_size, num_q_heads, chunk_size, 1), -jnp.inf),
@@ -174,6 +179,12 @@ def flash_attention(
         jnp.zeros((batch_size, chunk_size, num_q_heads, head_dim)),
         PS(("dp", "fsdp"), None, "mp", None)
     )
+
+    # Debug carry shapes
+    jax.debug.print("Initial carry shapes - m: {m_shape}, l: {l_shape}, o: {o_shape}", 
+                   m_shape=init_m.shape,
+                   l_shape=init_l.shape,
+                   o_shape=init_o.shape)
 
     # Scan over query chunks
     _, output = jax.lax.scan(
