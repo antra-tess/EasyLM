@@ -20,12 +20,11 @@ def flash_attention(
         q_chunk_size: int = 128,  # chunk size for queries
         k_chunk_size: int = 128,  # chunk size for keys
 ):
-    """JAX implementation of Flash Attention with GQA support and TPU sharding.
-
-    Expected sharding patterns:
-    - Input tensors: PS(("dp", "fsdp"), None, "mp", None)
-    - Intermediate tensors maintain similar patterns
-    - Output: PS(("dp", "fsdp"), None, "mp", None)
+    """Fully 2D-blocked flash attention with row-wise stable softmax.
+    
+    We chunk both queries and keys simultaneously, maintaining per-query stability
+    within each block. For each [q_chunk, k_chunk] block, we maintain separate
+    stable-softmax offset (m_inner) and sum (l_inner) for each query row.
 
     Args:
         query: Query tensor with shape [batch, seq_len, num_q_heads, head_dim]
@@ -33,13 +32,15 @@ def flash_attention(
         value: Value tensor with shape [batch, seq_len, num_kv_heads, head_dim]
         bias: Optional attention bias
         causal: Whether to apply causal masking
-        chunk_size: Size of chunks for blocked computation
+        q_chunk_size: Size of chunks for queries
+        k_chunk_size: Size of chunks for keys
 
     Returns:
         Output tensor with shape [batch, seq_len, num_q_heads, head_dim]
     """
-    jax.debug.print("Starting Flash Attention")
+    jax.debug.print("Running fully 2D-blocked flash attention with row-wise stability")
 
+    # Get shapes and validate
     batch_size, seq_len, num_q_heads, head_dim = query.shape
     _, _, num_kv_heads, _ = key.shape
 
@@ -48,22 +49,47 @@ def flash_attention(
             f"Number of query heads ({num_q_heads}) must be divisible by "
             f"number of key/value heads ({num_kv_heads})"
         )
-
     num_groups = num_q_heads // num_kv_heads
 
     # Scale query
     scale = jnp.sqrt(head_dim).astype(query.dtype)
     query = query / scale
 
-    # Split sequence into chunks and maintain sharding
-    query = einops.rearrange(query, 'b (n c) h d -> b n c h d', c=chunk_size)
-    key = einops.rearrange(key, 'b (n c) h d -> b n c h d', c=chunk_size)
-    value = einops.rearrange(value, 'b (n c) h d -> b n c h d', c=chunk_size)
+    # Reshape into chunks along sequence dimension
+    # [batch, n_q_chunks, q_chunk_size, q_heads, dim]
+    query = einops.rearrange(
+        query, 
+        'b (nq qc) h d -> b nq qc h d',
+        qc=q_chunk_size
+    )
+    # [batch, n_k_chunks, k_chunk_size, k_heads, dim]
+    key = einops.rearrange(
+        key,
+        'b (nk kc) h d -> b nk kc h d',
+        kc=k_chunk_size
+    )
+    value = einops.rearrange(
+        value,
+        'b (nk kc) h d -> b nk kc h d',
+        kc=k_chunk_size
+    )
 
     # Apply sharding constraints after reshape
-    query = with_sharding_constraint(query, PS(("dp", "fsdp"), None, None, "mp", None))
-    key = with_sharding_constraint(key, PS(("dp", "fsdp"), None, None, "mp", None))
-    value = with_sharding_constraint(value, PS(("dp", "fsdp"), None, None, "mp", None))
+    query = with_sharding_constraint(
+        query, PS(("dp", "fsdp"), None, None, "mp", None)
+    )
+    key = with_sharding_constraint(
+        key, PS(("dp", "fsdp"), None, None, "mp", None)
+    )
+    value = with_sharding_constraint(
+        value, PS(("dp", "fsdp"), None, None, "mp", None)
+    )
+
+    n_q_chunks = query.shape[1]
+    n_k_chunks = key.shape[1]
+
+    # Prepare output accumulator - we'll fill it chunk by chunk
+    out_chunks = []
 
     def kv_chunk_scanner(query_chunk, m_inner, l_inner, o_inner, idx_k, idx_n):
         from EasyLM.jax_utils import debug_tensor, create_debug_gather_fn
