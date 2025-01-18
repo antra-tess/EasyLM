@@ -63,7 +63,7 @@ def flash_attention(
     value = with_sharding_constraint(value, PS(("dp", "fsdp"), None, None, "mp", None))
 
     # Define kv chunk scanner with pjit
-    @partial(jax.jit,
+    @partial(pjit,
              in_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for m_inner
                            PS(("dp", "fsdp"), "mp", None, None),  # for l_inner
                            PS(("dp", "fsdp"), None, "mp", None),  # for o_inner
