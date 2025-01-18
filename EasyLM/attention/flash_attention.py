@@ -197,11 +197,13 @@ def flash_attention(
             )
 
             # Debug prints to track computation
-            query_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, "mp", None))
-            scores_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), "mp", None, None))
+            # Note: tensors are now [batch, chunk_size, num_heads, head_dim]
+            query_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, None, None))
+            key_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, None, None))
+            scores_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, None))
             
             debug_tensor(f"Query chunk {idx_n}", q, gather_fn=query_gather_fn)
-            debug_tensor(f"Key chunk {idx_k}", k, gather_fn=query_gather_fn)
+            debug_tensor(f"Key chunk {idx_k}", k, gather_fn=key_gather_fn)
 
             # Apply sharding after repeat
             k = with_sharding_constraint(k, PS(("dp", "fsdp"), None, "mp", None))
