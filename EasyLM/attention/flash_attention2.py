@@ -247,20 +247,20 @@ def flash_attention_2d_blocked(
                     scores,
                 )
 
-            # Current block's row-wise max
-            # m_curr shape: [b, qc, heads, 1],  scores shape: [b, heads, qc, kc]
-            # We want to broadcast each row in qc:
-            max_block = jnp.max(scores, axis=-1, keepdims=True)  # [b, heads, qc, 1]
-            m_new = jnp.maximum(m_curr, max_block)
+            # 1) Compute local block max
+            block_max = jnp.max(scores, axis=-1, keepdims=True)  # [b, heads, qc, 1]
 
-            # exponentiate shifted by new max
-            scores_shifted = jnp.exp(scores - max_block)
-            # old partial sum reweighted
+            # 2) Update global max - this is what we'll use for shifting
+            m_new = jnp.maximum(m_curr, block_max)
+
+            # 3) Exponentiate scores using global max m_new (not local block_max)
+            scores_shifted = jnp.exp(scores - m_new)
+
+            # 4) Scale old partial sums by exp_factor = exp(m_curr - m_new)
             exp_factor = jnp.exp(m_curr - m_new)
-            # l_curr: [b, qc, heads, 1]
-            # sum of exponentiated scores: [b, heads, qc, 1] after sum over k
+            
+            # Update running sums
             sum_scores = jnp.sum(scores_shifted, axis=-1, keepdims=True)
-
             l_new = l_curr * exp_factor + sum_scores  # [b, qc, heads, 1]
 
             # Since scores_shifted is [b, qc, heads, kc] and v_chunk is [b, kc, heads, d],
