@@ -175,7 +175,7 @@ class FlashAttentionTest(parameterized.TestCase):
             jax.debug.print("Output shape: {}", output_gathered.shape)
             jax.debug.print("First token: {}, Middle token: {}, Last token: {}", 
                           output_gathered[0, 0, 0, 0], output_gathered[0, 1, 0, 0], output_gathered[0, -1, 0, 0])
-            jax.debug.print("Max diff: {} at index {}", max_diff, max_diff_idx)
+            jax.debug.print("Max diff at index {}", max_diff_idx)
             jax.debug.print("Output value at max diff: {}", output_gathered.flatten()[max_diff_idx])
             jax.debug.print("Expected value at max diff: {}", expected_gathered.flatten()[max_diff_idx])
             
