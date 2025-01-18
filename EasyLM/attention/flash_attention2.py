@@ -247,14 +247,41 @@ def flash_attention_2d_blocked(
                     scores,
                 )
 
+            # Debug raw scores before masking
+            debug_tensor(f"Raw scores before mask (q={q_block_idx}, k={k_block_idx})", scores)
+
+            if causal:
+                # Get query positions for this block using dynamic_slice
+                q_offset = q_block_idx * q_chunk_size
+                local_q_positions = jax.lax.dynamic_slice(
+                    all_positions,
+                    (q_offset,),
+                    (q_chunk_size,)
+                )
+                
+                # Build causal mask using correct absolute positions
+                # shape [qc, kc] where True means position should be masked
+                causal_mask = local_q_positions[:, None] < local_k_positions[None, :]
+                scores = jnp.where(
+                    causal_mask[None, :, None, :],
+                    jnp.finfo(scores.dtype).min,
+                    scores,
+                )
+                
+                # Debug scores after masking
+                debug_tensor(f"Scores after mask (q={q_block_idx}, k={k_block_idx})", scores)
+
             # 1) Compute local block max
             block_max = jnp.max(scores, axis=-1, keepdims=True)  # [b, heads, qc, 1]
+            debug_tensor(f"Block max (q={q_block_idx}, k={k_block_idx})", block_max)
 
             # 2) Update global max - this is what we'll use for shifting
             m_new = jnp.maximum(m_curr, block_max)
+            debug_tensor(f"Global max (q={q_block_idx}, k={k_block_idx})", m_new)
 
             # 3) Exponentiate scores using global max m_new (not local block_max)
             scores_shifted = jnp.exp(scores - m_new)
+            debug_tensor(f"Shifted scores (q={q_block_idx}, k={k_block_idx})", scores_shifted)
 
             # 4) Scale old partial sums by exp_factor = exp(m_curr - m_new)
             exp_factor = jnp.exp(m_curr - m_new)
@@ -309,8 +336,22 @@ def flash_attention_2d_blocked(
         qc=q_chunk_size
     )
 
+    # Debug final output before reshaping
+    debug_tensor("Final output before reshape", all_q_outputs)
+
+    # Rearrange back to [b, (n_q * qc) = seq_len, heads, d]
+    output = einops.rearrange(
+        all_q_outputs,
+        "nq b qc h d -> b (nq qc) h d",
+        nq=n_q,
+        qc=q_chunk_size
+    )
+
     # Finally, apply a last with_sharding_constraint so the final output has the standard shape
     # consistent with your original: PS(("dp", "fsdp"), None, "mp", None)
     output = with_sharding_constraint(output, PS(("dp", "fsdp"), None, "mp", None))
+
+    # Debug final reshaped output
+    debug_tensor("Final reshaped output", output)
 
     return output
