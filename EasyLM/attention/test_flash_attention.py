@@ -57,8 +57,14 @@ class FlashAttentionTest(parameterized.TestCase):
                 scores
             )
 
-        # Apply softmax
+        # Debug raw scores before softmax
+        debug_tensor(f"Raw scores before softmax (q={q_block_idx}, k={k_block_idx})", scores)
+            
+        # Apply softmax per query
         scores = jax.nn.softmax(scores, axis=-1)
+            
+        # Debug post-softmax scores
+        debug_tensor(f"Post-softmax scores (q={q_block_idx}, k={k_block_idx})", scores)
 
         # Compute output
         output = jnp.einsum('bhqk,bkhd->bqhd', scores, value)
