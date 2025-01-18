@@ -82,6 +82,7 @@ class JaxDistributedConfig(object):
 
 class FlaxTemperatureLogitsWarper(FlaxLogitsWarper):
     """ JIT traceable version of FlaxLogitsWarper that performs temperature scaling."""
+
     def __init__(self, temperature):
         self.temperature = temperature
 
@@ -103,6 +104,7 @@ def make_shard_and_gather_fns(partition_specs, dtype_specs=None, loop=False):
             elif hasattr(dtype_spec, 'dtype') and hasattr(tensor, 'dtype'):
                 return tensor.astype(dtype_spec.dtype)
             return tensor
+
         return to_dtype
 
     def make_shard_fn(partition_spec, dtype_spec=None):
@@ -115,8 +117,10 @@ def make_shard_and_gather_fns(partition_specs, dtype_specs=None, loop=False):
             in_shardings=in_shardings,
             out_shardings=partition_spec
         )
+
         def shard_fn(tensor):
             return jax_shard_function(tensor).block_until_ready()
+
         return shard_fn
 
     def make_gather_fn(partition_spec, dtype_spec=None):
@@ -129,8 +133,10 @@ def make_shard_and_gather_fns(partition_specs, dtype_specs=None, loop=False):
             in_shardings=partition_spec,
             out_shardings=in_shardings
         )
+
         def gather_fn(tensor):
             return jax.device_get(jax_gather_fn(tensor))
+
         return gather_fn
 
     if dtype_specs is None or dtype_specs in float_dtypes:
@@ -168,7 +174,7 @@ def get_jax_mesh(axis_dims, names):
             assert name in names
             dims.append(int(dim))
             dim_names.append(name)
-        assert(set(dim_names) == set(names))
+        assert (set(dim_names) == set(names))
     else:
         dims = [int(x) for x in axis_dims.split(',')]
         dim_names = names
@@ -215,12 +221,15 @@ def with_sharding_constraint(x, partition_specs):
 
 def wrap_function_with_rng(rng):
     """ To be used as decorator, automatically bookkeep a RNG for the wrapped function. """
+
     def wrap_function(function):
         def wrapped(*args, **kwargs):
             nonlocal rng
             rng, split_rng = jax.random.split(rng)
             return function(split_rng, *args, **kwargs)
+
         return wrapped
+
     return wrap_function
 
 
@@ -263,7 +272,7 @@ def cross_entropy_loss_and_accuracy(logits, tokens, valid=None):
         valid = jnp.ones(tokens.shape[:2])
     valid = valid.astype(jnp.float32)
     valid_text_length = jnp.maximum(jnp.sum(valid, axis=-1), 1e-10)
-    logits = logits.astype(jnp.float32) # for numerical stability
+    logits = logits.astype(jnp.float32)  # for numerical stability
     token_log_prob = jnp.squeeze(
         jnp.take_along_axis(
             jax.nn.log_softmax(logits, axis=-1),
@@ -377,6 +386,7 @@ def match_partition_rules(rules, params, debug_print=False):
     """ Returns a pytree of PartitionSpec according to rules. Supports handling
         Flax TrainState and Optax optimizer state.
     """
+
     def get_partition_spec(name, leaf):
         if len(leaf.shape) == 0 or np.prod(leaf.shape) == 1:
             """ Don't partition scalar values. """
@@ -387,6 +397,7 @@ def match_partition_rules(rules, params, debug_print=False):
                     logging.info(f'Partition rule matched for param: {str(name)}, {str(rule)}')
                 return ps
         raise ValueError(f'Partition rule not found for param: {name}')
+
     return named_tree_map(get_partition_spec, params, sep='/')
 
 
@@ -394,6 +405,7 @@ def get_weight_decay_mask(exclusions):
     """ Return a weight decay mask function that computes the pytree masks
         according to the given exclusion rules.
     """
+
     def decay(name, _):
         for rule in exclusions:
             if re.search(rule, name) is not None:
@@ -411,27 +423,22 @@ def tree_apply(fns, tree):
     return jax.tree_util.tree_map(lambda fn, x: fn(x), fns, tree)
 
 
-def debug_sharded(name, array):
+def debug_sharded(array):
     """Helper for debugging sharded arrays that works inside jitted functions.
-    
+
     Args:
-        name: String name/description of array
+        name: String name/description of the array
         array: The sharded array to debug
     """
-    from functools import partial
-    # Create format string with name already included
-    debug_print = partial(
-        jax.debug.print,
-        f"\n=== {name} ===\nShape: {{shape}}\nValues: {{values}}\nStats: mean={{mean}} max={{max}} min={{min}}"
-    )
-    
-    # Now we only need to pass JAX arrays
-    debug_print(
+    # Use jax.debug.print with named format arguments
+    jax.debug.print(
+        "\n=== \nShape: {shape}\nValues: {values}\nStats: mean={mean} max={max} min={min}",
         shape=array.shape,
         values=array.reshape(-1)[:4],
         mean=array.mean(),
         max=array.max(),
-        min=array.min()
+        min=array.min(),
+        name=jnp.array([ord(c) for c in name], dtype=jnp.int32)  # Convert string to array of ASCII codes
     )
     return array
 
