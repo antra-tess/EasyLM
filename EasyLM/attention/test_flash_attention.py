@@ -73,11 +73,14 @@ class FlashAttentionTest(parameterized.TestCase):
             query = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
             key = value = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
 
-            # Set up pattern: first token has value 1, others 0
+            # First token: strongly negative query so it attends nowhere
+            query = query.at[:, 0, :, :].set(-1e9)
+            # Middle tokens: strong positive query to attend to first token
+            query = query.at[:, 1:3, :, :].set(10.0)
+            # First token: strong key for middle tokens to attend to
+            key = key.at[:, 0, :, :].set(10.0)
+            # First token: value of 1.0 that will be picked up by middle tokens
             value = value.at[:, 0, :, :].set(1.0)
-            # Middle tokens attend only to first token
-            query = query.at[:, 1:3, :, :].set(10.0)  # Strong attention
-            key = key.at[:, 0, :, :].set(10.0)  # Strong key for first token
 
 
 
