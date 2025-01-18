@@ -95,6 +95,9 @@ def flash_attention(
         v = with_sharding_constraint(v, PS(("dp", "fsdp"), None, None, None))
 
         # Compute attention scores for this block
+        # query_chunk: [batch, chunk_size, heads, head_dim]
+        # k: [batch, key_chunk_size, heads, head_dim]
+        # -> scores: [batch, heads, chunk_size, key_chunk_size]
         scores = jnp.einsum('bchd,bkhd->bhck', query_chunk, k)
         scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), None, None, None))
 
