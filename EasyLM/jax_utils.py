@@ -425,7 +425,11 @@ def debug_sharded(name, array, unreplicate=True):
     
     print(f"\n=== {name} ===")
     print(f"Shape: {array.shape}")
-    print(f"First row: {array[0, :4, 0, 0]}")  # First 4 positions of first batch
+    
+    # Print first few values, adapting to array shape
+    flat_array = array.reshape(-1)
+    print(f"First values: {flat_array[:4]}")
+    
     print(f"Mean: {array.mean():.4f}")
     print(f"Max: {array.max():.4f}")
     print(f"Min: {array.min():.4f}\n")
