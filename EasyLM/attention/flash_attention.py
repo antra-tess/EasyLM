@@ -77,11 +77,18 @@ def flash_attention(
         q = query[:, idx_n]  # [batch, chunk_size, num_q_heads, head_dim]
         q = with_sharding_constraint(q, PS(("dp", "fsdp"), None, "mp", None))
 
-        def kv_chunk_scanner(carry, idx_k):
-            m_inner, l_inner, o_inner = carry
-
+        # Define inner scanner with pjit
+        @partial(jax.jit,
+                in_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for m_inner
+                             PS(("dp", "fsdp"), "mp", None, None),  # for l_inner
+                             PS(("dp", "fsdp"), None, "mp", None),  # for o_inner
+                             None),  # for idx_k
+                out_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for new m
+                             PS(("dp", "fsdp"), "mp", None, None),  # for new l
+                             PS(("dp", "fsdp"), None, "mp", None)))  # for new o
+        def kv_chunk_scanner(m_inner, l_inner, o_inner, idx_k):
             # Debug prints to verify mechanism works
-            jax.debug.print("Processing chunk")
+            jax.debug.print("Processing kv chunk with idx_k={k}", k=idx_k)
             
             # Get key/value chunks and repeat for each query group
             k = einops.repeat(
@@ -163,7 +170,7 @@ def flash_attention(
         
         # Scan over key/value chunks
         (m_new, l_new, o_new), _ = jax.lax.scan(
-            kv_chunk_scanner,
+            lambda carry, idx: kv_chunk_scanner(*carry, idx),
             (m, l, o),
             jnp.arange(key.shape[1])
         )
