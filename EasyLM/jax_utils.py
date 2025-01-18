@@ -410,3 +410,24 @@ def tree_apply(fns, tree):
     """ Apply a pytree of functions to the pytree. """
     return jax.tree_util.tree_map(lambda fn, x: fn(x), fns, tree)
 
+
+def debug_sharded(name, array, unreplicate=True):
+    """Helper for debugging sharded arrays by gathering and printing key values.
+    
+    Args:
+        name: String name/description of the array
+        array: The sharded array to debug
+        unreplicate: Whether to unreplicate before gathering
+    """
+    if unreplicate:
+        array = flax.jax_utils.unreplicate(array)
+    array = jax.device_get(array)
+    
+    print(f"\n=== {name} ===")
+    print(f"Shape: {array.shape}")
+    print(f"First row: {array[0, :4, 0, 0]}")  # First 4 positions of first batch
+    print(f"Mean: {array.mean():.4f}")
+    print(f"Max: {array.max():.4f}")
+    print(f"Min: {array.min():.4f}\n")
+    return array
+
