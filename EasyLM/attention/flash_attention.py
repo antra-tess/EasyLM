@@ -174,6 +174,7 @@ def flash_attention(
 
     # Debug prints after all operations complete
     from EasyLM.jax_utils import debug_sharded
+    from jax.experimental.multihost_utils import process_allgather
     debug_sharded("Final output", output, gather_fn=process_allgather)
 
     return output
