@@ -116,7 +116,6 @@ def flash_attention(
 
             m_new = jnp.maximum(m_inner, scores.max(-1, keepdims=True))
             scores = jnp.exp(scores - m_new)
-            debug_sharded("Post-softmax scores", scores)
             l_new = l_inner * jnp.exp(m_inner - m_new) + scores.sum(-1, keepdims=True)
             # Reshape m_new for proper broadcasting
             scale = jnp.exp(m_inner - m_new)  # [batch, num_heads, chunk_size, 1]
