@@ -100,14 +100,14 @@ def flash_attention(
         scores = jnp.einsum('bchd,bkhd->bhck', query_chunk, k)
         scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
 
-        from EasyLM.jax_utils import debug_sharded, create_debug_gather_fn
+        from EasyLM.jax_utils import debug_tensor, create_debug_gather_fn
         # Create gather functions with appropriate partition specs
         query_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, "mp", None))
         scores_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), "mp", None, None))
 
-        debug_sharded("Query", query, gather_fn=query_gather_fn)
-        debug_sharded("Key", k, gather_fn=query_gather_fn)  # Same spec as query
-        debug_sharded("Raw scores", scores, gather_fn=scores_gather_fn)
+        debug_tensor("Query", query, gather_fn=query_gather_fn)
+        debug_tensor("Key", k, gather_fn=query_gather_fn)  # Same spec as query
+        debug_tensor("Raw scores", scores, gather_fn=scores_gather_fn)
 
         if bias is not None:
             # Handle GQA bias if provided
@@ -148,7 +148,7 @@ def flash_attention(
         m_new = jnp.maximum(m_inner, scores.max(-1, keepdims=True))
         scores = jnp.exp(scores - m_new)
         scores_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), "mp", None, None))
-        debug_sharded("Post-softmax scores", scores, gather_fn=scores_gather_fn)
+        debug_tensor("Post-softmax scores", scores, gather_fn=scores_gather_fn)
         l_new = l_inner * jnp.exp(m_inner - m_new) + scores.sum(-1, keepdims=True)
         # Reshape m_new for proper broadcasting
         scale = jnp.exp(m_inner - m_new)  # [batch, num_heads, chunk_size, 1]
