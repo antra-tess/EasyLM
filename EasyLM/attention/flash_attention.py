@@ -247,7 +247,7 @@ def flash_attention(
             scale = jnp.transpose(scale, (0, 2, 1, 3, 4))  # Reorder to (batch, num_heads, chunk_size, 1, 1)
 
             o_new = (o_inner * scale[..., 0] +  # Remove last dim after broadcast
-                     jnp.einsum('bhqk,bkhd->bqhd', scores, v))
+                     jnp.einsum('bhck,bkhd->bchd', scores, v))
 
             # Apply sharding to intermediate results
             o_new = with_sharding_constraint(o_new, PS(("dp", "fsdp"), None, "mp", None))
