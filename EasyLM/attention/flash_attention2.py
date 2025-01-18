@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 import einops
 from typing import Optional
+from EasyLM.jax_utils import debug_tensor
 
 from jax.sharding import PartitionSpec as PS
 from jax.experimental.pjit import pjit
