@@ -86,16 +86,9 @@ def flash_attention(
             scores = jnp.einsum('bqhd,bkhd->bhqk', q, k)
             scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
             
-            # Debug prints for attention computation
-            from jax.experimental.multihost_utils import process_allgather
-            scores_gathered = process_allgather(scores)
-            q_gathered = process_allgather(q)
-            k_gathered = process_allgather(k)
-            
-            jax.debug.print("Block scores shape: {shape}", shape=scores_gathered.shape)
-            jax.debug.print("Query block [0,1] (middle token): {q}", q=q_gathered[0, 1])
-            jax.debug.print("Key block [0,0] (first token): {k}", k=k_gathered[0, 0])
-            jax.debug.print("Raw scores for middle token: {scores}", scores_gathered[0, :, 1])
+            # Compute attention scores for this block
+            scores = jnp.einsum('bqhd,bkhd->bhqk', q, k)
+            scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
             
             if bias is not None:
                 # Handle GQA bias if provided
@@ -168,8 +161,17 @@ def flash_attention(
         PS(("dp", "fsdp"), None, "mp", None)
     )
     
-    # Scan over query chunks
-    _, output = jax.lax.scan(
+    # Scan over query chunks and collect debug info
+    debug_scores = []
+    debug_queries = []
+    debug_keys = []
+    
+    def debug_scanner(carry, idx_n):
+        result = chunk_scanner(carry, idx_n)
+        debug_scores.append(result[1])  # Collect scores for debugging
+        return result
+    
+    _, output = jax.lax.scan(debug_scanner,
         chunk_scanner,
         (init_m, init_l, init_o),
         jnp.arange(query.shape[1])
@@ -179,4 +181,11 @@ def flash_attention(
     output = einops.rearrange(output, 'n b c h d -> b (n c) h d')
     output = with_sharding_constraint(output, PS(("dp", "fsdp"), None, "mp", None))
     
-    return output 
+    # Debug prints after scan completes
+    from jax.experimental.multihost_utils import process_allgather
+    scores_gathered = process_allgather(debug_scores[0])  # Look at first chunk
+    
+    jax.debug.print("Block scores shape: {shape}", shape=scores_gathered.shape)
+    jax.debug.print("First chunk scores: {scores}", scores=scores_gathered)
+    
+    return output
