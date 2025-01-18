@@ -17,7 +17,8 @@ def flash_attention(
         value: jnp.ndarray,  # [batch, seq_len, num_kv_heads, head_dim]
         bias: Optional[jnp.ndarray] = None,
         causal: bool = True,
-        chunk_size: int = 128,
+        q_chunk_size: int = 128,  # chunk size for queries
+        k_chunk_size: int = 128,  # chunk size for keys
 ):
     """JAX implementation of Flash Attention with GQA support and TPU sharding.
 
