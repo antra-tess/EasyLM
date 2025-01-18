@@ -227,24 +227,6 @@ def flash_attention_2d_blocked(
                 # Now shape is [b, q_heads, qc, kc]. We match [b, heads, qc, kc].
                 scores = scores + bias_block
 
-            if causal:
-                # Get query positions for this block using dynamic_slice
-                q_offset = q_block_idx * q_chunk_size
-                local_q_positions = jax.lax.dynamic_slice(
-                    all_positions,
-                    (q_offset,),
-                    (q_chunk_size,)
-                )
-                
-                # Build causal mask using correct absolute positions
-                # shape [qc, kc] where True means position should be masked
-                causal_mask = local_q_positions[:, None] < local_k_positions[None, :]
-                scores = jnp.where(
-                    causal_mask[None, :, None, :],
-                    jnp.finfo(scores.dtype).min,
-                    scores,
-                )
-
             # Compute raw scores and apply causal masking if needed
             debug_tensor(f"Raw scores before mask (q={q_block_idx}, k={k_block_idx})", scores)
 
