@@ -75,20 +75,20 @@ def flash_attention(
             k = key[:, idx_k]  # Shape: [batch, 1, chunk, chunk, heads, dim]
             v = value[:, idx_k]
             
-            jax.debug.print("q shape: {}", q.shape)
-            jax.debug.print("k before reshape: {}", k.shape)
+            print("q shape:", q.shape)
+            print("k before reshape:", k.shape)
             
             # Reshape to collapse scan dimensions
             k = einops.rearrange(k, 'b n1 n2 c h d -> b c h d')
             v = einops.rearrange(v, 'b n1 n2 c h d -> b c h d')
             
-            jax.debug.print("k after reshape: {}", k.shape)
+            print("k after reshape:", k.shape)
             
             # Now repeat for groups
             k = einops.repeat(k, 'b c h d -> b c (h g) d', g=num_groups)
             v = einops.repeat(v, 'b c h d -> b c (h g) d', g=num_groups)
             
-            jax.debug.print("k after repeat: {}", k.shape)
+            print("k after repeat:", k.shape)
             
             # Apply sharding after repeat
             k = with_sharding_constraint(k, PS(("dp", "fsdp"), None, "mp", None))
