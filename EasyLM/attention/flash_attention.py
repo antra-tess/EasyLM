@@ -86,10 +86,13 @@ def flash_attention(
             scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
 
             from EasyLM.jax_utils import debug_sharded, create_debug_gather_fn
-            gather_fn = create_debug_gather_fn()
-            debug_sharded("Query", q, gather_fn=gather_fn)
-            debug_sharded("Key", k, gather_fn=gather_fn)
-            debug_sharded("Raw scores", scores, gather_fn=gather_fn)
+            # Create gather functions with appropriate partition specs
+            query_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, "mp", None))
+            scores_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), "mp", None, None))
+            
+            debug_sharded("Query", q, gather_fn=query_gather_fn)
+            debug_sharded("Key", k, gather_fn=query_gather_fn)  # Same spec as query
+            debug_sharded("Raw scores", scores, gather_fn=scores_gather_fn)
 
             if bias is not None:
                 # Handle GQA bias if provided
@@ -175,6 +178,7 @@ def flash_attention(
     # Debug prints after all operations complete
     from EasyLM.jax_utils import debug_sharded
     from jax.experimental.multihost_utils import process_allgather
-    debug_sharded("Final output", output, gather_fn=process_allgather)
+    output_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, "mp", None))
+    debug_sharded("Final output", output, gather_fn=output_gather_fn)
 
     return output
