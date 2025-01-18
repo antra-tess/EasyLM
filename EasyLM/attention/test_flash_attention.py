@@ -64,87 +64,7 @@ class FlashAttentionTest(parameterized.TestCase):
         output = jnp.einsum('bhqk,bkhd->bqhd', scores, value)
         return output
 
-    # @parameterized.parameters(
-    #     {"seq_len": 16, "num_q_heads": 8, "num_kv_heads": 4},
-    #     {"seq_len": 32, "num_q_heads": 16, "num_kv_heads": 4},
-    # )
-    # def test_flash_attention_matches_reference(self, seq_len, num_q_heads, num_kv_heads):
-    #     """Test that flash attention matches reference implementation."""
-    #     with self.mesh:
-    #         query, key, value = self.get_attention_inputs(
-    #             seq_len=seq_len,
-    #             num_q_heads=num_q_heads,
-    #             num_kv_heads=num_kv_heads
-    #         )
-    #
-    #
-    #
-    #         @jax.jit
-    #         def flash_attention_jit(query, key, value):
-    #             return flash_attention(
-    #                 query=query,
-    #                 key=key,
-    #                 value=value,
-    #                 chunk_size=8
-    #             )
-    #
-    #
-    #         # Run flash attention
-    #         flash_output = flash_attention_jit(query, key, value)
-    #
-    #         # Run reference
-    #         ref_output = self.reference_attention(query, key, value)
-    #
-    #         # Gather results from all devices for comparison
-    #         from jax.experimental.multihost_utils import process_allgather
-    #
-    #         flash_gathered = process_allgather(flash_output)
-    #         ref_gathered = process_allgather(ref_output)
-    #
-    #         if jax.process_index() == 0:  # Only compare on main process
-    #             np.testing.assert_allclose(
-    #                 flash_gathered, ref_gathered,
-    #                 rtol=1e-5, atol=1e-5
-    #             )
-    #
-    # @parameterized.parameters(
-    #     {"causal": True},
-    #     {"causal": False}
-    # )
-    # def test_causal_masking(self, causal):
-    #     """Test that causal masking properly blocks future tokens."""
-    #     with self.mesh:
-    #         # Create inputs where later tokens should strongly attend to earlier ones
-    #         batch_size, seq_len, num_heads, head_dim = 32, 4, 4, 32  # Match mesh dimensions: fsdp=8, mp=4
-    #         query = jnp.ones((batch_size, seq_len, num_heads, head_dim))
-    #         key = value = jnp.ones((batch_size, seq_len, num_heads, head_dim))
-    #
-    #         # Make later tokens have strong attention to earlier ones
-    #         value = value * jnp.arange(1, 5).reshape(1, 4, 1, 1)
-    #
-    #         # Run attention with and without causal mask
-    #         output = flash_attention(
-    #             query=query,
-    #             key=key,
-    #             value=value,
-    #             causal=causal,
-    #             chunk_size=2
-    #         )
-    #
-    #         if causal:
-    #             # Each token should only see values up to its position
-    #             expected = jnp.broadcast_to(
-    #                 jnp.array([[[[1.]], [[1.5]], [[2.]], [[2.5]]]]),
-    #                 (batch_size, seq_len, num_heads, head_dim)
-    #             )
-    #         else:
-    #             # All tokens should see all values (average = 2.5)
-    #             expected = jnp.ones((batch_size, seq_len, num_heads, head_dim)) * 2.5
-    #
-    #         diff = jnp.abs(output - expected)
-    #         max_diff = jnp.max(diff)
-    #         assert jnp.all(max_diff < 1e-5), f"Causal masking test failed with max difference {max_diff}"
-    #
+
     def test_attention_patterns(self):
         """Test specific attention patterns."""
         with self.mesh:
@@ -196,16 +116,6 @@ class FlashAttentionTest(parameterized.TestCase):
 
             assert jnp.all(max_diff < 1e-5), f"Attention pattern test failed with max difference {max_diff}"
 
-    # def test_invalid_head_config(self):
-    #     """Test that invalid head configurations raise error."""
-    #     with self.assertRaises(ValueError):
-    #         # num_q_heads not divisible by num_kv_heads
-    #         query, key, value = self.get_attention_inputs(
-    #             num_q_heads=6,  # Not divisible by 4
-    #             num_kv_heads=4
-    #         )
-    #         flash_attention(query, key, value)
-    # #
 
 if __name__ == '__main__':
     absltest.main() 
