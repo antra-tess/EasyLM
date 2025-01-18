@@ -141,14 +141,14 @@ class FlashAttentionTest(parameterized.TestCase):
         with self.mesh:
             # Create a sequence where middle tokens should attend strongly to first token
             batch_size, seq_len, num_heads, head_dim = 32, 4, 4, 32  # Match mesh dimensions: fsdp=8, mp=4
-            query = jnp.ones((batch_size, seq_len, num_heads, head_dim)) * -1e6  # Very negative for softmax
-            key = value = jnp.ones((batch_size, seq_len, num_heads, head_dim)) * -1e6
+            query = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
+            key = value = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
             
-            # Set up pattern: first token has value 1, others very negative
+            # Set up pattern: first token has value 1, others 0
             value = value.at[:, 0, :, :].set(1.0)
             # Middle tokens attend only to first token
-            query = query.at[:, 1:3, :, :].set(1.0)
-            key = key.at[:, 0, :, :].set(1.0)
+            query = query.at[:, 1:3, :, :].set(10.0)  # Strong attention
+            key = key.at[:, 0, :, :].set(10.0)  # Strong key for first token
             
             output = flash_attention(
                 query=query,
