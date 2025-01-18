@@ -151,7 +151,7 @@ def flash_attention(
         return (m_new, l_new, o_new), None
 
     # Define chunk scanner with pjit
-    @partial(jax.jit,
+    @partial(pjit,
             in_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for carry m
                          PS(("dp", "fsdp"), "mp", None, None),  # for carry l
                          PS(("dp", "fsdp"), None, "mp", None),  # for carry o
