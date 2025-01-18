@@ -176,8 +176,7 @@ def flash_attention(
     output = with_sharding_constraint(output, PS(("dp", "fsdp"), None, "mp", None))
 
     # Debug prints after all operations complete
-    from EasyLM.jax_utils import debug_sharded
-    from jax.experimental.multihost_utils import process_allgather
+    from EasyLM.jax_utils import debug_sharded, create_debug_gather_fn
     output_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, "mp", None))
     debug_sharded("Final output", output, gather_fn=output_gather_fn)
 
