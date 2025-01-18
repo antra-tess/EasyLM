@@ -52,6 +52,16 @@ def flash_attention_2d_blocked(
     """
     jax.debug.print("Starting 2D-blocked Flash Attention")
 
+    # Debug input tensors
+    from EasyLM.jax_utils import debug_tensor, create_debug_gather_fn
+    query_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, "mp", None))
+    key_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, "mp", None))
+    value_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, "mp", None))
+
+    debug_tensor("Initial query", query, gather_fn=query_gather_fn)
+    debug_tensor("Initial key", key, gather_fn=key_gather_fn)
+    debug_tensor("Initial value", value, gather_fn=value_gather_fn)
+
     batch_size, seq_len, num_q_heads, head_dim = query.shape
     _, _, num_kv_heads, _ = key.shape
 
