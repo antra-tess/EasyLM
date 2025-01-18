@@ -170,7 +170,7 @@ def flash_attention_2d_blocked(
             # Compute raw scores:
             # q_chunk [b, qc, heads, d] x k_chunk [b, kc, heads, d]
             # -> [b, heads, qc, kc]
-            scores = jnp.einsum("bqhd,bkhd->bhqk", q_chunk, k_chunk)
+            scores = jnp.einsum("bqhd,bkhd->bqhk", q_chunk, k_chunk)
             scores = with_sharding_constraint(
                 scores, PS(("dp", "fsdp"), "mp", None, None)
             )
@@ -224,7 +224,7 @@ def flash_attention_2d_blocked(
             # m_curr shape: [b, qc, heads, 1],  scores shape: [b, heads, qc, kc]
             # We want to broadcast each row in qc:
             max_block = jnp.max(scores, axis=-1, keepdims=True)  # [b, heads, qc, 1]
-            m_new = jnp.maximum(m_curr.transpose(0, 2, 1, 3), max_block)
+            m_new = jnp.maximum(m_curr, max_block)
             # shape: [b, qc, heads, 1] after we swap back
             m_new = m_new.transpose(0, 2, 1, 3)
 
@@ -238,11 +238,11 @@ def flash_attention_2d_blocked(
 
             l_new = l_curr * exp_factor + sum_scores  # [b, qc, heads, 1]
 
-            # Similarly, update output:
-            # scores_shifted: [b, heads, qc, kc]
-            # v_chunk: [b, kc, heads, d]
-            # we want o_new: [b, qc, heads, d]
-            out_block = jnp.einsum("bhqk,bkhd->bqhd", scores_shifted, v_chunk)
+            # Since scores_shifted is [b, qc, heads, kc] and v_chunk is [b, kc, heads, d],
+            # we want out_block in [b, qc, heads, d].
+            # new pattern:    'bqhk,bkh(d)-> bqhd'
+            out_block = jnp.einsum("bqhk,bkhd->bqhd", scores_shifted, v_chunk)
+
 
             # We must multiply existing o_curr by exp_factor, which is shaped [b, qc, heads, 1]
             o_new = o_curr * exp_factor + out_block
