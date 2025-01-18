@@ -315,9 +315,6 @@ def flash_attention(
     
     # Recombine chunks into final sequence
     output = einops.rearrange(outputs, 'n b c h d -> b (n c) h d')
-
-    # Reshape output back to original sequence length and maintain sharding
-    output = einops.rearrange(output, 'n b c h d -> b (n c) h d')
     output = with_sharding_constraint(output, PS(("dp", "fsdp"), None, "mp", None))
 
     # Debug final attention output
