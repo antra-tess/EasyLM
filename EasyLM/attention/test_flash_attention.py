@@ -4,6 +4,7 @@ import numpy as np
 from jax.sharding import Mesh, PartitionSpec as PS
 from absl.testing import absltest, parameterized
 from EasyLM.jax_utils import with_sharding_constraint, get_jax_mesh
+from jax.experimental.multihost_utils import process_allgather
 
 from EasyLM.attention.flash_attention import flash_attention
 
@@ -164,11 +165,10 @@ class FlashAttentionTest(parameterized.TestCase):
             expected = expected.at[:, 1:3, :, :].set(1.0)
 
             # Calculate diff on all processes
-                diff = jnp.abs(output - expected)
-                max_diff = jnp.max(diff)
+            diff = jnp.abs(output - expected)
+            max_diff = jnp.max(diff)
 
             # Gather results for debugging
-            from jax.experimental.multihost_utils import process_allgather
             output_gathered = process_allgather(output)
             expected_gathered = process_allgather(expected)
             max_diff_idx = jnp.argmax(jnp.abs(output_gathered - expected_gathered))
