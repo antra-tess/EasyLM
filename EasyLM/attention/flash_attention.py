@@ -74,10 +74,9 @@ def flash_attention(
     #          out_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for new m
     #                         PS(("dp", "fsdp"), "mp", None, None),  # for new l
     #                         PS(("dp", "fsdp"), None, "mp", None)))  # for new o
-    def kv_chunk_scanner(m_inner, l_inner, o_inner, idx_k, idx_n):
-        # Debug prints to verify mechanism works
-        jax.debug.print("Processing kv chunk with idx_k={k}", k=idx_k)
-
+    def kv_chunk_scanner(query_chunk, m_inner, l_inner, o_inner, idx_k, idx_n):
+        from EasyLM.jax_utils import debug_tensor, create_debug_gather_fn
+        
         # Get key/value chunks and repeat for each query group
         k = einops.repeat(
             key[:, idx_k],  # [batch, chunk_size, num_kv_heads, head_dim]
@@ -87,6 +86,9 @@ def flash_attention(
             value[:, idx_k],  # [batch, chunk_size, num_kv_heads, head_dim]
             'b c h d -> b c (h g) d', g=num_groups
         )
+
+        # Debug prints to track computation
+        debug_tensor(f"Processing chunk q={idx_n} k={idx_k}", k)
 
         # Apply sharding after repeat
         k = with_sharding_constraint(k, PS(("dp", "fsdp"), None, "mp", None))
@@ -267,32 +269,39 @@ def flash_attention(
     jax.debug.print("Number of chunks to process: {n}", n=query.shape[1])
     jax.debug.print("Chunk size: {size}", size=chunk_size)
     
-    # Initialize carry with appropriate sharding
-    init_m = with_sharding_constraint(
-        jnp.full((batch_size, num_q_heads, chunk_size, 1), -jnp.inf),
-        PS(("dp", "fsdp"), "mp", None, None)
-    )
-    init_l = with_sharding_constraint(
-        jnp.zeros((batch_size, num_q_heads, chunk_size, 1)),
-        PS(("dp", "fsdp"), "mp", None, None)
-    )
-    init_o = with_sharding_constraint(
-        jnp.zeros((batch_size, chunk_size, num_q_heads, head_dim)),
-        PS(("dp", "fsdp"), None, "mp", None)
-    )
+    def process_query_chunk(idx_n):
+        # Get current query chunk
+        q = query[:, idx_n]  # [batch, chunk_size, num_q_heads, head_dim]
+        q = with_sharding_constraint(q, PS(("dp", "fsdp"), None, "mp", None))
 
-    # Debug carry shapes
-    jax.debug.print("Initial carry shapes - m: {m_shape}, l: {l_shape}, o: {o_shape}", 
-                   m_shape=init_m.shape,
-                   l_shape=init_l.shape,
-                   o_shape=init_o.shape)
+        # Initialize fresh partial sums for this query chunk
+        m_init = with_sharding_constraint(
+            jnp.full((batch_size, num_q_heads, chunk_size, 1), -jnp.inf),
+            PS(("dp", "fsdp"), "mp", None, None)
+        )
+        l_init = with_sharding_constraint(
+            jnp.zeros((batch_size, num_q_heads, chunk_size, 1)),
+            PS(("dp", "fsdp"), "mp", None, None)
+        )
+        o_init = with_sharding_constraint(
+            jnp.zeros((batch_size, chunk_size, num_q_heads, head_dim)),
+            PS(("dp", "fsdp"), None, "mp", None)
+        )
 
-    # Scan over query chunks with pjitted function
-    _, output = jax.lax.scan(
-        lambda carry, idx: chunk_scanner(*carry, idx),
-        (init_m, init_l, init_o),
-        jnp.arange(query.shape[1])
-    )
+        # Scan over key chunks with fresh partial sums
+        (_, _, o_final), _ = jax.lax.scan(
+            lambda carry, idx_k: kv_chunk_scanner(q, *carry, idx_k, idx_n),
+            (m_init, l_init, o_init),
+            jnp.arange(key.shape[1])
+        )
+        return o_final
+
+    # Process each query chunk independently
+    outputs = jax.lax.map(process_query_chunk, jnp.arange(query.shape[1]))
+    # outputs shape: [n_chunks, batch, chunk_size, num_heads, head_dim]
+    
+    # Recombine chunks into final sequence
+    output = einops.rearrange(outputs, 'n b c h d -> b (n c) h d')
 
     # Reshape output back to original sequence length and maintain sharding
     output = einops.rearrange(output, 'n b c h d -> b (n c) h d')
