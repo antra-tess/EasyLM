@@ -168,7 +168,7 @@ def flash_attention(
         q = query[:, idx_n]  # [batch, chunk_size, num_q_heads, head_dim]
         q = with_sharding_constraint(q, PS(("dp", "fsdp"), None, "mp", None))
 
-        def kv_chunk_scanner(m_inner, l_inner, o_inner, idx_k):
+        def kv_chunk_scanner(m_inner, l_inner, o_inner, idx_k, idx_n):
             # Debug prints to verify mechanism works
             jax.debug.print("Processing kv chunk with idx_k={k}", k=idx_k)
             
