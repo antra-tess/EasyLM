@@ -9,6 +9,94 @@ from jax.sharding import PartitionSpec as PS
 from EasyLM.jax_utils import with_sharding_constraint
 
 
+# Define kv chunk scanner with pjit
+@partial(jax.jit,
+        in_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for m_inner
+                     PS(("dp", "fsdp"), "mp", None, None),  # for l_inner
+                     PS(("dp", "fsdp"), None, "mp", None),  # for o_inner
+                     None),  # for idx_k
+        out_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for new m
+                     PS(("dp", "fsdp"), "mp", None, None),  # for new l
+                     PS(("dp", "fsdp"), None, "mp", None)))  # for new o
+def kv_chunk_scanner(m_inner, l_inner, o_inner, idx_k, query, key, value, num_groups):
+    # Debug prints to verify mechanism works
+    jax.debug.print("Processing kv chunk with idx_k={k}", k=idx_k)
+    
+    # Get key/value chunks and repeat for each query group
+    k = einops.repeat(
+        key[:, idx_k],  # [batch, chunk_size, num_kv_heads, head_dim]
+        'b c h d -> b c (h g) d', g=num_groups
+    )
+    v = einops.repeat(
+        value[:, idx_k],  # [batch, chunk_size, num_kv_heads, head_dim]
+        'b c h d -> b c (h g) d', g=num_groups
+    )
+
+    # Apply sharding after repeat
+    k = with_sharding_constraint(k, PS(("dp", "fsdp"), None, "mp", None))
+    v = with_sharding_constraint(v, PS(("dp", "fsdp"), None, "mp", None))
+
+    # Compute attention scores for this block
+    scores = jnp.einsum('bqhd,bkhd->bhqk', query, k)
+    scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
+
+    from EasyLM.jax_utils import debug_sharded, create_debug_gather_fn
+    # Create gather functions with appropriate partition specs
+    query_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, "mp", None))
+    scores_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), "mp", None, None))
+    
+    debug_sharded("Query", query, gather_fn=query_gather_fn)
+    debug_sharded("Key", k, gather_fn=query_gather_fn)  # Same spec as query
+    debug_sharded("Raw scores", scores, gather_fn=scores_gather_fn)
+
+    if bias is not None:
+        # Handle GQA bias if provided
+        if bias.shape[1] == num_q_heads:
+            bias_block = jax.lax.dynamic_slice(
+                bias,
+                (0, 0, idx_n * chunk_size, idx_k * chunk_size),
+                (bias.shape[0], bias.shape[1], chunk_size, chunk_size)
+            )
+        elif bias.shape[1] == num_kv_heads:
+            bias_block = jax.lax.dynamic_slice(
+                bias,
+                (0, 0, idx_n * chunk_size, idx_k * chunk_size),
+                (bias.shape[0], bias.shape[1], chunk_size, chunk_size)
+            )
+            bias_block = einops.repeat(
+                bias_block, 'b h q k -> b (h g) q k', g=num_groups
+            )
+        scores = scores + bias_block
+
+    if causal:
+        q_pos = idx_n * chunk_size + jnp.arange(chunk_size)
+        k_pos = idx_k * chunk_size + jnp.arange(chunk_size)
+        causal_mask = q_pos[:, None] < k_pos[None, :]
+        scores = jnp.where(
+            causal_mask[None, None, :, :],
+            jnp.finfo(scores.dtype).min,
+            scores
+        )
+
+    m_new = jnp.maximum(m_inner, scores.max(-1, keepdims=True))
+    scores = jnp.exp(scores - m_new)
+    scores_gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), "mp", None, None))
+    debug_sharded("Post-softmax scores", scores, gather_fn=scores_gather_fn)
+    l_new = l_inner * jnp.exp(m_inner - m_new) + scores.sum(-1, keepdims=True)
+    # Reshape m_new for proper broadcasting
+    scale = jnp.exp(m_inner - m_new)  # [batch, num_heads, chunk_size, 1]
+    # Reshape scale to match o_inner dimensions
+    scale = jnp.expand_dims(scale, axis=-1)  # Add dim for head_dim
+    scale = jnp.transpose(scale, (0, 2, 1, 3, 4))  # Reorder to (batch, num_heads, chunk_size, 1, 1)
+
+    o_new = (o_inner * scale[..., 0] +  # Remove last dim after broadcast
+             jnp.einsum('bhqk,bkhd->bqhd', scores, v))
+
+    # Apply sharding to intermediate results
+    o_new = with_sharding_constraint(o_new, PS(("dp", "fsdp"), None, "mp", None))
+
+    return (m_new, l_new, o_new), None
+
 def flash_attention(
         query: jnp.ndarray,  # [batch, seq_len, num_q_heads, head_dim]
         key: jnp.ndarray,  # [batch, seq_len, num_kv_heads, head_dim]
@@ -77,15 +165,6 @@ def flash_attention(
         q = query[:, idx_n]  # [batch, chunk_size, num_q_heads, head_dim]
         q = with_sharding_constraint(q, PS(("dp", "fsdp"), None, "mp", None))
 
-        # Define inner scanner with pjit
-        @partial(jax.jit,
-                in_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for m_inner
-                             PS(("dp", "fsdp"), "mp", None, None),  # for l_inner
-                             PS(("dp", "fsdp"), None, "mp", None),  # for o_inner
-                             None),  # for idx_k
-                out_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for new m
-                             PS(("dp", "fsdp"), "mp", None, None),  # for new l
-                             PS(("dp", "fsdp"), None, "mp", None)))  # for new o
         def kv_chunk_scanner(m_inner, l_inner, o_inner, idx_k):
             # Debug prints to verify mechanism works
             jax.debug.print("Processing kv chunk with idx_k={k}", k=idx_k)
@@ -170,7 +249,7 @@ def flash_attention(
         
         # Scan over key/value chunks
         (m_new, l_new, o_new), _ = jax.lax.scan(
-            lambda carry, idx: kv_chunk_scanner(*carry, idx),
+            lambda carry, idx: kv_chunk_scanner(*carry, idx, q, key, value, num_groups),
             (m, l, o),
             jnp.arange(key.shape[1])
         )
