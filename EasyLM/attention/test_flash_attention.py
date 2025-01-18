@@ -162,19 +162,23 @@ class FlashAttentionTest(parameterized.TestCase):
             expected = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
             expected = expected.at[:, 1:3, :, :].set(1.0)
             
+            # Get values after jitted function returns
+            output_np = np.array(output)
+            expected_np = np.array(expected)
+            
             # Print actual and expected values for debugging
-            print(f"Output shape: {output.shape}")
-            print(f"First token output: {output[0, 0, 0, 0]}")
-            print(f"Middle token output: {output[0, 1, 0, 0]}")
-            print(f"Last token output: {output[0, -1, 0, 0]}")
+            print(f"Output shape: {output_np.shape}")
+            print(f"First token output: {output_np[0, 0, 0, 0]}")
+            print(f"Middle token output: {output_np[0, 1, 0, 0]}")
+            print(f"Last token output: {output_np[0, -1, 0, 0]}")
             
             # Compare with tolerance
-            diff = jnp.abs(output - expected)
-            max_diff = jnp.max(diff)
-            max_diff_idx = jnp.unravel_index(jnp.argmax(diff), diff.shape)
+            diff = np.abs(output_np - expected_np)
+            max_diff = np.max(diff)
+            max_diff_idx = np.unravel_index(np.argmax(diff), diff.shape)
             print(f"Max diff at index {max_diff_idx}:")
-            print(f"Output value: {output[max_diff_idx]}")
-            print(f"Expected value: {expected[max_diff_idx]}")
+            print(f"Output value: {output_np[max_diff_idx]}")
+            print(f"Expected value: {expected_np[max_diff_idx]}")
             
             assert jnp.all(max_diff < 1e-5), f"Attention pattern test failed with max difference {max_diff}"
 
