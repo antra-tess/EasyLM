@@ -68,7 +68,7 @@ def flash_attention(
             m_inner, l_inner, o_inner = carry
 
             # Debug prints to verify mechanism works
-            jax.debug.print("Processing chunk: q={q}, k={k}", q=idx_n, k=idx_k)
+            jax.debug.print("Processing chunk")
             
             # Get key/value chunks and repeat for each query group
             k = einops.repeat(
