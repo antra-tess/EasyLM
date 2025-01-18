@@ -140,8 +140,13 @@ def flash_attention_2d_blocked(
             """
             (m_curr, l_curr, o_curr) = carry
 
-            k_chunk = key_blocked[:, k_block_idx]  # [b, k_chunk_size, num_kv_heads, d]
+            k_chunk = key_blocked[:, k_block_idx]  # [batch, k_chunk_size, num_kv_heads, head_dim]
             v_chunk = value_blocked[:, k_block_idx]
+
+            # Debug input values
+            debug_tensor(f"Query chunk (q={q_block_idx})", query_chunk)
+            debug_tensor(f"Key chunk (k={k_block_idx})", k_chunk)
+            debug_tensor(f"Value chunk (k={k_block_idx})", v_chunk)
 
             # GQA: expand key/value heads to match q_heads = num_kv_heads * num_groups
             k_chunk = einops.repeat(
