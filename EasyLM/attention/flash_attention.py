@@ -161,17 +161,8 @@ def flash_attention(
         PS(("dp", "fsdp"), None, "mp", None)
     )
     
-    # Scan over query chunks and collect debug info
-    debug_scores = []
-    debug_queries = []
-    debug_keys = []
-    
-    def debug_scanner(carry, idx_n):
-        result = chunk_scanner(carry, idx_n)
-        debug_scores.append(result[1])  # Collect scores for debugging
-        return result
-    
-    _, output = jax.lax.scan(debug_scanner,
+    # Scan over query chunks
+    _, output = jax.lax.scan(
         chunk_scanner,
         (init_m, init_l, init_o),
         jnp.arange(query.shape[1])
@@ -183,9 +174,9 @@ def flash_attention(
     
     # Debug prints after scan completes
     from jax.experimental.multihost_utils import process_allgather
-    scores_gathered = process_allgather(debug_scores[0])  # Look at first chunk
+    output_gathered = process_allgather(output)
     
-    jax.debug.print("Block scores shape: {shape}", shape=scores_gathered.shape)
-    jax.debug.print("First chunk scores: {scores}", scores=scores_gathered)
+    jax.debug.print("Output shape: {shape}", shape=output_gathered.shape)
+    jax.debug.print("First token values: {values}", values=output_gathered[0, :4, 0, 0])
     
     return output
