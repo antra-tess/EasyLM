@@ -162,17 +162,22 @@ class FlashAttentionTest(parameterized.TestCase):
             expected = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
             expected = expected.at[:, 1:3, :, :].set(1.0)
             
-            # Use jax.debug.print for debugging inside jitted context
-            diff = jnp.abs(output - expected)
-            max_diff = jnp.max(diff)
-            max_diff_idx = jnp.argmax(diff)
+            # Gather results for debugging
+            from jax.experimental.multihost_utils import process_allgather
+            output_gathered = process_allgather(output)
+            expected_gathered = process_allgather(expected)
             
-            jax.debug.print("Output shape: {}", output.shape)
-            jax.debug.print("First token: {}, Middle token: {}, Last token: {}", 
-                          output[0, 0, 0, 0], output[0, 1, 0, 0], output[0, -1, 0, 0])
-            jax.debug.print("Max diff: {} at index {}", max_diff, max_diff_idx)
-            jax.debug.print("Output value at max diff: {}", output.flatten()[max_diff_idx])
-            jax.debug.print("Expected value at max diff: {}", expected.flatten()[max_diff_idx])
+            if jax.process_index() == 0:
+                diff = jnp.abs(output_gathered - expected_gathered)
+                max_diff = jnp.max(diff)
+                max_diff_idx = jnp.argmax(diff)
+                
+                jax.debug.print("Output shape: {}", output_gathered.shape)
+                jax.debug.print("First token: {}, Middle token: {}, Last token: {}", 
+                              output_gathered[0, 0, 0, 0], output_gathered[0, 1, 0, 0], output_gathered[0, -1, 0, 0])
+                jax.debug.print("Max diff: {} at index {}", max_diff, max_diff_idx)
+                jax.debug.print("Output value at max diff: {}", output_gathered.flatten()[max_diff_idx])
+                jax.debug.print("Expected value at max diff: {}", expected_gathered.flatten()[max_diff_idx])
             
             assert jnp.all(max_diff < 1e-5), f"Attention pattern test failed with max difference {max_diff}"
 
