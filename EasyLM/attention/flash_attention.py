@@ -302,12 +302,13 @@ def flash_attention(
         )
 
         # Scan over key chunks with fresh partial sums
-        (_, _, o_final), _ = jax.lax.scan(
+        (_, l_final, o_final), _ = jax.lax.scan(
             lambda carry, idx_k: kv_chunk_scanner(q, *carry, idx_k, idx_n),
             (m_init, l_init, o_init),
             jnp.arange(key.shape[1])
         )
-        return o_final
+        o_normalized = o_final / l_final
+        return o_normalized
 
     # Process each query chunk independently
     outputs = jax.lax.map(process_query_chunk, jnp.arange(query.shape[1]))
