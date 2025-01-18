@@ -81,14 +81,9 @@ def flash_attention(
             k = with_sharding_constraint(k, PS(("dp", "fsdp"), None, "mp", None))
             v = with_sharding_constraint(v, PS(("dp", "fsdp"), None, "mp", None))
 
-            # Compute attention scores for this block and debug
+            # Compute attention scores for this block
             scores = jnp.einsum('bqhd,bkhd->bhqk', q, k)
             scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
-
-            from EasyLM.jax_utils import debug_sharded
-            debug_sharded("Query chunk", q)
-            debug_sharded("Key chunk", k)
-            debug_sharded("Raw scores", scores)
 
             if bias is not None:
                 # Handle GQA bias if provided
@@ -170,5 +165,9 @@ def flash_attention(
     # Reshape output back to original sequence length and maintain sharding
     output = einops.rearrange(output, 'n b c h d -> b (n c) h d')
     output = with_sharding_constraint(output, PS(("dp", "fsdp"), None, "mp", None))
+
+    # Debug prints after all operations complete
+    from EasyLM.jax_utils import debug_sharded
+    debug_sharded("Final output", output)
 
     return output
