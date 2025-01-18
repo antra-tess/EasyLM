@@ -27,9 +27,10 @@ class FlashAttentionTest(parameterized.TestCase):
         # Apply sharding using make_array_from_callback
         with self.mesh:
             # Use with_sharding_constraint for multi-host compatibility
-            query = with_sharding_constraint(query, PS(("dp",), None, "mp", None))
-            key = with_sharding_constraint(key_tensor, PS(("dp",), None, "mp", None))
-            value = with_sharding_constraint(value, PS(("dp",), None, "mp", None))
+            # Use the same partition: (dp, fsdp) on batch, "mp" on heads
+            query = with_sharding_constraint(query, PS(("dp", "fsdp"), None, "mp", None))
+            key = with_sharding_constraint(key_tensor, PS(("dp", "fsdp"), None, "mp", None))
+            value = with_sharding_constraint(value, PS(("dp", "fsdp"), None, "mp", None))
 
         return query, key, value
 
