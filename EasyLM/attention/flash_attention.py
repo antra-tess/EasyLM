@@ -14,6 +14,7 @@ def flash_attention(
     bias: Optional[jnp.ndarray] = None,
     causal: bool = True,
     chunk_size: int = 128,
+    mesh: Optional[jax.sharding.Mesh] = None,
 ):
     """JAX implementation of Flash Attention with GQA support and TPU sharding.
     
@@ -143,7 +144,7 @@ def flash_attention(
 
         # Create replicated indices for inner scan
         num_kv_chunks = key.shape[1]
-        kv_indices = jax.device_put(jnp.arange(num_kv_chunks), jax.sharding.NamedSharding(self.mesh, None))
+        kv_indices = jax.device_put(jnp.arange(num_kv_chunks), jax.sharding.NamedSharding(mesh, None))
         
         # Scan over key/value chunks
         (m_new, l_new, o_new), _ = jax.lax.scan(
@@ -170,7 +171,7 @@ def flash_attention(
     
     # Create replicated indices using device_put with None sharding
     num_chunks = query.shape[1]
-    indices = jax.device_put(jnp.arange(num_chunks), jax.sharding.NamedSharding(self.mesh, None))
+    indices = jax.device_put(jnp.arange(num_chunks), jax.sharding.NamedSharding(mesh, None))
     
     # Scan over query chunks
     _, output = jax.lax.scan(

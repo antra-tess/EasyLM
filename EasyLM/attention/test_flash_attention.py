@@ -80,7 +80,8 @@ class FlashAttentionTest(parameterized.TestCase):
                 query=query,
                 key=key,
                 value=value,
-                chunk_size=8  # Small chunk size for testing
+                chunk_size=8,  # Small chunk size for testing
+                mesh=self.mesh
             )
             
             # Run reference
