@@ -418,15 +418,15 @@ def debug_sharded(name, array):
         name: String name/description of the array
         array: The sharded array to debug
     """
-    # Use jax.debug.print with raw values
+    # Use jax.debug.print with named format arguments
     jax.debug.print(
-        "\n=== {} ===\nShape: {}\nValues: {}\nStats: mean={} max={} min={}",
-        name,
-        array.shape,
-        array.reshape(-1)[:4],
-        array.mean(),
-        array.max(),
-        array.min()
+        "\n=== {name} ===\nShape: {shape}\nValues: {values}\nStats: mean={mean} max={max} min={min}",
+        shape=array.shape,
+        values=array.reshape(-1)[:4],
+        mean=array.mean(),
+        max=array.max(),
+        min=array.min(),
+        name=jnp.array([ord(c) for c in name], dtype=jnp.int32)  # Convert string to array of ASCII codes
     )
     return array
 
