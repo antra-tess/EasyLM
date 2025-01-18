@@ -411,27 +411,22 @@ def tree_apply(fns, tree):
     return jax.tree_util.tree_map(lambda fn, x: fn(x), fns, tree)
 
 
-def debug_sharded(name, array, unreplicate=True):
-    """Helper for debugging sharded arrays by gathering and printing key values.
+def debug_sharded(name, array):
+    """Helper for debugging sharded arrays that works inside jitted functions.
     
     Args:
         name: String name/description of the array
         array: The sharded array to debug
-        unreplicate: Whether to unreplicate before gathering
     """
-    if unreplicate:
-        array = flax.jax_utils.unreplicate(array)
-    array = jax.device_get(array)
-    
-    print(f"\n=== {name} ===")
-    print(f"Shape: {array.shape}")
-    
-    # Print first few values, adapting to array shape
-    flat_array = array.reshape(-1)
-    print(f"First values: {flat_array[:4]}")
-    
-    print(f"Mean: {array.mean():.4f}")
-    print(f"Max: {array.max():.4f}")
-    print(f"Min: {array.min():.4f}\n")
+    # Use jax.debug.print with raw values
+    jax.debug.print(
+        "\n=== {name} ===\nShape: {shape}\nValues: {values}\nStats: mean={mean} max={max} min={min}",
+        name=name,
+        shape=array.shape,
+        values=array.reshape(-1)[:4],
+        mean=array.mean(),
+        max=array.max(),
+        min=array.min()
+    )
     return array
 
