@@ -18,7 +18,8 @@ from EasyLM.jax_utils import with_sharding_constraint
         out_shardings=(PS(("dp", "fsdp"), "mp", None, None),  # for new m
                      PS(("dp", "fsdp"), "mp", None, None),  # for new l
                      PS(("dp", "fsdp"), None, "mp", None)))  # for new o
-def kv_chunk_scanner(m_inner, l_inner, o_inner, idx_k, query, key, value, num_groups):
+def kv_chunk_scanner(m_inner, l_inner, o_inner, idx_k, query, key, value, num_groups, 
+                    bias, causal, chunk_size, num_q_heads, num_kv_heads, idx_n):
     # Debug prints to verify mechanism works
     jax.debug.print("Processing kv chunk with idx_k={k}", k=idx_k)
     
@@ -249,7 +250,8 @@ def flash_attention(
         
         # Scan over key/value chunks
         (m_new, l_new, o_new), _ = jax.lax.scan(
-            lambda carry, idx: kv_chunk_scanner(*carry, idx, q, key, value, num_groups),
+            lambda carry, idx: kv_chunk_scanner(*carry, idx, q, key, value, num_groups,
+                                              bias, causal, chunk_size, num_q_heads, num_kv_heads, idx_n),
             (m, l, o),
             jnp.arange(key.shape[1])
         )
