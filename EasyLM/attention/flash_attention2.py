@@ -171,9 +171,7 @@ def flash_attention_2d_blocked(
             # q_chunk [b, qc, heads, d] x k_chunk [b, kc, heads, d]
             # -> [b, heads, qc, kc]
             scores = jnp.einsum("bqhd,bkhd->bqhk", q_chunk, k_chunk)
-            scores = with_sharding_constraint(
-                scores, PS(("dp", "fsdp"), "mp", None, None)
-            )
+            scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), None, "mp", None))
 
             # Optionally add bias
             # shape of bias: [b, #heads, seq_len, seq_len]
@@ -225,8 +223,6 @@ def flash_attention_2d_blocked(
             # We want to broadcast each row in qc:
             max_block = jnp.max(scores, axis=-1, keepdims=True)  # [b, heads, qc, 1]
             m_new = jnp.maximum(m_curr, max_block)
-            # shape: [b, qc, heads, 1] after we swap back
-            m_new = m_new.transpose(0, 2, 1, 3)
 
             # exponentiate shifted by new max
             scores_shifted = jnp.exp(scores - max_block)
@@ -234,7 +230,7 @@ def flash_attention_2d_blocked(
             exp_factor = jnp.exp(m_curr - m_new)
             # l_curr: [b, qc, heads, 1]
             # sum of exponentiated scores: [b, heads, qc, 1] after sum over k
-            sum_scores = jnp.sum(scores_shifted, axis=-1, keepdims=True).transpose(0, 2, 1, 3)
+            sum_scores = jnp.sum(scores_shifted, axis=-1, keepdims=True)
 
             l_new = l_curr * exp_factor + sum_scores  # [b, qc, heads, 1]
 
