@@ -156,9 +156,17 @@ def flash_attention_2d_blocked(
 
             # *** CHANGED ***: row-wise stable softmax
             # `scores` is [B, QH, qc, kc]
-            # Debug raw attention scores
-            jax.debug.print("Raw scores stats - Mean: {}, Max: {}, Min: {}", 
+            # Debug raw attention scores with more detail
+            jax.debug.print("\n=== Processing block q={q} k={k} ===", q=idx_n, k=idx_k)
+            jax.debug.print("Raw scores overall - Mean: {}, Max: {}, Min: {}", 
                            jnp.mean(scores), jnp.max(scores), jnp.min(scores))
+            
+            # Debug per-position scores in this block
+            for pos in range(min(scores.shape[2], 4)):  # First 4 positions
+                pos_scores = scores[:, :, pos, :]
+                jax.debug.print("Position {pos} scores - Mean: {}, Max: {}, Min: {}", 
+                              pos=pos + idx_n * scores.shape[2],
+                              jnp.mean(pos_scores), jnp.max(pos_scores), jnp.min(pos_scores))
 
             # We want to update each query row's running max in `m_inner`.
             # `m_inner` is [B, QH, qc, 1], so we do a max over last dim (k).
