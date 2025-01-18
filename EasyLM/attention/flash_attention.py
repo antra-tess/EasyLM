@@ -72,14 +72,16 @@ def flash_attention(
             m_inner, l_inner, o_inner = carry
             
             # Get key/value chunks and repeat for each query group
-            k = einops.repeat(
-                key[:, idx_k],  # [batch, chunk_size, num_kv_heads, head_dim]
-                'b c h d -> b c (h g) d', g=num_groups
-            )
-            v = einops.repeat(
-                value[:, idx_k],  # [batch, chunk_size, num_kv_heads, head_dim]
-                'b c h d -> b c (h g) d', g=num_groups
-            )
+            k = key[:, idx_k]  # [batch, chunk_size, num_kv_heads, head_dim]
+            v = value[:, idx_k]
+            
+            # Reshape to handle scan dimensions
+            k = k.reshape(batch_size, chunk_size, num_kv_heads, head_dim)
+            v = v.reshape(batch_size, chunk_size, num_kv_heads, head_dim)
+            
+            # Now repeat for groups
+            k = einops.repeat(k, 'b c h d -> b c (h g) d', g=num_groups)
+            v = einops.repeat(v, 'b c h d -> b c (h g) d', g=num_groups)
             
             # Apply sharding after repeat
             k = with_sharding_constraint(k, PS(("dp", "fsdp"), None, "mp", None))
