@@ -36,6 +36,8 @@ class FlashAttentionTest(parameterized.TestCase):
 
     def reference_attention(self, query, key, value, causal=True):
         """Reference implementation for comparison."""
+        from EasyLM.jax_utils import debug_tensor
+
         batch_size, seq_len, num_q_heads, head_dim = query.shape
         _, _, num_kv_heads, _ = key.shape
 
@@ -59,13 +61,13 @@ class FlashAttentionTest(parameterized.TestCase):
             )
 
         # Debug raw scores before softmax
-        debug_tensor(f"Raw scores before softmax (q={q_block_idx}, k={k_block_idx})", scores)
+        debug_tensor("Raw scores before softmax", scores)
             
         # Apply softmax per query
         scores = jax.nn.softmax(scores, axis=-1)
             
         # Debug post-softmax scores
-        debug_tensor(f"Post-softmax scores (q={q_block_idx}, k={k_block_idx})", scores)
+        debug_tensor("Post-softmax scores", scores)
 
         # Compute output
         output = jnp.einsum('bhqk,bkhd->bqhd', scores, value)
