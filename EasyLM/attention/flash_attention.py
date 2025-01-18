@@ -71,13 +71,13 @@ def flash_attention(
         def kv_chunk_scanner(carry, idx_k):
             m_inner, l_inner, o_inner = carry
             
-            # Get key/value chunks and repeat for each query group
-            k = key[:, idx_k]  # [batch, chunk_size, num_kv_heads, head_dim]
+            # Get key/value chunks and handle scan dimensions
+            k = key[:, idx_k]  # Shape: [batch, 1, chunk, chunk, heads, dim]
             v = value[:, idx_k]
             
-            # Reshape to handle scan dimensions
-            k = k.reshape(batch_size, chunk_size, num_kv_heads, head_dim)
-            v = v.reshape(batch_size, chunk_size, num_kv_heads, head_dim)
+            # Reshape to collapse scan dimensions
+            k = einops.rearrange(k, 'b n1 n2 c h d -> b c h d')
+            v = einops.rearrange(v, 'b n1 n2 c h d -> b c h d')
             
             # Now repeat for groups
             k = einops.repeat(k, 'b c h d -> b c (h g) d', g=num_groups)
