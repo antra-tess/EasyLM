@@ -6,6 +6,7 @@ import jax.numpy as jnp
 import einops
 from typing import Optional
 from jax.sharding import PartitionSpec as PS
+from jax.experimental.pjit import pjit
 from EasyLM.jax_utils import with_sharding_constraint
 
 
