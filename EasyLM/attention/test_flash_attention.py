@@ -74,10 +74,19 @@ class FlashAttentionTest(parameterized.TestCase):
             query = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
             key = value = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
 
-            # Set up attention pattern
+            # Set up a clear attention pattern:
+            # - First token: uniform attention (zeros)
+            # - Middle tokens (1,2): strong attention to first token (positive values)
+            # - Last token: uniform attention (zeros)
+            
+            # Middle tokens attend strongly to first token
             query = query.at[:, 1:3, :, :].set(1.0)
+            # First token has a distinctive key
             key = key.at[:, 0, :, :].set(1.0)
+            # First token has value 1.0, others 0.0
             value = value.at[:, 0, :, :].set(1.0)
+
+            # Scale query by 1/sqrt(head_dim) as in real usage
             query = query / jnp.sqrt(head_dim)
 
             @jax.jit
@@ -86,7 +95,7 @@ class FlashAttentionTest(parameterized.TestCase):
                     query=query,
                     key=key,
                     value=value,
-                    causal=False,
+                    causal=False,  # Test pure attention without masking
                     q_chunk_size=2,
                     kv_chunk_size=2
                 )
@@ -95,13 +104,39 @@ class FlashAttentionTest(parameterized.TestCase):
             output = flash_attention_jit(query, key, value)
             ref_output = self.reference_attention(query, key, value)
 
-            # Compare outputs using debug_tensor
+            # Compare outputs
             diff = jnp.abs(output - ref_output)
-            debug_tensor("Absolute difference between flash and reference", diff)
-            debug_tensor("Flash attention output", output)
-            debug_tensor("Reference attention output", ref_output)
-
             max_diff = jnp.max(diff)
+
+            # Create gather functions for sharded arrays
+            gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, "mp", None))
+
+            # Debug comparisons using debug_tensor
+            debug_tensor("Max difference between flash and reference", max_diff)
+            debug_tensor("Flash output", output, gather_fn=gather_fn)
+            debug_tensor("Reference output", ref_output, gather_fn=gather_fn)
+
+            # Print specific positions using gather_fn
+            flash_gathered = gather_fn(output) if gather_fn else output
+            ref_gathered = gather_fn(ref_output) if gather_fn else ref_output
+            
+            if flash_gathered is not None and ref_gathered is not None:
+                jax.debug.print(
+                    "First token - Flash: {}, Ref: {}",
+                    flash_gathered[0, 0, 0, 0],
+                    ref_gathered[0, 0, 0, 0]
+                )
+                jax.debug.print(
+                    "Middle token - Flash: {}, Ref: {}",
+                    flash_gathered[0, 1, 0, 0],
+                    ref_gathered[0, 1, 0, 0]
+                )
+                jax.debug.print(
+                    "Last token - Flash: {}, Ref: {}",
+                    flash_gathered[0, -1, 0, 0],
+                    ref_gathered[0, -1, 0, 0]
+                )
+
             assert jnp.all(max_diff < 1e-5), f"Attention pattern test failed with max difference {max_diff}"
 
     # def test_causal_masking(self):
