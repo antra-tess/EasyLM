@@ -10,7 +10,7 @@ sudo mkdir -p /tmp/tpu_logs && sudo chown -R $USER:$USER /tmp/tpu_logs && sudo c
 
 cd ~/EasyLM
 
-if [ "$WORKER_NUM" = "1" ]; then
+if [ "$WORKER_NUM" = "3" ]; then
     echo "Starting flash attention test on worker 0..."
     # Run flash attention tests with output
     python -m EasyLM.attention.test_flash_attention
