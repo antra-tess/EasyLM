@@ -103,39 +103,18 @@ class FlashAttentionTest(parameterized.TestCase):
             # Run both implementations
             output = flash_attention_jit(query, key, value)
             ref_output = self.reference_attention(query, key, value)
+            ref_gathered = process_allgather(ref_output)
 
             # Compare outputs
-            diff = jnp.abs(output - ref_output)
+            diff = jnp.abs(output - ref_gathered)
             max_diff = jnp.max(diff)
 
-            # Create gather functions for sharded arrays
-            gather_fn = create_debug_gather_fn(partition_spec=PS(("dp", "fsdp"), None, "mp", None))
-
-            # Debug comparisons using debug_tensor
-            debug_tensor("Max difference between flash and reference", max_diff)
-            debug_tensor("Flash output", output, gather_fn=gather_fn)
-            debug_tensor("Reference output", ref_output, gather_fn=gather_fn)
-
-            # Print specific positions using gather_fn
-            flash_gathered = gather_fn(output) if gather_fn else output
-            ref_gathered = gather_fn(ref_output) if gather_fn else ref_output
-            
-            if flash_gathered is not None and ref_gathered is not None:
-                jax.debug.print(
-                    "First token - Flash: {}, Ref: {}",
-                    flash_gathered[0, 0, 0, 0],
-                    ref_gathered[0, 0, 0, 0]
-                )
-                jax.debug.print(
-                    "Middle token - Flash: {}, Ref: {}",
-                    flash_gathered[0, 1, 0, 0],
-                    ref_gathered[0, 1, 0, 0]
-                )
-                jax.debug.print(
-                    "Last token - Flash: {}, Ref: {}",
-                    flash_gathered[0, -1, 0, 0],
-                    ref_gathered[0, -1, 0, 0]
-                )
+            # Debug comparisons
+            jax.debug.print("Max difference between flash and reference: {}", max_diff)
+            jax.debug.print("Flash output - First: {}, Middle: {}, Last: {}",
+                          output[0, 0, 0, 0], output[0, 1, 0, 0], output[0, -1, 0, 0])
+            jax.debug.print("Reference output - First: {}, Middle: {}, Last: {}",
+                          ref_gathered[0, 0, 0, 0], ref_gathered[0, 1, 0, 0], ref_gathered[0, -1, 0, 0])
 
             assert jnp.all(max_diff < 1e-5), f"Attention pattern test failed with max difference {max_diff}"
 
