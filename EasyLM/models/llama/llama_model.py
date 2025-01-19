@@ -606,6 +606,9 @@ class FlaxLLaMAAttention(nn.Module):
                     jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
                     jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
                 )
+                # Shape is [batch, seq_len, seq_len]. Expand to [batch, 1, seq_len, seq_len]
+                attention_bias = jnp.expand_dims(attention_bias, axis=1)
+
             # Create the FlashAttention instance from easydel_flash_attention
             fa = create_flash_attention(
                 backend='tpu' if 'tpu' in jax.default_backend() else 'gpu',
