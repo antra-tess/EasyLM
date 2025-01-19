@@ -182,8 +182,8 @@ def flash_attention_2d_blocked(
 
             # Compute raw scores:
             # q_chunk [b, qc, heads, d] x k_chunk [b, kc, heads, d]
-            # -> [b, qc, heads, kc] for consistent bqhk layout
-            scores = jnp.einsum("bqhd,bkhd->bqhk", q_chunk, k_chunk)
+            # -> [b, heads, qc, kc] for consistent bhqk layout
+            scores = jnp.einsum("bqhd,bkhd->bhqk", q_chunk, k_chunk)
             scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
 
             # Optionally add bias
@@ -244,7 +244,7 @@ def flash_attention_2d_blocked(
                 debug_tensor(f"Scores after causal mask (q={q_block_idx}, k={k_block_idx})", scores)
 
             # Now proceed with stable softmax using global max
-            block_max = jnp.max(scores, axis=-1, keepdims=True)   # shape [b,q,h,1] now correct
+            block_max = jnp.max(scores, axis=-1, keepdims=True)   # shape [b,h,q,1] in bhqk layout
             debug_tensor(f"Block max (q={q_block_idx}, k={k_block_idx})", block_max)
 
             # 2) Update global max - this is what we'll use for shifting
