@@ -601,17 +601,25 @@ class FlaxLLaMAAttention(nn.Module):
             # Convert attention mask to bias
             attention_bias = None
             if attention_mask is not None:
+                print(f"Initial attention_mask shape: {attention_mask.shape}")
+                
                 attention_bias = jax.lax.select(
                     attention_mask > 0,
                     jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
                     jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
                 )
+                print(f"After select attention_bias shape: {attention_bias.shape}")
+                
                 # Shape is [batch, seq_len, seq_len]. 
                 # Expand and broadcast to [batch, num_heads, seq_len, seq_len]
                 attention_bias = jnp.broadcast_to(
                     jnp.expand_dims(attention_bias, axis=1),
                     (attention_bias.shape[0], self.config.num_attention_heads, *attention_bias.shape[1:])
                 )
+                print(f"Final attention_bias shape: {attention_bias.shape}")
+                print(f"Query shape: {xq.shape}")
+                print(f"Key shape: {xk.shape}")
+                print(f"Value shape: {xv.shape}")
 
             # Create the FlashAttention instance from easydel_flash_attention
             fa = create_flash_attention(
