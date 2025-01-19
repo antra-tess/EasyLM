@@ -113,7 +113,7 @@ class LLaMAConfigurator(object):
         config.lora_merge_weights = False  # If True, merges LoRA into main weights at inference time
 
         config.use_flash_attention = False 
-        config.flash_platform = 'triton'  # Default to triton since it's generally fastest
+        config.flash_platform = 'pallas'  # Default to triton since it's generally fastest
         config.flash_block_q = 128  # Default block sizes from the paper
         config.flash_block_k = 128
 

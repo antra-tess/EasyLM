@@ -34,17 +34,32 @@ from jax.experimental.pallas.ops.tpu.flash_attention import (
 )
 from jax.extend.backend import get_backend
 
-from .cpu_ops import jax_flash_attn_2_mu
-from .gpu_ops import (
-	pallas_gqa_flash_attention2_gpu,
-	pallas_mha_flash_attention2_gpu,
-	triton_gqa_flash_attention2_gpu,
-)
+# from .cpu_ops import jax_flash_attn_2_mu
+# from .gpu_ops import (
+# 	pallas_gqa_flash_attention2_gpu,
+# 	pallas_mha_flash_attention2_gpu,
+# 	triton_gqa_flash_attention2_gpu,
+# )
 
 AVAILABLE_FLASH_ATTENTION2_PLATFORMS = tp.Literal["triton", "pallas", "jax"]
 AVAILABLE_BACKENDS = tp.Literal["gpu", "tpu", "cpu"]
 BACKEND = get_backend().platform
 
+def jax_flash_attn_2_mu(**kwargs):
+	"""Dummy function to avoid import errors in JAX CPU mode."""
+	raise NotImplementedError("JAX CPU mode not supported.")
+
+def pallas_gqa_flash_attention2_gpu(**kwargs):
+	"""Dummy function to avoid import errors in JAX CPU mode."""
+	raise NotImplementedError("JAX CPU mode not supported.")
+
+def pallas_mha_flash_attention2_gpu(**kwargs):
+	"""Dummy function to avoid import errors in JAX CPU mode."""
+	raise NotImplementedError("JAX CPU mode not supported.")
+
+def triton_gqa_flash_attention2_gpu(**kwargs):
+	"""Dummy function to avoid import errors in JAX CPU mode."""
+	raise NotImplementedError("JAX CPU mode not supported.")
 
 def get_device_memory_usage(device: jax.Device) -> float:
 	"""
