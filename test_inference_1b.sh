@@ -47,7 +47,6 @@ python -m EasyLM.test_inference \
     --llama.lora_dropout=0.1 \
     --llama.lora_attn=true \
     --llama.lora_mlp=true \
-
-#    --llama.use_flash_attention=True \
+    --llama.use_flash_attention=True \
 
 #a46dfdf701c6495882316a472776dc28
