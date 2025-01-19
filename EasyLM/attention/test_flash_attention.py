@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.sharding import Mesh, PartitionSpec as PS
 from absl.testing import absltest, parameterized
-from EasyLM.jax_utils import with_sharding_constraint, get_jax_mesh
+from EasyLM.jax_utils import with_sharding_constraint, get_jax_mesh, create_debug_gather_fn, debug_tensor
 from jax.experimental.multihost_utils import process_allgather
 
 from EasyLM.attention.flash_attention2 import flash_attention_2d_blocked as flash_attention
