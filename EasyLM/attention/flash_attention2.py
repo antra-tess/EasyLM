@@ -183,7 +183,7 @@ def flash_attention_2d_blocked(
             # Compute raw scores:
             # q_chunk [b, qc, heads, d] x k_chunk [b, kc, heads, d]
             # -> [b, heads, qc, kc] for consistent bhqk layout
-            scores = jnp.einsum("bqhd,bkhd->bqhk", q_chunk, k_chunk)
+            scores = jnp.einsum("bqhd,bkhd->bhqk", q_chunk, k_chunk)
             scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
 
             # Optionally add bias
@@ -264,7 +264,7 @@ def flash_attention_2d_blocked(
 
             # Since scores_shifted is [b, h, q, k] and v_chunk is [b, k, h, d],
             # we want out_block in [b, h, q, d] to match bhqk layout
-            out_block = jnp.einsum("bqhk,bkhd->bqhd", scores_shifted, v_chunk)  # [b,q,h,d]
+            out_block = jnp.einsum("bhqk,bkhd->bhqd", scores_shifted, v_chunk)  # [b,h,q,d]
 
 
             # We must multiply existing o_curr by exp_factor, which is shaped [b, qc, heads, 1]
