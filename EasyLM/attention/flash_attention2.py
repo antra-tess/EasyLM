@@ -183,8 +183,8 @@ def flash_attention_2d_blocked(
             # Compute raw scores:
             # q_chunk [b, qc, heads, d] x k_chunk [b, kc, heads, d]
             # -> [b, heads, qc, kc] for consistent bhqk layout
-            scores = jnp.einsum("bqhd,bkhd->bhqk", q_chunk, k_chunk)
-            scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
+            scores = jnp.einsum("bqhd,bkhd->bqhk", q_chunk, k_chunk)
+            scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), None, "mp", None))
 
             # Optionally add bias
             # shape of bias: [b, #heads, seq_len, seq_len]
@@ -196,26 +196,25 @@ def flash_attention_2d_blocked(
 
                 # In GQA, bias might be shaped for kv_heads vs q_heads. We handle accordingly:
                 if bias.shape[1] == num_q_heads:
-                    # Direct slice
                     bias_block = jax.lax.dynamic_slice(
                         bias,
                         (0, 0, q_offset, k_offset),
                         (batch_size, num_q_heads, q_chunk_size, kv_chunk_size),
                     )
+                    # Transpose bias to match bqhk layout
+                    bias_block = jnp.transpose(bias_block, (0, 2, 1, 3))
                 elif bias.shape[1] == num_kv_heads:
-                    # Then repeat it to match q_heads
                     bias_block = jax.lax.dynamic_slice(
                         bias,
                         (0, 0, q_offset, k_offset),
                         (batch_size, num_kv_heads, q_chunk_size, kv_chunk_size),
                     )
                     bias_block = einops.repeat(
-                        bias_block, "b h q k -> b (h g) q k", g=num_groups
+                        bias_block, "b h q k -> b q (h g) k", g=num_groups
                     )
                 else:
                     raise ValueError("Unsupported bias shape for GQA")
 
-                # Now shape is [b, q_heads, qc, kc]. We match [b, heads, qc, kc].
                 scores = scores + bias_block
 
             # Compute raw scores and apply causal masking if needed
@@ -264,7 +263,7 @@ def flash_attention_2d_blocked(
 
             # Since scores_shifted is [b, h, q, k] and v_chunk is [b, k, h, d],
             # we want out_block in [b, h, q, d] to match bhqk layout
-            out_block = jnp.einsum("bhqk,bkhd->bhqd", scores_shifted, v_chunk)  # [b,h,q,d]
+            out_block = jnp.einsum("bqhk,bkhd->bqhd", scores_shifted, v_chunk)
 
 
             # We must multiply existing o_curr by exp_factor, which is shaped [b, qc, heads, 1]
