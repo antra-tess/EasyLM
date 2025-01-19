@@ -74,19 +74,10 @@ class FlashAttentionTest(parameterized.TestCase):
             query = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
             key = value = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
 
-            # Set up a clear attention pattern:
-            # - First token: uniform attention (zeros)
-            # - Middle tokens (1,2): strong attention to first token (positive values)
-            # - Last token: uniform attention (zeros)
-            
-            # Middle tokens attend strongly to first token
+            # Set up attention pattern
             query = query.at[:, 1:3, :, :].set(1.0)
-            # First token has a distinctive key
             key = key.at[:, 0, :, :].set(1.0)
-            # First token has value 1.0, others 0.0
             value = value.at[:, 0, :, :].set(1.0)
-
-            # Scale query by 1/sqrt(head_dim) as in real usage
             query = query / jnp.sqrt(head_dim)
 
             @jax.jit
@@ -95,7 +86,7 @@ class FlashAttentionTest(parameterized.TestCase):
                     query=query,
                     key=key,
                     value=value,
-                    causal=False,  # Test pure attention without masking
+                    causal=False,
                     q_chunk_size=2,
                     kv_chunk_size=2
                 )
@@ -104,17 +95,13 @@ class FlashAttentionTest(parameterized.TestCase):
             output = flash_attention_jit(query, key, value)
             ref_output = self.reference_attention(query, key, value)
 
-            # Compare outputs
+            # Compare outputs using debug_tensor
             diff = jnp.abs(output - ref_output)
+            debug_tensor("Absolute difference between flash and reference", diff)
+            debug_tensor("Flash attention output", output)
+            debug_tensor("Reference attention output", ref_output)
+
             max_diff = jnp.max(diff)
-
-            # Debug comparisons
-            jax.debug.print("Max difference between flash and reference: {}", max_diff)
-            jax.debug.print("Flash output - First: {}, Middle: {}, Last: {}",
-                          output[0, 0, 0, 0], output[0, 1, 0, 0], output[0, -1, 0, 0])
-            jax.debug.print("Reference output - First: {}, Middle: {}, Last: {}",
-                          ref_output[0, 0, 0, 0], ref_output[0, 1, 0, 0], ref_output[0, -1, 0, 0])
-
             assert jnp.all(max_diff < 1e-5), f"Attention pattern test failed with max difference {max_diff}"
 
     # def test_causal_masking(self):
