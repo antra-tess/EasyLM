@@ -608,6 +608,9 @@ class FlaxLLaMAAttention(nn.Module):
                 )
                 # Shape is [batch, seq_len, seq_len]. Expand to [batch, 1, seq_len, seq_len]
                 attention_bias = jnp.expand_dims(attention_bias, axis=1)
+                # Add another dimension for kv_seq_len if needed
+                if len(attention_bias.shape) == 3:
+                    attention_bias = jnp.expand_dims(attention_bias, axis=-1)
 
             # Create the FlashAttention instance from easydel_flash_attention
             fa = create_flash_attention(
