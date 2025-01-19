@@ -34,7 +34,7 @@ class FlashAttentionTest(parameterized.TestCase):
 
         return query, key, value
 
-    def reference_attention(self, query, key, value, causal=True):
+    def reference_attention(self, query, key, value, causal=False):
         """Reference implementation for comparison."""
         from EasyLM.jax_utils import debug_tensor
 
@@ -48,29 +48,22 @@ class FlashAttentionTest(parameterized.TestCase):
 
         # Scale query
         query = query / jnp.sqrt(head_dim)
+        debug_tensor("Reference - scaled query", query)
 
         # Compute attention scores
-        scores = jnp.einsum('bqhd,bkhd->bhqk', query, key)
-
-        if causal:
-            mask = jnp.triu(jnp.ones((seq_len, seq_len)), k=1)
-            scores = jnp.where(
-                mask[None, None, :, :],
-                jnp.finfo(scores.dtype).min,
-                scores
-            )
-
-        # Debug raw scores before softmax
-        debug_tensor("Raw scores before softmax", scores)
+        scores = jnp.einsum('bqhd,bkhd->bqhk', query, key)
+        debug_tensor("Reference - raw scores", scores)
             
         # Apply softmax per query
         scores = jax.nn.softmax(scores, axis=-1)
+        debug_tensor("Reference - softmax scores", scores)
             
-        # Debug post-softmax scores
-        debug_tensor("Post-softmax scores", scores)
+        # Debug attention distribution for middle tokens
+        debug_tensor("Reference - middle token attention", scores[:, 1:3, :, 0])
 
         # Compute output
-        output = jnp.einsum('bhqk,bkhd->bqhd', scores, value)
+        output = jnp.einsum('bqhk,bkhd->bqhd', scores, value)
+        debug_tensor("Reference - output", output)
         return output
 
 
@@ -107,26 +100,20 @@ class FlashAttentionTest(parameterized.TestCase):
                     kv_chunk_size=2
                 )
 
+            # Run both implementations
             output = flash_attention_jit(query, key, value)
+            ref_output = self.reference_attention(query, key, value)
 
-            # Expected pattern:
-            # - First token: uniform attention -> ~0.25 (average of all values)
-            # - Middle tokens: strong attention to first token -> ~1.0
-            # - Last token: uniform attention -> ~0.25
-            expected = jnp.full((batch_size, seq_len, num_heads, head_dim), 0.25)
-            expected = expected.at[:, 1:3, :, :].set(1.0)
-
-            # Calculate diff on all processes
-            diff = jnp.abs(output - expected)
+            # Compare outputs
+            diff = jnp.abs(output - ref_output)
             max_diff = jnp.max(diff)
 
-            # Gather results for debugging
-            output_gathered = process_allgather(output)
-            expected_gathered = process_allgather(expected)
-
-            jax.debug.print("Output shape: {}", output_gathered.shape)
-            jax.debug.print("First token (uniform): {}, Middle token (strong): {}, Last token (uniform): {}",
-                          output_gathered[0, 0, 0, 0], output_gathered[0, 1, 0, 0], output_gathered[0, -1, 0, 0])
+            # Debug comparisons
+            jax.debug.print("Max difference between flash and reference: {}", max_diff)
+            jax.debug.print("Flash output - First: {}, Middle: {}, Last: {}",
+                          output[0, 0, 0, 0], output[0, 1, 0, 0], output[0, -1, 0, 0])
+            jax.debug.print("Reference output - First: {}, Middle: {}, Last: {}",
+                          ref_output[0, 0, 0, 0], ref_output[0, 1, 0, 0], ref_output[0, -1, 0, 0])
 
             assert jnp.all(max_diff < 1e-5), f"Attention pattern test failed with max difference {max_diff}"
 

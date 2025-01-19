@@ -280,6 +280,15 @@ def flash_attention_2d_blocked(
             l_new = with_sharding_constraint(l_new, PS(("dp", "fsdp"), None, "mp", None))
             o_new = with_sharding_constraint(o_new, PS(("dp", "fsdp"), None, "mp", None))
 
+            # Debug normalization factors
+            debug_tensor(f"exp_factor (q={q_block_idx}, k={k_block_idx})", exp_factor)
+            debug_tensor(f"sum_scores before norm (q={q_block_idx}, k={k_block_idx})", sum_scores)
+            debug_tensor(f"l_new (denominator) (q={q_block_idx}, k={k_block_idx})", l_new)
+            
+            # Debug intermediate output
+            debug_tensor(f"out_block before scaling (q={q_block_idx}, k={k_block_idx})", out_block)
+            debug_tensor(f"o_new (numerator) (q={q_block_idx}, k={k_block_idx})", o_new)
+
             return (m_new, l_new, o_new), None
 
         # Now do a scan over the key-chunks for this single q-chunk
@@ -290,6 +299,15 @@ def flash_attention_2d_blocked(
         # Normalize final o_final by l_final
         # shapes: o_final [b, qc, heads, d], l_final [b, qc, heads, 1]
         o_normalized = o_final / l_final
+
+        # Debug normalization factors
+        debug_tensor(f"exp_factor (q={q_block_idx}, k={k_block_idx})", exp_factor)
+        debug_tensor(f"sum_scores before norm (q={q_block_idx}, k={k_block_idx})", sum_scores)
+        debug_tensor(f"l_new (denominator) (q={q_block_idx}, k={k_block_idx})", l_final)
+        
+        # Debug intermediate output
+        debug_tensor(f"out_block before scaling (q={q_block_idx}, k={k_block_idx})", o_final)
+        debug_tensor(f"o_new (numerator) (q={q_block_idx}, k={k_block_idx})", o_final)
 
         return o_normalized
 
