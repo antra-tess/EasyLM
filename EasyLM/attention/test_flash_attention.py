@@ -75,23 +75,26 @@ class FlashAttentionTest(parameterized.TestCase):
 
 
     def test_attention_patterns(self):
-        """Test specific attention patterns."""
+        """Test specific attention patterns without causal masking."""
         with self.mesh:
-            # Create a sequence where middle tokens should attend strongly to first token
-            batch_size, seq_len, num_heads, head_dim = 32, 4, 4, 32  # Match mesh dimensions: fsdp=8, mp=4
+            batch_size, seq_len, num_heads, head_dim = 32, 4, 4, 32
             query = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
             key = value = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
 
-            # First token: strongly negative query so it attends nowhere
-            query = query.at[:, 0, :, :].set(-1e9)
-            # Middle tokens: strong positive query to attend to first token
-            query = query.at[:, 1:3, :, :].set(10.0)
-            # First token: strong key for middle tokens to attend to
-            key = key.at[:, 0, :, :].set(10.0)
-            # First token: value of 1.0 that will be picked up by middle tokens
+            # Set up a clear attention pattern:
+            # - First token: uniform attention (zeros)
+            # - Middle tokens (1,2): strong attention to first token (positive values)
+            # - Last token: uniform attention (zeros)
+            
+            # Middle tokens attend strongly to first token
+            query = query.at[:, 1:3, :, :].set(1.0)
+            # First token has a distinctive key
+            key = key.at[:, 0, :, :].set(1.0)
+            # First token has value 1.0, others 0.0
             value = value.at[:, 0, :, :].set(1.0)
 
-
+            # Scale query by 1/sqrt(head_dim) as in real usage
+            query = query / jnp.sqrt(head_dim)
 
             @jax.jit
             def flash_attention_jit(query, key, value):
@@ -99,16 +102,18 @@ class FlashAttentionTest(parameterized.TestCase):
                     query=query,
                     key=key,
                     value=value,
+                    causal=False,  # Test pure attention without masking
                     q_chunk_size=2,
                     kv_chunk_size=2
                 )
 
-
-            # Run flash attention
             output = flash_attention_jit(query, key, value)
 
-            # Middle tokens should get first token's value, others near zero
-            expected = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
+            # Expected pattern:
+            # - First token: uniform attention -> ~0.25 (average of all values)
+            # - Middle tokens: strong attention to first token -> ~1.0
+            # - Last token: uniform attention -> ~0.25
+            expected = jnp.full((batch_size, seq_len, num_heads, head_dim), 0.25)
             expected = expected.at[:, 1:3, :, :].set(1.0)
 
             # Calculate diff on all processes
@@ -118,14 +123,10 @@ class FlashAttentionTest(parameterized.TestCase):
             # Gather results for debugging
             output_gathered = process_allgather(output)
             expected_gathered = process_allgather(expected)
-            max_diff_idx = jnp.argmax(jnp.abs(output_gathered - expected_gathered))
 
             jax.debug.print("Output shape: {}", output_gathered.shape)
-            jax.debug.print("First token: {}, Middle token: {}, Last token: {}",
+            jax.debug.print("First token (uniform): {}, Middle token (strong): {}, Last token (uniform): {}",
                           output_gathered[0, 0, 0, 0], output_gathered[0, 1, 0, 0], output_gathered[0, -1, 0, 0])
-            jax.debug.print("Max diff at index {}", max_diff_idx)
-            jax.debug.print("Output value at max diff: {}", output_gathered.flatten()[max_diff_idx])
-            jax.debug.print("Expected value at max diff: {}", expected_gathered.flatten()[max_diff_idx])
 
             assert jnp.all(max_diff < 1e-5), f"Attention pattern test failed with max difference {max_diff}"
 
