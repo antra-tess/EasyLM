@@ -7,7 +7,7 @@ echo "Starting TPU pod deployment..."
 
 # Push local changes to antra's repo
 echo "Pushing local changes to repository..."
-git push antra
+git push
 
 # Deploy to all workers
 # Get HF token from environment or ask for it
