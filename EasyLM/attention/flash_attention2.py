@@ -234,7 +234,7 @@ def flash_attention_2d_blocked(
                 # shape [qc, kc] where True means position should be masked
                 causal_mask = local_q_positions[:, None] < local_k_positions[None, :]
                 # Expand mask to [1, 1, qc, kc] for broadcasting with [b, h, qc, kc]
-                causal_mask = causal_mask[None, None, :, :]
+                causal_mask = causal_mask[None, :, None, :]
                 scores = jnp.where(
                     causal_mask,
                     jnp.finfo(scores.dtype).min,
