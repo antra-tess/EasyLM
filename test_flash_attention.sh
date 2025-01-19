@@ -15,6 +15,6 @@ if [ "$WORKER_NUM" = "1" ]; then
     # Run flash attention tests with output
     python -m EasyLM.attention.test_flash_attention
 else
-     Run tests but suppress output
+    # Run tests but suppress output
     python -m EasyLM.attention.test_flash_attention > /dev/null 2>&1
 fi
