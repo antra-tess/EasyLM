@@ -12,7 +12,7 @@ echo "Starting TPU pod serving deployment..."
 # Push local changes to antra's repo
 echo "Pushing local changes to repository..."
 git pull
-git push antra
+git push
 
 ## Start coordinator server in background
 #echo "Starting coordinator server..."

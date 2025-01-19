@@ -7,7 +7,7 @@ echo "Starting TPU pod training deployment..."
 # Push latest changes
 echo "Pushing changes to repository..."
 git pull
-git push antra
+git push
 
 export SCRIPT=worker_train_lora.sh
 

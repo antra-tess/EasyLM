@@ -8,7 +8,7 @@ echo "Starting TPU pod test deployment..."
 # Push local changes to antra's repo
 echo "Pushing local changes to repository..."
 git pull
-git push antra
+git push
 
 # Copy script and run on all workers
 echo "Starting test on all workers..."
