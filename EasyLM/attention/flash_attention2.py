@@ -300,14 +300,10 @@ def flash_attention_2d_blocked(
         # shapes: o_final [b, qc, heads, d], l_final [b, qc, heads, 1]
         o_normalized = o_final / l_final
 
-        # Debug normalization factors
-        debug_tensor(f"exp_factor (q={q_block_idx}, k={k_block_idx})", exp_factor)
-        debug_tensor(f"sum_scores before norm (q={q_block_idx}, k={k_block_idx})", sum_scores)
-        debug_tensor(f"l_new (denominator) (q={q_block_idx}, k={k_block_idx})", l_final)
-        
-        # Debug intermediate output
-        debug_tensor(f"out_block before scaling (q={q_block_idx}, k={k_block_idx})", o_final)
-        debug_tensor(f"o_new (numerator) (q={q_block_idx}, k={k_block_idx})", o_final)
+        # Debug final values for this q_chunk
+        debug_tensor(f"Final l (denominator) for q_chunk {q_block_idx}", l_final)
+        debug_tensor(f"Final o (numerator) for q_chunk {q_block_idx}", o_final)
+        debug_tensor(f"Normalized output for q_chunk {q_block_idx}", o_normalized)
 
         return o_normalized
 
