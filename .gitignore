@@ -137,3 +137,5 @@ request_logs
 .aider*
 *.md
 *.json
+.idea/*
+.idea/inspectionProfiles/profiles_settings.xml
