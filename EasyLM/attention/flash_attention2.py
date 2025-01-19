@@ -232,8 +232,8 @@ def flash_attention_2d_blocked(
                 # Build causal mask using correct absolute positions
                 # shape [qc, kc] where True means position should be masked
                 causal_mask = local_q_positions[:, None] < local_k_positions[None, :]
-                # Expand mask to [1, 1, qc, kc] for broadcasting with [b, h, qc, kc]
-                causal_mask = causal_mask[None, None, :, :]
+                # Expand mask to [1, qc, 1, kc] for broadcasting with [b, qc, h, kc]
+                causal_mask = causal_mask[None, :, None, :]
                 scores = jnp.where(
                     causal_mask,
                     jnp.finfo(scores.dtype).min,
@@ -243,7 +243,7 @@ def flash_attention_2d_blocked(
                 debug_tensor(f"Scores after causal mask (q={q_block_idx}, k={k_block_idx})", scores)
 
             # Now proceed with stable softmax using global max
-            block_max = jnp.max(scores, axis=-1, keepdims=True)   # shape [b,h,q,1] in bhqk layout
+            block_max = jnp.max(scores, axis=-1, keepdims=True)   # shape [b,q,h,1]
             debug_tensor(f"Block max (q={q_block_idx}, k={k_block_idx})", block_max)
 
             # 2) Update global max - this is what we'll use for shifting
@@ -261,7 +261,7 @@ def flash_attention_2d_blocked(
             sum_scores = jnp.sum(scores_shifted, axis=-1, keepdims=True)
             l_new = l_curr * exp_factor + sum_scores  # [b, qc, heads, 1]
 
-            # Since scores_shifted is [b, h, q, k] and v_chunk is [b, k, h, d],
+            # Since scores_shifted is [b, q, h, k] and v_chunk is [b, k, h, d],
             # we want out_block in [b, h, q, d] to match bhqk layout
             out_block = jnp.einsum("bqhk,bkhd->bqhd", scores_shifted, v_chunk)
 
