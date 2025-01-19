@@ -182,7 +182,7 @@ def flash_attention_2d_blocked(
 
             # Compute raw scores:
             # q_chunk [b, qc, heads, d] x k_chunk [b, kc, heads, d]
-            # -> [b, heads, qc, kc] for consistent bhqk layout
+            # -> [b, qc, heads, kc] for consistent bqhk layout
             scores = jnp.einsum("bqhd,bkhd->bqhk", q_chunk, k_chunk)
             scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
 
