@@ -128,18 +128,9 @@ def flash_attention_2d_blocked(
         # q_chunk: [b, qc, q_heads, d]
         # We'll track partial sums with shape [b, h, q, 1] for m and l
         # and [b, h, q, d] for o to match bhqk layout
-        m_init = jnp.full(
-            (batch_size, num_q_heads, q_chunk_size, 1),
-            -jnp.inf,
-            dtype=q_chunk.dtype,
-        )
-        l_init = jnp.zeros(
-            (batch_size, num_q_heads, q_chunk_size, 1), dtype=q_chunk.dtype
-        )
-        o_init = jnp.zeros(
-            (batch_size, num_q_heads, q_chunk_size, head_dim),
-            dtype=q_chunk.dtype,
-        )
+        m_init = jnp.full((batch_size, q_chunk_size, num_q_heads, 1), -jnp.inf, dtype=q_chunk.dtype)
+        l_init = jnp.zeros((batch_size, q_chunk_size, num_q_heads, 1), dtype=q_chunk.dtype)
+        o_init = jnp.zeros((batch_size, q_chunk_size, num_q_heads, head_dim), dtype=q_chunk.dtype)
 
         m_init = with_sharding_constraint(m_init, PS(("dp", "fsdp"), "mp", None, None))
         l_init = with_sharding_constraint(l_init, PS(("dp", "fsdp"), "mp", None, None))
@@ -192,7 +183,7 @@ def flash_attention_2d_blocked(
             # Compute raw scores:
             # q_chunk [b, qc, heads, d] x k_chunk [b, kc, heads, d]
             # -> [b, heads, qc, kc] for consistent bhqk layout
-            scores = jnp.einsum("bqhd,bkhd->bhqk", q_chunk, k_chunk)
+            scores = jnp.einsum("bqhd,bkhd->bqhk", q_chunk, k_chunk)
             scores = with_sharding_constraint(scores, PS(("dp", "fsdp"), "mp", None, None))
 
             # Optionally add bias
@@ -253,7 +244,7 @@ def flash_attention_2d_blocked(
                 debug_tensor(f"Scores after causal mask (q={q_block_idx}, k={k_block_idx})", scores)
 
             # Now proceed with stable softmax using global max
-            block_max = jnp.max(scores, axis=-1, keepdims=True)  # [b, h, qc, 1]
+            block_max = jnp.max(scores, axis=-1, keepdims=True)   # shape [b,q,h,1] now correct
             debug_tensor(f"Block max (q={q_block_idx}, k={k_block_idx})", block_max)
 
             # 2) Update global max - this is what we'll use for shifting
@@ -273,7 +264,7 @@ def flash_attention_2d_blocked(
 
             # Since scores_shifted is [b, h, q, k] and v_chunk is [b, k, h, d],
             # we want out_block in [b, h, q, d] to match bhqk layout
-            out_block = jnp.einsum("bhqk,bkhd->bhqd", scores_shifted, v_chunk)
+            out_block = jnp.einsum("bqhk,bkhd->bqhd", scores_shifted, v_chunk)  # [b,q,h,d]
 
 
             # We must multiply existing o_curr by exp_factor, which is shaped [b, qc, heads, 1]
@@ -308,22 +299,11 @@ def flash_attention_2d_blocked(
     # Map over all q-blocks. This yields shape [n_q, b, qc, heads, d]
     all_q_outputs = jax.lax.map(process_all_q_chunks, jnp.arange(n_q))
 
-    # Debug final output before reshaping
-    debug_tensor("Final output before reshape", all_q_outputs)
-
-    # First transpose to get [b, h, n_q, qc, d]
-    output = jnp.transpose(all_q_outputs, (1, 2, 0, 3, 4))
-
-    # Then merge n_q and qc dimensions to get [b, h, seq_len, d]
+    debug_tensor("Final output blocks", all_q_outputs)
     output = einops.rearrange(
-        output,
-        "b h nq qc d -> b h (nq qc) d",
-        nq=n_q,
-        qc=q_chunk_size
+            all_q_outputs, "nq b qc h d -> b (nq qc) h d",
+            nq=n_q, qc=q_chunk_size
     )
-
-    # Finally transpose to match expected output shape [b, seq_len, h, d]
-    output = jnp.transpose(output, (0, 2, 1, 3))
 
     # Apply final sharding constraint
     output = with_sharding_constraint(output, PS(("dp", "fsdp"), None, "mp", None))
