@@ -21,7 +21,7 @@ from EasyLM.bpt import blockwise_ffn, blockwise_attn
 from EasyLM.jax_utils import (
     with_sharding_constraint, get_jax_mesh, get_gradient_checkpoint_policy
 )
-from EasyLM.attention.flash_attention import flash_attention
+from EasyLM.attention.easydel_flash_attention import create_flash_attention
 
 
 class LLaMAConfigurator(object):
@@ -260,7 +260,7 @@ class LLaMAConfigurator(object):
                 rope_theta=5e5,
             ),
             'llama31_70b': dict(
-                base_model='llama31_70b',  # The internal “base_model” name, can be whatever you like
+                base_model='llama31_70b',  # The internal "base_model" name, can be whatever you like
                 vocab_size=128256,  # from config.json
                 hidden_size=8192,  # "hidden_size": 8192
                 intermediate_size=28672,  # "intermediate_size": 28672
@@ -606,14 +606,19 @@ class FlaxLLaMAAttention(nn.Module):
                     jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
                     jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
                 )
-
-            attn_output = flash_attention(
+            # Create the FlashAttention instance from easydel_flash_attention
+            fa = create_flash_attention(
+                backend='tpu' if 'tpu' in jax.default_backend() else 'gpu',
+                platform=self.config.flash_platform,
+                blocksize_q=self.config.flash_block_q,
+                blocksize_k=self.config.flash_block_k
+            )
+            # Simply call fa(...) with query, key, value, and optional bias
+            attn_output = fa(
                 query=xq,
                 key=xk,
                 value=xv,
                 bias=attention_bias,
-                causal=True,
-                chunk_size=self.config.flash_block_q
             )
             attn_weights = None
 
