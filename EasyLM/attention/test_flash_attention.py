@@ -129,6 +129,84 @@ class FlashAttentionTest(parameterized.TestCase):
 
             assert jnp.all(max_diff < 1e-5), f"Attention pattern test failed with max difference {max_diff}"
 
+    def test_causal_masking(self):
+        """Test that causal masking works correctly."""
+        with self.mesh:
+            batch_size, seq_len, num_heads, head_dim = 32, 4, 4, 32
+            query = jnp.ones((batch_size, seq_len, num_heads, head_dim))
+            key = value = jnp.ones((batch_size, seq_len, num_heads, head_dim))
+
+            # Scale query by 1/sqrt(head_dim) as in real usage
+            query = query / jnp.sqrt(head_dim)
+
+            @jax.jit
+            def flash_attention_jit(query, key, value):
+                return flash_attention(
+                    query=query,
+                    key=key,
+                    value=value,
+                    causal=True,
+                    q_chunk_size=2,
+                    kv_chunk_size=2
+                )
+
+            output = flash_attention_jit(query, key, value)
+
+            # With uniform inputs and causal masking:
+            # - First position (0) should only attend to itself: value[0]
+            # - Second position (1) should attend to 0,1: mean(value[0:2])
+            # - Third position (2) should attend to 0,1,2: mean(value[0:3])
+            # And so on...
+            expected = jnp.zeros_like(output)
+            for i in range(seq_len):
+                expected = expected.at[:, i].set(jnp.mean(value[:, :i+1], axis=1))
+
+            diff = jnp.abs(output - expected)
+            max_diff = jnp.max(diff)
+            assert jnp.all(max_diff < 1e-5), f"Causal masking test failed with max difference {max_diff}"
+
+    def test_attention_values(self):
+        """Test attention value computation without masking."""
+        with self.mesh:
+            batch_size, seq_len, num_heads, head_dim = 32, 4, 4, 32
+            
+            # Create query that strongly attends to first position
+            query = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
+            query = query.at[:, 1:3].set(1.0)  # Middle tokens attend strongly
+            
+            # Create key with distinct value at first position
+            key = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
+            key = key.at[:, 0].set(1.0)  # First position is special
+            
+            # Create value with 1.0 at first position
+            value = jnp.zeros((batch_size, seq_len, num_heads, head_dim))
+            value = value.at[:, 0].set(1.0)
+
+            # Scale query by 1/sqrt(head_dim)
+            query = query / jnp.sqrt(head_dim)
+
+            @jax.jit
+            def flash_attention_jit(query, key, value):
+                return flash_attention(
+                    query=query,
+                    key=key,
+                    value=value,
+                    causal=False,  # Test attention without masking
+                    q_chunk_size=2,
+                    kv_chunk_size=2
+                )
+
+            output = flash_attention_jit(query, key, value)
+
+            # Middle tokens should attend strongly to first position
+            # Other tokens should have near-zero attention
+            expected = jnp.zeros_like(output)
+            expected = expected.at[:, 1:3].set(1.0)
+
+            diff = jnp.abs(output - expected)
+            max_diff = jnp.max(diff)
+            assert jnp.all(max_diff < 1e-5), f"Attention values test failed with max difference {max_diff}"
+
 
 if __name__ == '__main__':
     absltest.main() 

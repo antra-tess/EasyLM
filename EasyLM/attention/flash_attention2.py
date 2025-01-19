@@ -231,7 +231,7 @@ def flash_attention_2d_blocked(
                 
                 # Build causal mask using correct absolute positions
                 # shape [qc, kc] where True means position should be masked
-                causal_mask = local_q_positions[:, None] < local_k_positions[None, :]
+                causal_mask = local_q_positions[:, None] < local_k_positions[None, :]  # Mask future positions
                 # Expand mask to [1, qc, 1, kc] for broadcasting with [b, qc, h, kc]
                 causal_mask = causal_mask[None, :, None, :]
                 scores = jnp.where(
@@ -251,7 +251,13 @@ def flash_attention_2d_blocked(
             debug_tensor(f"Global max (q={q_block_idx}, k={k_block_idx})", m_new)
 
             # 3) Exponentiate scores using global max m_new (not local block_max)
-            scores_shifted = jnp.exp(scores - m_new)
+            # Add numerical stability check
+            shifted = scores - m_new
+            scores_shifted = jnp.where(
+                shifted < -10.0,  # threshold for numerical stability
+                jnp.zeros_like(shifted),
+                jnp.exp(shifted)
+            )
             debug_tensor(f"Shifted scores (q={q_block_idx}, k={k_block_idx})", scores_shifted)
 
             # 4) Scale old partial sums by exp_factor = exp(m_curr - m_new)
