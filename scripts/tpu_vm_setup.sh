@@ -15,7 +15,7 @@ sudo apt-get update && sudo apt-get install -y \
 # Python dependencies
 cat > $HOME/tpu_requirements.txt <<- EndOfFile
 -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
-jax[tpu]==0.4.28
+jax[tpu]==0.4.34
 flax==0.10.2
 optax==0.2.2
 einops
