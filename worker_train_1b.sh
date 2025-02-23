@@ -26,8 +26,8 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --tokenizer="meta-llama/Llama-3.2-1B" \
     --load_checkpoint='base_params::/mnt/disk2/llama-3.2-1b.easylm' \
     --train_dataset.type='json' \
-    --train_dataset.text_processor.template="$(cat templates/borg_chat.yaml)" \
-    --train_dataset.json_dataset.path="/mnt/disk2/simulect_conversations.jsonl" \
+    --train_dataset.text_processor.template="$(cat templates/borg_chat_exp.yaml)" \
+    --train_dataset.json_dataset.path="/mnt/disk2/conversations_all.jsonl" \
     --train_dataset.json_dataset.seq_length=4096 \
     --train_dataset.json_dataset.batch_size=64 \
     --optimizer.type='adamw' \

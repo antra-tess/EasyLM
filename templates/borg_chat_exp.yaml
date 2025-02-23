@@ -1,0 +1,5 @@
+sequence:
+  - no_loss: "{instruction}{input}\n"
+  - no_loss: '<msg username="{author}">'
+  - with_loss: "{output}"
+  - with_loss: '</msg>\n'
