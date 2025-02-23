@@ -31,10 +31,10 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --train_dataset.json_dataset.seq_length=4096 \
     --train_dataset.json_dataset.batch_size=64 \
     --optimizer.type='adamw' \
-    --optimizer.adamw_optimizer.lr=5e-4 \
-    --optimizer.adamw_optimizer.end_lr=1e-5 \
+    --optimizer.adamw_optimizer.lr=9e-4 \
+    --optimizer.adamw_optimizer.end_lr=3e-5 \
     --optimizer.adamw_optimizer.lr_warmup_steps=100 \
-    --optimizer.adamw_optimizer.lr_decay_steps=1000 \
+    --optimizer.adamw_optimizer.lr_decay_steps=5000 \
     --total_steps=15000 \
     --log_freq=50 \
     --save_model_freq=200 \
