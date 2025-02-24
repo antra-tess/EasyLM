@@ -28,7 +28,7 @@ cd ~/EasyLM && python -m EasyLM.models.llama.llama_lora_train \
     --train_dataset.type='json' \
     --train_dataset.text_processor.template="$(cat templates/borg_chat_exp.yaml)" \
     --train_dataset.json_dataset.path="/mnt/disk2/conversations_all.jsonl" \
-    --train_dataset.json_dataset.seq_length=2048 \
+    --train_dataset.json_dataset.seq_length=1024 \
     --train_dataset.json_dataset.batch_size=64 \
     --optimizer.type='adamw' \
     --optimizer.adamw_optimizer.lr=1e-4 \
