@@ -7,6 +7,7 @@ import os
 import json
 import time
 import argparse
+import random  # Add import for random module
 from pathlib import Path
 
 # Configure logging
@@ -154,16 +155,18 @@ def test_gemma_inference(prompt_file=None, num_completions=5):
         
         for i in range(num_completions):
             logger.info(f"Starting generation #{i+1}...")
-            # Use different random seeds for variety
-            torch.manual_seed(42 + i)
+            # Use true random seeds for complete variety
+            random_seed = random.randint(1, 1000000)
+            torch.manual_seed(random_seed)
+            logger.info(f"Using random seed: {random_seed}")
             
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=500,  # Reasonable length for a short story
                 do_sample=True,
-                temperature=0.9,     # Slightly higher temperature for creativity
+                temperature=0.95,     # Slightly higher temperature for creativity
                 top_p=0.99,          # More focused sampling
-                top_k=250,            # Reasonable diversity
+                top_k=250,           # Reasonable diversity
             )
             
             # Decode and save output
