@@ -16,7 +16,7 @@ def main():
     """
     Simple test script to verify Gemma-3 model loading works correctly
     """
-    model_name = "google/gemma-3-2b-pt"  # Smaller model for quicker testing
+    model_name = "google/gemma-3-27b-pt"  # Smaller model for quicker testing
     
     logger.info(f"Testing loading Gemma-3 model: {model_name}")
     
