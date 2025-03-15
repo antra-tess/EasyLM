@@ -42,15 +42,83 @@ echo "==== Template file content ===="
 cat "$TEMPLATE_PATH"
 echo "==== End of template file content ===="
 
+# Diagnostic information about CUDA setup
+echo "==== CUDA Diagnostics ===="
+echo "Checking for CUDA installation..."
+
+# Try to find CUDA installation paths
+CUDA_PATHS=(
+    "/usr/local/cuda"
+    "/usr/cuda"
+    "/opt/cuda"
+    "/usr/lib/cuda"
+)
+
+CUDA_FOUND=false
+for path in "${CUDA_PATHS[@]}"; do
+    if [ -d "$path" ]; then
+        echo "Found CUDA at: $path"
+        if [ -f "$path/include/cuda_runtime.h" ]; then
+            echo "✅ Found cuda_runtime.h at $path/include/cuda_runtime.h"
+            export CUDA_HOME="$path"
+            export CUDA_TOOLKIT_ROOT_DIR="$path"
+            export PATH="$CUDA_HOME/bin:$PATH"
+            export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+            export CPATH="$CUDA_HOME/include:$CPATH"
+            CUDA_FOUND=true
+            break
+        else
+            echo "❌ cuda_runtime.h not found in $path/include"
+        fi
+    fi
+done
+
+if [ "$CUDA_FOUND" = false ]; then
+    echo "No standard CUDA installation found. Using nvcc to determine CUDA location..."
+    NVCC_PATH=$(which nvcc 2>/dev/null || echo "")
+    if [ -n "$NVCC_PATH" ]; then
+        CUDA_HOME=$(dirname $(dirname "$NVCC_PATH"))
+        echo "Found CUDA at: $CUDA_HOME (derived from nvcc path)"
+        export CUDA_HOME="$CUDA_HOME"
+        export CUDA_TOOLKIT_ROOT_DIR="$CUDA_HOME"
+        export PATH="$CUDA_HOME/bin:$PATH"
+        export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+        export CPATH="$CUDA_HOME/include:$CPATH"
+        if [ -f "$CUDA_HOME/include/cuda_runtime.h" ]; then
+            echo "✅ Found cuda_runtime.h at $CUDA_HOME/include/cuda_runtime.h"
+            CUDA_FOUND=true
+        else
+            echo "❌ cuda_runtime.h not found in $CUDA_HOME/include"
+        fi
+    else
+        echo "❌ nvcc not found in PATH"
+    fi
+fi
+
+if [ "$CUDA_FOUND" = true ]; then
+    echo "Using CUDA_HOME: $CUDA_HOME"
+    echo "Adding GPU architecture for A100 (sm_80)"
+    export TORCH_CUDA_ARCH_LIST="8.0"
+    # Remove any previous failed compilations
+    rm -rf /home/athuser/.cache/torch_extensions/py312_cu124/fused_adam
+else
+    echo "⚠️  Could not find CUDA installation with cuda_runtime.h"
+    echo "Switching to standard PyTorch optimizer to avoid compilation issues"
+    
+    # Use these environment variables to disable CUDA ops compilation
+    export DS_BUILD_OPS=0 
+    export DS_BUILD_FUSED_ADAM=0
+    export DS_BUILD_FUSED_LAMB=0
+    
+    # Add parameter to use standard PyTorch optimizer
+    ADDITIONAL_ARGS="--optim adamw_torch"
+fi
+echo "==== End CUDA Diagnostics ===="
+
 # Set torch distributed environment variables
 export NCCL_DEBUG=INFO
 
-# Set environment variables to avoid CUDA compilation for optimizers
-export DS_BUILD_OPS=0
-export DS_BUILD_FUSED_ADAM=0
-export DS_BUILD_FUSED_LAMB=0
-
-# Define DeepSpeed config to use torch's AdamW implementation
+# Define DeepSpeed config with AdamW optimizer 
 DS_CONFIG='{
   "train_batch_size": "auto",
   "train_micro_batch_size_per_gpu": "auto",
@@ -72,7 +140,6 @@ DS_CONFIG='{
     "reduce_scatter": true,
     "stage3_gather_16bit_weights_on_model_save": true
   },
-  "zero_force_ds_cpu_optimizer": false,
   "optimizer": {
     "type": "AdamW",
     "params": {
@@ -98,7 +165,10 @@ DS_CONFIG='{
   }
 }'
 
-# Run with AdamW optimizer using torch's implementation
+# Set default additional args if not defined
+ADDITIONAL_ARGS=${ADDITIONAL_ARGS:-""}
+
+# Run with the appropriate optimizer
 deepspeed --num_gpus=2 gemma_sft_train.py \
     --model_name_or_path "google/gemma-3-27b-pt" \
     --dataset_path $DATA_PATH \
@@ -126,9 +196,9 @@ deepspeed --num_gpus=2 gemma_sft_train.py \
     --adam_beta1 0.9 \
     --adam_beta2 0.95 \
     --weight_decay 0.01 \
-    --optim adamw_torch \
     --deepspeed "$DS_CONFIG" \
     --load_in_8bit False \
-    --load_in_4bit False
+    --load_in_4bit False \
+    $ADDITIONAL_ARGS
 
 echo "Training complete!" 
