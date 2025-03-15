@@ -20,6 +20,23 @@ echo "- Data: $DATA_PATH"
 # Set torch distributed environment variables
 export NCCL_DEBUG=INFO
 
+# Define DeepSpeed config inline as a JSON string
+DS_CONFIG='{
+  "train_batch_size": "auto",
+  "train_micro_batch_size_per_gpu": "auto",
+  "gradient_accumulation_steps": "auto",
+  "gradient_clipping": "auto",
+  "bf16": {"enabled": "auto"},
+  "zero_optimization": {
+    "stage": 3,
+    "offload_optimizer": {"device": "cpu", "pin_memory": true},
+    "offload_param": {"device": "cpu", "pin_memory": true},
+    "overlap_comm": true,
+    "contiguous_gradients": true,
+    "stage3_gather_16bit_weights_on_model_save": true
+  }
+}'
+
 # Run the training script with DeepSpeed for multi-GPU
 deepspeed --num_gpus=4 gemma_sft_train.py \
     --model_name_or_path "google/gemma-3-27b-pt" \
@@ -44,7 +61,7 @@ deepspeed --num_gpus=4 gemma_sft_train.py \
     --save_total_limit 3 \
     --max_grad_norm 1.0 \
     --ddp_find_unused_parameters False \
-    --deepspeed ds_configs/zero3.json \
+    --deepspeed "$DS_CONFIG" \
     --load_in_8bit False \
     --load_in_4bit False
 
