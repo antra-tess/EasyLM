@@ -54,6 +54,9 @@ echo "Checking for CUDA installation..."
 # Check for CUDA installations with priority on matching PyTorch's version
 echo "Searching for CUDA installations..."
 
+# Initialize CUDA_FOUND to false
+CUDA_FOUND=false
+
 # First check if we're in a conda environment and prioritize that
 CONDA_PREFIX=${CONDA_PREFIX:-""}
 if [[ -n "$CONDA_PREFIX" ]]; then
