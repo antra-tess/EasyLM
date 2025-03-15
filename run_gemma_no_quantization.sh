@@ -51,76 +51,165 @@ echo "==== End of template file content ===="
 echo "==== CUDA Diagnostics ===="
 echo "Checking for CUDA installation..."
 
-# Get PyTorch's CUDA version
-TORCH_CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda if torch.cuda.is_available() else 'NA')")
-echo "PyTorch CUDA version: $TORCH_CUDA_VERSION"
-
 # Check for CUDA installations with priority on matching PyTorch's version
 echo "Searching for CUDA installations..."
-CUDA_SYSTEM_PATHS=(
-    "/usr/local/cuda"
-    "/usr/local/cuda-12.4"
-    "/usr/local/cuda-12.1"
-    "/usr/local/cuda-11.8"
-    "/usr/cuda"
-    "/usr/cuda-12.4"
-    "/usr/cuda-12.1"
-    "/usr/cuda-11.8"
-    "/opt/cuda"
-    "/opt/cuda-12.4"
-    "/opt/cuda-12.1"
-    "/opt/cuda-11.8"
-)
 
-# Check additional package manager locations (conda, pip, apt)
-PYTHON_PATH=$(which python)
-PYTHON_SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+# First check if we're in a conda environment and prioritize that
 CONDA_PREFIX=${CONDA_PREFIX:-""}
-
-ADDITIONAL_CUDA_PATHS=(
-    "${PYTHON_SITE_PACKAGES}/torch/lib"
-    "${CONDA_PREFIX}/lib/python*/site-packages/torch/lib"
-    "${CONDA_PREFIX}/pkgs/*/lib"
-)
-
-# Combine all paths with PyTorch CUDA version paths first
-if [[ "$TORCH_CUDA_VERSION" != "NA" ]]; then
-    ALL_CUDA_PATHS=(
-        "/usr/local/cuda-${TORCH_CUDA_VERSION}"
-        "/usr/cuda-${TORCH_CUDA_VERSION}"
-        "/opt/cuda-${TORCH_CUDA_VERSION}"
-        "${ADDITIONAL_CUDA_PATHS[@]}"
-        "${CUDA_SYSTEM_PATHS[@]}"
+if [[ -n "$CONDA_PREFIX" ]]; then
+    echo "Active conda environment detected at: $CONDA_PREFIX"
+    
+    # Check for common CUDA locations within conda environment
+    CONDA_CUDA_PATHS=(
+        "$CONDA_PREFIX"
+        "$CONDA_PREFIX/lib/cuda"
+        "$CONDA_PREFIX/pkgs/cuda"
+        "$CONDA_PREFIX/pkgs/cuda-toolkit"
     )
-else
-    ALL_CUDA_PATHS=(
-        "${CUDA_SYSTEM_PATHS[@]}"
-        "${ADDITIONAL_CUDA_PATHS[@]}"
-    )
-fi
-
-CUDA_FOUND=false
-for path in "${ALL_CUDA_PATHS[@]}"; do
-    # Handle glob patterns
-    for expanded_path in $path; do
-        if [ -d "$expanded_path" ]; then
-            echo "Found potential CUDA installation at: $expanded_path"
-            
-            # Look for cuda_runtime.h in include or include/cuda dirs
-            if [ -f "$expanded_path/include/cuda_runtime.h" ]; then
-                echo "✅ Found cuda_runtime.h at $expanded_path/include/cuda_runtime.h"
-                CUDA_FOUND=true
-                SYSTEM_CUDA_HOME="$expanded_path"
-                break 2
-            elif [ -f "$expanded_path/include/cuda/cuda_runtime.h" ]; then
-                echo "✅ Found cuda_runtime.h at $expanded_path/include/cuda/cuda_runtime.h"
-                CUDA_FOUND=true
-                SYSTEM_CUDA_HOME="$expanded_path"
-                break 2
-            fi
+    
+    # Look for include/cuda_runtime.h in conda environment
+    for path in "${CONDA_CUDA_PATHS[@]}"; do
+        if [[ -f "$path/include/cuda_runtime.h" ]]; then
+            echo "✅ Found cuda_runtime.h in conda environment at $path/include/cuda_runtime.h"
+            CUDA_FOUND=true
+            SYSTEM_CUDA_HOME="$path"
+            break
+        elif [[ -f "$path/include/cuda/cuda_runtime.h" ]]; then
+            echo "✅ Found cuda_runtime.h in conda environment at $path/include/cuda/cuda_runtime.h"
+            CUDA_FOUND=true
+            SYSTEM_CUDA_HOME="$path"
+            break
         fi
     done
-done
+    
+    # If we found CUDA in conda environment, use it and skip other checks
+    if [[ "$CUDA_FOUND" = true ]]; then
+        echo "Using CUDA from conda environment"
+    else
+        # Look for library paths containing CUDA in conda environment
+        echo "Searching for CUDA libraries in conda environment..."
+        
+        # Find all libcudart.so files in conda environment
+        CONDA_CUDA_LIBS=$(find "$CONDA_PREFIX" -name "libcudart.so*" -o -name "libcudart.dylib" 2>/dev/null || echo "")
+        
+        if [[ -n "$CONDA_CUDA_LIBS" ]]; then
+            # Take the first match
+            FIRST_LIB=$(echo "$CONDA_CUDA_LIBS" | head -n 1)
+            echo "Found CUDA library at: $FIRST_LIB"
+            
+            # Get the directory containing the library
+            LIB_DIR=$(dirname "$FIRST_LIB")
+            
+            # Go up two levels to get a potential CUDA_HOME
+            POTENTIAL_CUDA_HOME=$(dirname "$(dirname "$LIB_DIR")")
+            
+            if [[ -d "$POTENTIAL_CUDA_HOME/include" ]]; then
+                echo "Found potential CUDA home at: $POTENTIAL_CUDA_HOME"
+                
+                # Check if cuda_runtime.h exists in this location
+                if [[ -f "$POTENTIAL_CUDA_HOME/include/cuda_runtime.h" ]]; then
+                    echo "✅ Found cuda_runtime.h at $POTENTIAL_CUDA_HOME/include/cuda_runtime.h"
+                    CUDA_FOUND=true
+                    SYSTEM_CUDA_HOME="$POTENTIAL_CUDA_HOME"
+                elif [[ -f "$POTENTIAL_CUDA_HOME/include/cuda/cuda_runtime.h" ]]; then
+                    echo "✅ Found cuda_runtime.h at $POTENTIAL_CUDA_HOME/include/cuda/cuda_runtime.h"
+                    CUDA_FOUND=true
+                    SYSTEM_CUDA_HOME="$POTENTIAL_CUDA_HOME"
+                fi
+            fi
+        fi
+    fi
+fi
+
+# If we didn't find CUDA in conda environment, check system paths
+if [[ "$CUDA_FOUND" != true ]]; then
+    # Get PyTorch's CUDA version
+    TORCH_CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda if torch.cuda.is_available() else 'NA')")
+    echo "PyTorch CUDA version: $TORCH_CUDA_VERSION"
+    
+    CUDA_SYSTEM_PATHS=(
+        "/usr/local/cuda"
+        "/usr/local/cuda-12.4"
+        "/usr/local/cuda-12.1"
+        "/usr/local/cuda-11.8"
+        "/usr/cuda"
+        "/usr/cuda-12.4"
+        "/usr/cuda-12.1"
+        "/usr/cuda-11.8"
+        "/opt/cuda"
+        "/opt/cuda-12.4"
+        "/opt/cuda-12.1"
+        "/opt/cuda-11.8"
+    )
+
+    # Check additional package manager locations (conda, pip, apt)
+    PYTHON_PATH=$(which python)
+    PYTHON_SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+
+    ADDITIONAL_CUDA_PATHS=(
+        "${PYTHON_SITE_PACKAGES}/torch/lib"
+        "${CONDA_PREFIX}/lib/python*/site-packages/torch/lib"
+        "${CONDA_PREFIX}/pkgs/*/lib"
+    )
+
+    # Combine all paths with PyTorch CUDA version paths first
+    if [[ "$TORCH_CUDA_VERSION" != "NA" ]]; then
+        ALL_CUDA_PATHS=(
+            "/usr/local/cuda-${TORCH_CUDA_VERSION}"
+            "/usr/cuda-${TORCH_CUDA_VERSION}"
+            "/opt/cuda-${TORCH_CUDA_VERSION}"
+            "${ADDITIONAL_CUDA_PATHS[@]}"
+            "${CUDA_SYSTEM_PATHS[@]}"
+        )
+    else
+        ALL_CUDA_PATHS=(
+            "${CUDA_SYSTEM_PATHS[@]}"
+            "${ADDITIONAL_CUDA_PATHS[@]}"
+        )
+    fi
+
+    for path in "${ALL_CUDA_PATHS[@]}"; do
+        # Handle glob patterns
+        for expanded_path in $path; do
+            if [ -d "$expanded_path" ]; then
+                echo "Found potential CUDA installation at: $expanded_path"
+                
+                # Look for cuda_runtime.h in include or include/cuda dirs
+                if [ -f "$expanded_path/include/cuda_runtime.h" ]; then
+                    echo "✅ Found cuda_runtime.h at $expanded_path/include/cuda_runtime.h"
+                    CUDA_FOUND=true
+                    SYSTEM_CUDA_HOME="$expanded_path"
+                    break 2
+                elif [ -f "$expanded_path/include/cuda/cuda_runtime.h" ]; then
+                    echo "✅ Found cuda_runtime.h at $expanded_path/include/cuda/cuda_runtime.h"
+                    CUDA_FOUND=true
+                    SYSTEM_CUDA_HOME="$expanded_path"
+                    break 2
+                fi
+            fi
+        done
+    done
+fi
+
+# Additional fallback: check for NVCC in PATH
+if [[ "$CUDA_FOUND" != true ]]; then
+    NVCC_PATH=$(which nvcc 2>/dev/null || echo "")
+    if [[ -n "$NVCC_PATH" ]]; then
+        echo "Found nvcc at: $NVCC_PATH"
+        NVCC_VERSION=$($NVCC_PATH -V 2>&1 | grep "release" | awk '{print $5}' | awk -F, '{print $1}')
+        echo "NVCC version: $NVCC_VERSION"
+        
+        # Get the base directory (typically 2 levels up from bin/nvcc)
+        NVCC_BASE=$(dirname "$(dirname "$NVCC_PATH")")
+        echo "NVCC base directory: $NVCC_BASE"
+        
+        if [[ -f "$NVCC_BASE/include/cuda_runtime.h" ]]; then
+            echo "✅ Found cuda_runtime.h at $NVCC_BASE/include/cuda_runtime.h"
+            CUDA_FOUND=true
+            SYSTEM_CUDA_HOME="$NVCC_BASE"
+        fi
+    fi
+fi
 
 # If we found PyTorch with CUDA but couldn't match it, disable custom CUDA ops
 if [[ "$TORCH_CUDA_VERSION" != "NA" && "$CUDA_FOUND" = false ]]; then
