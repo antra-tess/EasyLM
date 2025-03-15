@@ -272,10 +272,6 @@ if [[ "$TORCH_CUDA_VERSION" != "NA" && "$CUDA_FOUND" = false ]]; then
     "bf16": {
         "enabled": true
     },
-    "train_batch_size": 32,
-    "train_micro_batch_size_per_gpu": 8,
-    "gradient_accumulation_steps": 2,
-    "gradient_clipping": 1.0,
     "zero_optimization": {
         "stage": 3,
         "offload_optimizer": {
@@ -288,14 +284,13 @@ if [[ "$TORCH_CUDA_VERSION" != "NA" && "$CUDA_FOUND" = false ]]; then
         },
         "overlap_comm": true,
         "contiguous_gradients": true,
-        "reduce_bucket_size": 5e7,
-        "prefetch_bucket_size": 5e7,
-        "stage3_prefetch_bucket_size": 5e7,
         "stage3_param_persistence_threshold": 1e5,
-        "stage3_max_live_parameters": 1e9,
-        "stage3_max_reuse_distance": 1e9,
-        "gather_16bit_weights_on_model_save": true
+        "stage3_max_live_parameters": 1e9
     },
+    "gradient_clipping": 1.0,
+    "train_batch_size": 32,
+    "train_micro_batch_size_per_gpu": 8,
+    "gradient_accumulation_steps": 2,
     "optimizer": {
         "type": "AdamW",
         "params": {
@@ -316,21 +311,7 @@ if [[ "$TORCH_CUDA_VERSION" != "NA" && "$CUDA_FOUND" = false ]]; then
     },
     "activation_checkpointing": {
         "partition_activations": true,
-        "cpu_checkpointing": true,
-        "contiguous_memory_optimization": true,
-        "number_checkpoints": 2,
-        "synchronize_checkpoint_boundary": false,
-        "profile": false
-    },
-    "steps_per_print": 100,
-    "wall_clock_breakdown": false,
-    "tensorboard": {
-        "enabled": true,
-        "output_path": "./logs/tensorboard"
-    },
-    "memory_breakdown": true,
-    "fp16": {
-        "enabled": false
+        "contiguous_memory_optimization": true
     }
 }
 EOF
@@ -611,10 +592,6 @@ else
     "bf16": {
         "enabled": true
     },
-    "train_batch_size": 32,
-    "train_micro_batch_size_per_gpu": 8,
-    "gradient_accumulation_steps": 2,
-    "gradient_clipping": 1.0,
     "zero_optimization": {
         "stage": 3,
         "offload_optimizer": {
@@ -627,14 +604,13 @@ else
         },
         "overlap_comm": true,
         "contiguous_gradients": true,
-        "reduce_bucket_size": 5e7,
-        "prefetch_bucket_size": 5e7,
-        "stage3_prefetch_bucket_size": 5e7,
         "stage3_param_persistence_threshold": 1e5,
-        "stage3_max_live_parameters": 1e9,
-        "stage3_max_reuse_distance": 1e9,
-        "gather_16bit_weights_on_model_save": true
+        "stage3_max_live_parameters": 1e9
     },
+    "gradient_clipping": 1.0,
+    "train_batch_size": 32,
+    "train_micro_batch_size_per_gpu": 4,
+    "gradient_accumulation_steps": 4,
     "optimizer": {
         "type": "AdamW",
         "params": {
@@ -655,21 +631,7 @@ else
     },
     "activation_checkpointing": {
         "partition_activations": true,
-        "cpu_checkpointing": true,
-        "contiguous_memory_optimization": true,
-        "number_checkpoints": 2,
-        "synchronize_checkpoint_boundary": false,
-        "profile": false
-    },
-    "steps_per_print": 100,
-    "wall_clock_breakdown": false,
-    "tensorboard": {
-        "enabled": true,
-        "output_path": "./logs/tensorboard"
-    },
-    "memory_breakdown": true,
-    "fp16": {
-        "enabled": false
+        "contiguous_memory_optimization": true
     }
 }
 EOF
@@ -695,12 +657,12 @@ EOF
                 --model_name_or_path "google/gemma-3-27b-pt" \
                 --dataset_path $DATA_PATH \
                 --template_path $TEMPLATE_PATH \
-                --max_seq_length 1024 \
-                --lora_rank 48 \
-                --lora_alpha 96 \
+                --max_seq_length 512 \
+                --lora_rank 32 \
+                --lora_alpha 64 \
                 --lora_dropout 0.05 \
-                --per_device_train_batch_size 8 \
-                --gradient_accumulation_steps 2 \
+                --per_device_train_batch_size 4 \
+                --gradient_accumulation_steps 4 \
                 --num_train_epochs 3 \
                 --learning_rate 2e-4 \
                 --warmup_steps 100 \
@@ -730,12 +692,12 @@ EOF
             --model_name_or_path "google/gemma-3-27b-pt" \
             --dataset_path $DATA_PATH \
             --template_path $TEMPLATE_PATH \
-            --max_seq_length 1024 \
-            --lora_rank 48 \
-            --lora_alpha 96 \
+            --max_seq_length 512 \
+            --lora_rank 32 \
+            --lora_alpha 64 \
             --lora_dropout 0.05 \
-            --per_device_train_batch_size 8 \
-            --gradient_accumulation_steps 2 \
+            --per_device_train_batch_size 4 \
+            --gradient_accumulation_steps 4 \
             --num_train_epochs 3 \
             --learning_rate 2e-4 \
             --warmup_steps 100 \
@@ -785,10 +747,6 @@ EOF
     "bf16": {
         "enabled": true
     },
-    "train_batch_size": 32,
-    "train_micro_batch_size_per_gpu": 8,
-    "gradient_accumulation_steps": 2,
-    "gradient_clipping": 1.0,
     "zero_optimization": {
         "stage": 3,
         "offload_optimizer": {
@@ -801,19 +759,35 @@ EOF
         },
         "overlap_comm": true,
         "contiguous_gradients": true,
-        "reduce_bucket_size": 5e7,
-        "prefetch_bucket_size": 5e7
+        "stage3_param_persistence_threshold": 1e5,
+        "stage3_max_live_parameters": 1e9
+    },
+    "gradient_clipping": 1.0,
+    "train_batch_size": 32,
+    "train_micro_batch_size_per_gpu": 8,
+    "gradient_accumulation_steps": 2,
+    "optimizer": {
+        "type": "AdamW",
+        "params": {
+            "lr": "auto",
+            "betas": "auto",
+            "eps": "auto",
+            "weight_decay": "auto"
+        }
+    },
+    "scheduler": {
+        "type": "WarmupDecayLR",
+        "params": {
+            "warmup_min_lr": 0,
+            "warmup_max_lr": "auto",
+            "warmup_num_steps": "auto",
+            "total_num_steps": "auto"
+        }
     },
     "activation_checkpointing": {
         "partition_activations": true,
-        "cpu_checkpointing": true,
-        "contiguous_memory_optimization": true,
-        "number_checkpoints": 2,
-        "synchronize_checkpoint_boundary": false,
-        "profile": false
-    },
-    "steps_per_print": 100,
-    "wall_clock_breakdown": false
+        "contiguous_memory_optimization": true
+    }
 }
 EOF
 
@@ -824,12 +798,12 @@ EOF
             --model_name_or_path "google/gemma-3-27b-pt" \
             --dataset_path $DATA_PATH \
             --template_path $TEMPLATE_PATH \
-            --max_seq_length 1024 \
-            --lora_rank 48 \
-            --lora_alpha 96 \
+            --max_seq_length 512 \
+            --lora_rank 32 \
+            --lora_alpha 64 \
             --lora_dropout 0.05 \
-            --per_device_train_batch_size 8 \
-            --gradient_accumulation_steps 2 \
+            --per_device_train_batch_size 4 \
+            --gradient_accumulation_steps 4 \
             --num_train_epochs 3 \
             --learning_rate 2e-4 \
             --warmup_steps 100 \
