@@ -45,7 +45,7 @@ echo "==== End of template file content ===="
 # Set torch distributed environment variables
 export NCCL_DEBUG=INFO
 
-# Define optimized DeepSpeed config for speed with A100 80GB GPUs
+# Define simplified DeepSpeed config with only supported parameters
 DS_CONFIG='{
   "train_batch_size": "auto",
   "train_micro_batch_size_per_gpu": "auto",
@@ -65,10 +65,7 @@ DS_CONFIG='{
     "contiguous_gradients": true,
     "overlap_comm": true,
     "reduce_scatter": true,
-    "reduce_bucket_size": 5e8,
-    "prefetch_bucket_size": 5e8,
-    "stage3_prefetch_bucket_size": 5e8,
-    "stage3_param_persistence_threshold": 1e6
+    "stage3_gather_16bit_weights_on_model_save": true
   },
   "optimizer": {
     "type": "AdamW",
@@ -92,20 +89,6 @@ DS_CONFIG='{
     "partition_activations": true,
     "cpu_checkpointing": false,
     "contiguous_memory_optimization": true
-  },
-  "aio": {
-    "block_size": 1048576,
-    "queue_depth": 16,
-    "thread_count": 1,
-    "single_submit": false,
-    "overlap_events": true
-  },
-  "flops_profiler": {
-    "enabled": false,
-    "profile_step": 1,
-    "module_depth": -1,
-    "top_modules": 3,
-    "detailed": false
   }
 }'
 
@@ -136,7 +119,6 @@ deepspeed --num_gpus=2 gemma_sft_train.py \
     --ddp_find_unused_parameters False \
     --deepspeed "$DS_CONFIG" \
     --load_in_8bit False \
-    --load_in_4bit False \
-    --use_flash_attn True
+    --load_in_4bit False
 
 echo "Training complete!" 
