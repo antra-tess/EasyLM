@@ -24,7 +24,6 @@ from transformers import (
     BitsAndBytesConfig,
 )
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils.import_utils import is_xpu_available
 
 from peft import (
     LoraConfig,
@@ -280,12 +279,20 @@ def main():
             # For multiple GPUs, use device_map="auto"
             model_kwargs["device_map"] = "auto"
         elif is_xpu_available():
+            logger.info("Intel XPU detected")
             model_kwargs["device_map"] = {"": 0}  # For Intel XPU
         else:
             # For single GPU, place everything on cuda:0
             model_kwargs["device_map"] = {"": 0}
     else:
         logger.info("Using DeepSpeed for distributed training - device_map will be handled by DeepSpeed")
+    
+    # Log system information
+    logger.info(f"CUDA available: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        logger.info(f"CUDA device count: {torch.cuda.device_count()}")
+        for i in range(torch.cuda.device_count()):
+            logger.info(f"CUDA device {i}: {torch.cuda.get_device_name(i)}")
     
     # Load model
     logger.info(f"Loading model from {model_args.model_name_or_path} with kwargs: {model_kwargs}")
