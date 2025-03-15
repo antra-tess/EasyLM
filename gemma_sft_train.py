@@ -135,6 +135,10 @@ class JsonlDataset(Dataset):
             logger.error(error_msg)
             raise FileNotFoundError(error_msg)
         
+        # Log the absolute path of the dataset file
+        abs_dataset_path = os.path.abspath(dataset_path)
+        logger.info(f"Loading dataset from absolute path: {abs_dataset_path}")
+        
         # Load the template if provided
         self.template = None
         if template_yaml:
@@ -143,25 +147,82 @@ class JsonlDataset(Dataset):
                 error_msg = f"ERROR: Template file not found: {template_yaml}"
                 logger.error(error_msg)
                 raise FileNotFoundError(error_msg)
-                
+            
+            # Log the absolute path of the template file
+            abs_template_path = os.path.abspath(template_yaml)
+            logger.info(f"Loading template from absolute path: {abs_template_path}")
+            
             with open(template_yaml, 'r') as f:
                 self.template = yaml.safe_load(f)
+                logger.info(f"Template content (summary): {self.template.keys() if isinstance(self.template, dict) else 'Not a dictionary'}")
+                
+                # Log the template sequence to help with debugging
+                if isinstance(self.template, dict) and 'sequence' in self.template:
+                    logger.info(f"Template sequence contains {len(self.template['sequence'])} segments")
+                    for i, segment in enumerate(self.template['sequence']):
+                        keys = list(segment.keys())
+                        logger.info(f"  Segment {i+1} keys: {keys}")
+                        # Show an example of the expected format
+                        for k in keys:
+                            value = segment[k]
+                            logger.info(f"  Segment {i+1} {k} format string contains these placeholders: {[p for p in self._find_format_placeholders(value)]}")
         
         # Load and process dataset
         self.examples = []
-        with open(dataset_path, 'r') as f:
-            for line in f:
-                if line.strip():
-                    try:
-                        self.examples.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        logger.warning(f"Could not parse line as JSON: {line[:100]}...")
-        
-        # Check if dataset is empty
-        if len(self.examples) == 0:
-            error_msg = f"ERROR: Dataset is empty or contains no valid examples: {dataset_path}"
+        try:
+            with open(dataset_path, 'r') as f:
+                for line_num, line in enumerate(f, 1):
+                    if line.strip():
+                        try:
+                            example = json.loads(line)
+                            self.examples.append(example)
+                        except json.JSONDecodeError:
+                            logger.warning(f"Line {line_num}: Could not parse as JSON: {line[:100]}...")
+                    
+            # Check if dataset is empty
+            if len(self.examples) == 0:
+                error_msg = f"ERROR: Dataset is empty or contains no valid examples: {dataset_path}"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            
+            # Log sample entries to help with debugging
+            logger.info(f"Loaded {len(self.examples)} examples from the dataset")
+            if len(self.examples) > 0:
+                sample_example = self.examples[0]
+                logger.info(f"First example keys: {list(sample_example.keys())}")
+                
+                # Validate template fields against dataset content
+                if self.template and 'sequence' in self.template:
+                    logger.info("Validating template fields against dataset content...")
+                    required_fields = set()
+                    for segment in self.template['sequence']:
+                        for content in segment.values():
+                            # Extract field names from the format string
+                            placeholders = self._find_format_placeholders(content)
+                            required_fields.update(placeholders)
+                    
+                    logger.info(f"Template requires these fields: {required_fields}")
+                    
+                    # Check first example for required fields
+                    missing_fields = [field for field in required_fields if field not in sample_example]
+                    if missing_fields:
+                        error_msg = f"ERROR: First example is missing these required fields: {missing_fields}"
+                        logger.error(error_msg)
+                        logger.error(f"Dataset example contains only these fields: {list(sample_example.keys())}")
+                        raise KeyError(error_msg)
+                    else:
+                        logger.info("First example contains all required template fields.")
+                        
+        except Exception as e:
+            error_msg = f"ERROR loading dataset: {str(e)}"
             logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise
+    
+    def _find_format_placeholders(self, format_string):
+        """Extract field names from a format string"""
+        import re
+        # This regex finds all format placeholders like {name} in a string
+        return re.findall(r'\{([^{}]*)\}', format_string)
     
     def __len__(self):
         return len(self.examples)
@@ -174,16 +235,30 @@ class JsonlDataset(Dataset):
             text_parts = []
             loss_mask_parts = []
             
-            for segment in self.template['sequence']:
-                for loss_key, content in segment.items():
-                    mask_value = 0.0 if loss_key == 'no_loss' else 1.0
-                    formatted_text = content.format(**example).replace('\\n', '\n')
-                    
-                    # Tokenize this part
-                    tokens = self.tokenizer.encode(formatted_text, add_special_tokens=False)
-                    text_parts.extend(tokens)
-                    loss_mask_parts.extend([mask_value] * len(tokens))
+            try:
+                for segment in self.template['sequence']:
+                    for loss_key, content in segment.items():
+                        mask_value = 0.0 if loss_key == 'no_loss' else 1.0
+                        try:
+                            formatted_text = content.format(**example).replace('\\n', '\n')
+                        except KeyError as e:
+                            # More detailed error message with example index and missing key
+                            missing_key = str(e).strip("'")
+                            error_msg = f"Example {idx} is missing required field '{missing_key}' for template formatting"
+                            logger.error(error_msg)
+                            logger.error(f"Example keys: {list(example.keys())}")
+                            logger.error(f"Template content: {content}")
+                            raise KeyError(error_msg) from e
+                        
+                        # Tokenize this part
+                        tokens = self.tokenizer.encode(formatted_text, add_special_tokens=False)
+                        text_parts.extend(tokens)
+                        loss_mask_parts.extend([mask_value] * len(tokens))
+            except Exception as e:
+                logger.error(f"Error processing example {idx}: {e}")
+                raise
             
+            # Rest of the function remains the same
             # Add BOS token if not already present
             if len(text_parts) == 0 or text_parts[0] != self.tokenizer.bos_token_id:
                 text_parts.insert(0, self.tokenizer.bos_token_id)

@@ -7,15 +7,40 @@ echo "Starting Gemma-3 multi-GPU training WITHOUT quantization (bf16 precision).
 # Create directories (with configurable paths)
 OUTPUT_DIR=${OUTPUT_DIR:-"./gemma3_full_precision_output"}
 TEMPLATE_PATH=${TEMPLATE_PATH:-"templates/borg_chat_exp.yaml"}
-DATA_PATH=${DATA_PATH:-"./data/conversations.jsonl"}
+DATA_PATH=${DATA_PATH:-"./conversations_all.jsonl"}
 
 # Make sure directories exist
 mkdir -p $OUTPUT_DIR
 
+# Print absolute paths to help with debugging
+TEMPLATE_ABS_PATH=$(realpath "$TEMPLATE_PATH" 2>/dev/null || echo "File not found: $TEMPLATE_PATH")
+DATA_ABS_PATH=$(realpath "$DATA_PATH" 2>/dev/null || echo "File not found: $DATA_PATH")
+
 echo "Using:"
 echo "- Output directory: $OUTPUT_DIR"
-echo "- Template: $TEMPLATE_PATH"
-echo "- Data: $DATA_PATH"
+echo "- Template: $TEMPLATE_PATH (absolute: $TEMPLATE_ABS_PATH)"
+echo "- Data: $DATA_PATH (absolute: $DATA_ABS_PATH)"
+
+# Check if files exist
+if [[ ! -f "$TEMPLATE_PATH" ]]; then
+    echo "ERROR: Template file not found: $TEMPLATE_PATH"
+    exit 1
+fi
+
+if [[ ! -f "$DATA_PATH" ]]; then
+    echo "ERROR: Dataset file not found: $DATA_PATH"
+    exit 1
+fi
+
+# Display first few lines of the dataset to verify its structure
+echo "==== Dataset preview (first 5 lines) ===="
+head -n 5 "$DATA_PATH"
+echo "==== End of dataset preview ===="
+
+# Display template file content to verify its structure
+echo "==== Template file content ===="
+cat "$TEMPLATE_PATH"
+echo "==== End of template file content ===="
 
 # Set torch distributed environment variables
 export NCCL_DEBUG=INFO
