@@ -227,6 +227,9 @@ DS_CONFIG='{
     "contiguous_gradients": true,
     "overlap_comm": true,
     "reduce_scatter": true,
+    "reduce_bucket_size": 5e8,
+    "prefetch_bucket_size": 5e8,
+    "stage3_param_persistence_threshold": 1e6,
     "stage3_gather_16bit_weights_on_model_save": true
   },
   "optimizer": {
@@ -250,7 +253,16 @@ DS_CONFIG='{
   "activation_checkpointing": {
     "partition_activations": true,
     "cpu_checkpointing": false,
-    "contiguous_memory_optimization": true
+    "contiguous_memory_optimization": true,
+    "number_checkpoints": 1,
+    "synchronize_checkpoint_boundary": false,
+    "profile": false
+  },
+  "steps_per_print": 100,
+  "wall_clock_breakdown": false,
+  "tensorboard": {
+    "enabled": true,
+    "output_path": "./logs/tensorboard"
   }
 }'
 
@@ -266,8 +278,8 @@ deepspeed --num_gpus=2 gemma_sft_train.py \
     --lora_rank 32 \
     --lora_alpha 64 \
     --lora_dropout 0.05 \
-    --per_device_train_batch_size 4 \
-    --gradient_accumulation_steps 2 \
+    --per_device_train_batch_size 16 \
+    --gradient_accumulation_steps 1 \
     --num_train_epochs 3 \
     --learning_rate 3e-4 \
     --warmup_steps 100 \
