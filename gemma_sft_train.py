@@ -159,6 +159,16 @@ class DataCollatorForCausalLM:
     label_pad_token_id: int = -100
 
     def __call__(self, features):
+        # First, ensure sequences are not too long
+        if self.max_length is not None:
+            for feature in features:
+                if len(feature['input_ids']) > self.max_length:
+                    # Truncate to max_length
+                    feature['input_ids'] = feature['input_ids'][:self.max_length]
+                    feature['attention_mask'] = feature['attention_mask'][:self.max_length]
+                    if 'labels' in feature:
+                        feature['labels'] = feature['labels'][:self.max_length]
+        
         # Save original labels
         if "labels" in features[0]:
             labels = [feature.pop("labels") for feature in features]
@@ -172,6 +182,7 @@ class DataCollatorForCausalLM:
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors=self.return_tensors,
+            truncation=True,  # Add truncation for safety
         )
         
         # Add labels back with proper padding
@@ -183,6 +194,7 @@ class DataCollatorForCausalLM:
                 max_length=self.max_length,
                 pad_to_multiple_of=self.pad_to_multiple_of,
                 return_tensors=self.return_tensors,
+                truncation=True,  # Add truncation for safety
             )["input_ids"]
             
             # Replace padding token with label_pad_token_id (-100)
@@ -340,6 +352,12 @@ class JsonlDataset(Dataset):
             text_parts.append(self.tokenizer.eos_token_id)
             loss_mask_parts.append(1.0)  # Apply loss on EOS token
             
+            # Truncate if exceeding max_length
+            if len(text_parts) > self.max_seq_length:
+                logger.warning(f"Example {idx} exceeds max_seq_length ({len(text_parts)} > {self.max_seq_length}), truncating")
+                text_parts = text_parts[:self.max_seq_length]
+                loss_mask_parts = loss_mask_parts[:self.max_seq_length]
+            
             # Convert to list format that can be properly padded by data collator
             input_ids = text_parts
             attention_mask = [1] * len(input_ids)
@@ -375,8 +393,14 @@ class JsonlDataset(Dataset):
                 return_tensors=None # Return lists, not tensors
             )
             
+            # Verify lengths are within max_seq_length
+            if len(encodings["input_ids"]) > self.max_seq_length:
+                logger.warning(f"Example {idx} exceeds max_seq_length after tokenization ({len(encodings['input_ids'])} > {self.max_seq_length}), truncating")
+                encodings["input_ids"] = encodings["input_ids"][:self.max_seq_length]
+                encodings["attention_mask"] = encodings["attention_mask"][:self.max_seq_length]
+            
             # Create labels: -100 for prompt tokens (no loss), actual token IDs for output tokens
-            prompt_len = len(self.tokenizer(prompt, truncation=True).input_ids)
+            prompt_len = min(len(self.tokenizer(prompt, truncation=True).input_ids), len(encodings["input_ids"]))
             labels = encodings["input_ids"].copy()
             labels[:prompt_len] = [-100] * prompt_len  # No loss for prompt tokens
             
