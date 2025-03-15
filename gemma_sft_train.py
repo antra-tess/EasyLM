@@ -159,24 +159,13 @@ class DataCollatorForCausalLM:
     label_pad_token_id: int = -100
 
     def __call__(self, features):
+        # Save original labels
         if "labels" in features[0]:
-            # Handle labels separately to apply label_pad_token_id
-            labels = [feature["labels"] for feature in features]
+            labels = [feature.pop("labels") for feature in features]
+        else:
+            labels = None
             
-            # Pad labels with label_pad_token_id
-            padded_labels = self.tokenizer.pad(
-                {"input_ids": labels},
-                padding=self.padding,
-                max_length=self.max_length,
-                pad_to_multiple_of=self.pad_to_multiple_of,
-                return_tensors=self.return_tensors,
-            )["input_ids"]
-            
-            # Remove labels from features to avoid conflict
-            for feature in features:
-                del feature["labels"]
-        
-        # Pad input_ids and attention_mask
+        # Pad the inputs (input_ids and attention_mask)
         batch = self.tokenizer.pad(
             features,
             padding=self.padding,
@@ -185,8 +174,22 @@ class DataCollatorForCausalLM:
             return_tensors=self.return_tensors,
         )
         
-        # Add back the labels
-        if "labels" in features[0]:
+        # Add labels back with proper padding
+        if labels is not None:
+            # Pad the labels (replacing pad with label_pad_token_id)
+            padded_labels = self.tokenizer.pad(
+                {"input_ids": labels},
+                padding=self.padding,
+                max_length=self.max_length,
+                pad_to_multiple_of=self.pad_to_multiple_of,
+                return_tensors=self.return_tensors,
+            )["input_ids"]
+            
+            # Replace padding token with label_pad_token_id (-100)
+            if self.tokenizer.pad_token_id != self.label_pad_token_id:
+                padded_labels[padded_labels == self.tokenizer.pad_token_id] = self.label_pad_token_id
+                
+            # Add labels to batch
             batch["labels"] = padded_labels
             
         return batch
@@ -497,6 +500,9 @@ def main():
         model_kwargs["use_cache"] = False if training_args.gradient_checkpointing else True
     else:
         logger.info("Skipping use_cache parameter for Gemma model")
+        # For Gemma-3 models, use eager attention implementation as recommended
+        logger.info("Setting attn_implementation='eager' for Gemma model")
+        model_kwargs["attn_implementation"] = "eager"
         
     # Add device_map for optimal memory usage on multi-GPU setup
     # For DeepSpeed, we don't need to specify the device_map as the model will be 
@@ -621,7 +627,7 @@ def main():
     logger.info("Setting up DataCollatorForCausalLM with padding")
     data_collator = DataCollatorForCausalLM(
         tokenizer=tokenizer,
-        padding=True,
+        padding="max_length",
         max_length=data_args.max_seq_length,
         pad_to_multiple_of=8,
         return_tensors="pt",
