@@ -351,6 +351,8 @@ EOF
         --load_in_8bit False \
         --load_in_4bit False \
         --use_flash_attn True \
+        --debug True \
+        --report_to wandb \
         $ADDITIONAL_ARGS
 else
     # We found a working CUDA installation
@@ -721,6 +723,8 @@ EOF
             --load_in_8bit False \
             --load_in_4bit False \
             --use_flash_attn True \
+            --debug True \
+            --report_to wandb \
             $ADDITIONAL_ARGS
 
         # If deepspeed fails, try the fallback
@@ -828,6 +832,8 @@ EOF
             --load_in_8bit False \
             --load_in_4bit False \
             --use_flash_attn True \
+            --debug True \
+            --report_to wandb \
             $ADDITIONAL_ARGS
     fi
 fi

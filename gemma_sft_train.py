@@ -24,6 +24,9 @@ from transformers import (
     BitsAndBytesConfig,
     AutoConfig,
     DataCollatorForLanguageModeling,
+    TrainerCallback,
+    TrainerState,
+    TrainerControl,
 )
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import PaddingStrategy
@@ -74,6 +77,10 @@ class ModelArguments:
     use_flash_attn: bool = field(
         default=False,
         metadata={"help": "Whether to use flash attention for faster training"}
+    )
+    debug: bool = field(
+        default=False,
+        metadata={"help": "Enable additional debugging output"}
     )
 
 @dataclass
@@ -366,6 +373,17 @@ class JsonlDataset(Dataset):
                 if mask_val == 0.0:
                     labels[i] = -100
             
+            # Debug info about label distribution
+            if hasattr(self, 'debug') and self.debug and idx < 3:
+                non_masked = sum(1 for l in labels if l != -100)
+                masked = sum(1 for l in labels if l == -100)
+                logger.info(f"Debug __getitem__ idx={idx} using template:")
+                logger.info(f"  Total length: {len(input_ids)} tokens")
+                logger.info(f"  Number of -100 labels: {masked}")
+                logger.info(f"  Number of non-masked labels: {non_masked}")
+                if non_masked == 0:
+                    logger.error("  ❌ ERROR: All labels are masked! Model will not learn anything.")
+                
             # Return as simple lists instead of tensors to allow proper padding by collator
             return {
                 "input_ids": input_ids,
@@ -385,7 +403,7 @@ class JsonlDataset(Dataset):
             # Use tokenizer with explicit padding and truncation settings
             encodings = self.tokenizer(
                 text, 
-                max_length=self.max_seq_length, 
+                max_length=self.max_seq_length,
                 truncation=True, 
                 padding=False, # Let the data collator handle padding
                 return_tensors=None # Return lists, not tensors
@@ -402,11 +420,92 @@ class JsonlDataset(Dataset):
             labels = encodings["input_ids"].copy()
             labels[:prompt_len] = [-100] * prompt_len  # No loss for prompt tokens
             
+            # Debug info about label distribution
+            if hasattr(self, 'debug') and self.debug and idx < 3:
+                non_masked = len(labels) - labels.count(-100)
+                logger.info(f"Debug __getitem__ idx={idx} using default format:")
+                logger.info(f"  Prompt: {prompt[:50]}...")
+                logger.info(f"  Prompt length: {prompt_len} tokens")
+                logger.info(f"  Total length: {len(encodings['input_ids'])} tokens")
+                logger.info(f"  Number of -100 labels: {labels.count(-100)}")
+                logger.info(f"  Number of non-masked labels: {non_masked}")
+                if non_masked == 0:
+                    logger.error("  ❌ ERROR: All labels are masked! Model will not learn anything.")
+                elif prompt_len == len(encodings["input_ids"]):
+                    logger.error("  ❌ ERROR: Prompt length equals total length! No tokens left for prediction.")
+            
             return {
                 "input_ids": encodings["input_ids"],
                 "attention_mask": encodings["attention_mask"],
                 "labels": labels
             }
+
+# Add DebugCallback for monitoring training progress
+class DebugCallback(TrainerCallback):
+    """Custom callback for debugging training issues."""
+    
+    def __init__(self):
+        self.last_loss = None
+        self.loss_counter = 0
+        self.static_loss_count = 0
+        self.step_counter = 0
+        
+    def on_step_end(self, args, state, control, model=None, **kwargs):
+        """Monitor loss changes and gradients during training."""
+        self.step_counter += 1
+        
+        if state.log_history and len(state.log_history) > 0:
+            # Extract the current loss
+            current_loss = None
+            for entry in reversed(state.log_history):
+                if 'loss' in entry:
+                    current_loss = entry['loss']
+                    break
+            
+            if current_loss is not None:
+                # Check if loss is changing
+                if self.last_loss is not None and abs(current_loss - self.last_loss) < 1e-6:
+                    self.static_loss_count += 1
+                    if self.static_loss_count >= 10:
+                        logger.warning(f"⚠️ Loss has been static at {current_loss:.4f} for {self.static_loss_count} steps!")
+                else:
+                    self.static_loss_count = 0
+                
+                self.last_loss = current_loss
+        
+        # Every 10 steps, check for gradient flow
+        if model is not None and self.step_counter % 10 == 0:
+            # Check for proper gradient flow
+            has_grad = False
+            zero_grad_count = 0
+            non_zero_grad_count = 0
+            lora_layer_count = 0
+            
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    if 'lora_' in name:
+                        lora_layer_count += 1
+                        if param.grad is not None:
+                            grad_norm = param.grad.data.norm().item()
+                            if grad_norm > 0:
+                                has_grad = True
+                                non_zero_grad_count += 1
+                            else:
+                                zero_grad_count += 1
+                            
+                            # Log a sample of gradient norms
+                            if lora_layer_count <= 3:  # Just log first few layers as samples
+                                logger.info(f"Grad norm for {name}: {grad_norm:.6f}")
+            
+            logger.info(f"Step {self.step_counter}: LoRA layers with zero gradients: {zero_grad_count}/{zero_grad_count+non_zero_grad_count}")
+            
+            if not has_grad and lora_layer_count > 0:
+                logger.warning("❌ NO GRADIENT FLOW DETECTED! All trainable parameters have zero gradients.")
+                # Suggest possible fixes
+                logger.warning("Possible issues:")
+                logger.warning("1. Labels might be incorrectly formatted or all -100 (masked)")
+                logger.warning("2. Optimizer might not be connected to trainable parameters")
+                logger.warning("3. Loss function might not be properly connected")
 
 def main():
     parser = HfArgumentParser((ModelArguments, LoRAArguments, DataArguments, TrainingArguments))
@@ -419,6 +518,11 @@ def main():
         level=logging.INFO if training_args.local_rank in [-1, 0] else logging.WARN,
     )
     logger.info(f"Training arguments: {training_args}")
+    
+    # Add debug option
+    debug_mode = model_args.debug
+    if debug_mode:
+        logger.info("Debug mode enabled - will output detailed debugging information")
     
     # Check for required dataset path
     if data_args.dataset_path is None:
@@ -634,6 +738,28 @@ def main():
     # Apply LoRA to model
     model = get_peft_model(model, peft_config)
     
+    # Debug: Count trainable parameters and verify LoRA is properly applied
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_percent = 100 * trainable_params / total_params if total_params > 0 else 0
+
+    logger.info(f"Total parameters: {total_params:,}")
+    logger.info(f"Trainable parameters: {trainable_params:,} ({trainable_percent:.2f}%)")
+
+    if trainable_params == 0:
+        raise ValueError("❌ ERROR: No trainable parameters found! LoRA adapters might not be properly initialized.")
+
+    # Verify target_modules were found in the model
+    lora_targets_found = False
+    for name, module in model.named_modules():
+        if hasattr(module, 'lora_A'):
+            logger.info(f"✅ Found LoRA module at: {name}")
+            lora_targets_found = True
+            break
+
+    if not lora_targets_found:
+        raise ValueError("❌ ERROR: No LoRA modules found in model! Check if target_modules are correct.")
+
     # Log model parameter info
     logger.info(f"Trainable params: {model.print_trainable_parameters()}")
     
@@ -645,6 +771,11 @@ def main():
         max_seq_length=data_args.max_seq_length,
     )
     
+    # Set debug flag if needed
+    if model_args.debug:
+        train_dataset.debug = True
+        logger.info("Enabled debug mode for dataset")
+
     # Create custom data collator with padding and truncation
     logger.info("Setting up DataCollatorForCausalLM with padding")
     data_collator = DataCollatorForCausalLM(
@@ -665,6 +796,91 @@ def main():
         data_collator=data_collator,
     )
     
+    # Add the debug callback if debug mode is enabled
+    if model_args.debug:
+        debug_callback = DebugCallback()
+        trainer.add_callback(debug_callback)
+        
+        # Debug: Examine data to ensure labels are properly formatted
+        logger.info("Debug: Examining training data...")
+        
+        # Check a few examples from the dataset
+        for i in range(min(3, len(train_dataset))):
+            example = train_dataset[i]
+            
+            # Count non-masked tokens in labels
+            if 'labels' in example:
+                label_tokens = [l for l in example['labels'] if l != -100]
+                masked_tokens = [l for l in example['labels'] if l == -100]
+                
+                logger.info(f"Example {i}:")
+                logger.info(f"  Total tokens: {len(example['input_ids'])}")
+                logger.info(f"  Non-masked label tokens: {len(label_tokens)} ({len(label_tokens)/len(example['input_ids'])*100:.1f}%)")
+                logger.info(f"  Masked tokens (-100): {len(masked_tokens)} ({len(masked_tokens)/len(example['input_ids'])*100:.1f}%)")
+                
+                # Severe warning if no non-masked tokens
+                if len(label_tokens) == 0:
+                    logger.error("❌ CRITICAL ERROR: Example has no non-masked tokens in labels!")
+                    logger.error("The model cannot learn if all labels are masked (-100)")
+                
+                # Sample input and output
+                input_sample = tokenizer.decode(example['input_ids'][:50])
+                label_indices = [i for i, l in enumerate(example['labels']) if l != -100]
+                if label_indices:
+                    start_idx = max(0, min(label_indices) - 5)
+                    end_idx = min(len(example['input_ids']), start_idx + 50)
+                    target_sample = tokenizer.decode([t for t, l in zip(example['input_ids'][start_idx:end_idx], 
+                                                                      example['labels'][start_idx:end_idx]) if l != -100])
+                    logger.info(f"  Input sample: {input_sample}...")
+                    logger.info(f"  Target sample: {target_sample}...")
+        
+        # Debug: Test collation on a batch
+        logger.info("Debug: Testing batch collation...")
+        test_batch_size = min(4, len(train_dataset))
+        test_samples = [train_dataset[i] for i in range(test_batch_size)]
+        test_batch = data_collator(test_samples)
+        
+        # Check batch shapes
+        logger.info(f"Batch input_ids shape: {test_batch['input_ids'].shape}")
+        logger.info(f"Batch attention_mask shape: {test_batch['attention_mask'].shape}")
+        if 'labels' in test_batch:
+            logger.info(f"Batch labels shape: {test_batch['labels'].shape}")
+            
+            # Count non-masked tokens in the batch
+            non_masked = (test_batch['labels'] != -100).sum().item()
+            total = test_batch['labels'].numel()
+            logger.info(f"Batch non-masked tokens: {non_masked}/{total} ({non_masked/total*100:.1f}%)")
+            
+            if non_masked == 0:
+                logger.error("❌ CRITICAL ERROR: Entire batch has no non-masked tokens in labels!")
+        else:
+            logger.error("❌ CRITICAL ERROR: 'labels' key missing from collated batch!")
+
+        # Debug: Check if the model outputs have 'loss' in their keys
+        logger.info("Debug: Testing model forward pass...")
+        # Use the test batch we already created
+        # Move to the same device as the model
+        device = next(model.parameters()).device
+        device_batch = {k: v.to(device) if hasattr(v, 'to') else v for k, v in test_batch.items()}
+
+        # Run forward pass
+        with torch.no_grad():
+            outputs = model(**device_batch)
+
+        logger.info(f"Debug: Model output keys: {outputs.keys()}")
+        if hasattr(outputs, 'loss'):
+            logger.info(f"Debug: Loss value: {outputs.loss.item()}")
+        else:
+            logger.warning("❌ WARNING: 'loss' not found in model outputs!")
+            logger.info(f"Available keys: {list(outputs.keys())}")
+            # Check if labels are present in input
+            if 'labels' in device_batch:
+                logger.info("Debug: 'labels' are present in input batch")
+                # Sample of labels to check
+                logger.info(f"Debug: Labels sample: {device_batch['labels'][0][:10]}")
+            else:
+                logger.warning("❌ WARNING: 'labels' not present in input batch!")
+
     # Train
     if training_args.resume_from_checkpoint:
         checkpoint = training_args.resume_from_checkpoint
