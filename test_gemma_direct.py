@@ -4,6 +4,7 @@
 import torch
 import logging
 import os
+import json
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 # Configure logging
@@ -44,24 +45,53 @@ def test_gemma_inference():
     logger.info(f"Loading and patching config from {model_name}")
     config = AutoConfig.from_pretrained(model_name, token=hf_token)
     
-    # Monkey patch the config object directly
-    # Add vocab_size attribute directly to the config object, not just its dict
-    if not hasattr(config, "vocab_size"):
-        logger.info("Patching vocab_size directly onto config object")
-        vocab_size = getattr(tokenizer, "vocab_size", 262144)
-        setattr(config, "vocab_size", vocab_size)
-        logger.info(f"Set vocab_size to {vocab_size}")
+    # Print the config structure for debugging
+    config_dict = config.to_dict()
+    logger.info(f"Config dictionary top-level keys: {list(config_dict.keys())}")
     
-    # Manually copy text_config attributes to main config if needed
-    if hasattr(config, "text_config") and isinstance(config.text_config, dict):
-        for key, value in config.text_config.items():
-            if not hasattr(config, key):
-                logger.info(f"Copying {key} from text_config to main config")
+    # Check text_config structure
+    if 'text_config' in config_dict:
+        logger.info(f"Found text_config: {json.dumps(config_dict['text_config'], indent=2)}")
+        
+        # Add vocab_size attribute directly to the config object
+        if not hasattr(config, "vocab_size"):
+            logger.info("Patching vocab_size directly onto config object")
+            vocab_size = getattr(tokenizer, "vocab_size", 262144)
+            setattr(config, "vocab_size", vocab_size)
+            logger.info(f"Set vocab_size to {vocab_size}")
+        
+        # Make sure all key attributes from text_config are copied to main config
+        text_config = config_dict['text_config']
+        
+        # Essential attributes needed for model initialization
+        essential_attrs = [
+            "hidden_size", "intermediate_size", "num_attention_heads", 
+            "num_hidden_layers", "num_key_value_heads"
+        ]
+        
+        # Copy all attributes from text_config to main config, prioritizing essential ones
+        for key, value in text_config.items():
+            if key in essential_attrs:
+                logger.info(f"Copying essential attribute {key}={value} from text_config to main config")
+                setattr(config, key, value)
+            elif not hasattr(config, key):
+                logger.info(f"Copying attribute {key} from text_config to main config")
                 setattr(config, key, value)
     
     # Print config attributes for debugging
     config_attrs = [attr for attr in dir(config) if not attr.startswith('_') and not callable(getattr(config, attr))]
     logger.info(f"Config now has attributes: {config_attrs}")
+    
+    # Check for essential attributes
+    essential_missing = []
+    for attr in ["vocab_size", "hidden_size", "intermediate_size", "num_attention_heads", "num_hidden_layers"]:
+        if not hasattr(config, attr):
+            essential_missing.append(attr)
+    
+    if essential_missing:
+        logger.warning(f"Still missing essential attributes: {essential_missing}")
+    else:
+        logger.info("All essential attributes present in config")
     
     logger.info(f"Loading model from {model_name}")
     logger.info(f"Found {torch.cuda.device_count()} CUDA devices")
