@@ -5,6 +5,7 @@ import torch
 import logging
 import os
 import json
+import tempfile
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
 # Configure logging
@@ -85,7 +86,11 @@ def test_gemma_inference():
     # Configure model loading
     compute_dtype = torch.bfloat16  # Use bfloat16 for more efficient inference
     
-    # Set up model loading parameters
+    # Create a temp directory for potential weight offloading
+    temp_dir = tempfile.mkdtemp()
+    logger.info(f"Created temporary directory for weight offloading: {temp_dir}")
+    
+    # Set up model loading parameters with adjusted settings
     model_kwargs = {
         "torch_dtype": compute_dtype,
         "trust_remote_code": True,
@@ -93,6 +98,10 @@ def test_gemma_inference():
         "device_map": "auto",  # Let transformers handle multi-GPU placement
         "max_memory": {i: "80GiB" for i in range(torch.cuda.device_count())},  # Allocate memory for each GPU
         "config": config,  # Use our modified config
+        "low_cpu_mem_usage": True,  # Enable low CPU memory usage
+        "offload_folder": temp_dir,  # Specify offload folder
+        "offload_state_dict": True,  # Enable state dict offloading
+        "use_cache": False,  # Disable KV cache for first load
     }
     
     logger.info(f"Loading with kwargs: {model_kwargs}")
@@ -173,6 +182,14 @@ def test_gemma_inference():
             memory_reserved = torch.cuda.memory_reserved(i) / 1024**3
             logger.info(f"GPU {i} memory allocated: {memory_allocated:.2f} GB")
             logger.info(f"GPU {i} memory reserved: {memory_reserved:.2f} GB")
+    
+    # Clean up temp directory
+    import shutil
+    try:
+        shutil.rmtree(temp_dir)
+        logger.info(f"Removed temporary directory: {temp_dir}")
+    except Exception as e:
+        logger.warning(f"Could not remove temporary directory {temp_dir}: {e}")
 
 if __name__ == "__main__":
     test_gemma_inference() 
