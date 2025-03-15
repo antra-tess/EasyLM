@@ -182,7 +182,6 @@ class DataCollatorForCausalLM:
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors=self.return_tensors,
-            truncation=True,  # Add truncation for safety
         )
         
         # Add labels back with proper padding
@@ -194,7 +193,6 @@ class DataCollatorForCausalLM:
                 max_length=self.max_length,
                 pad_to_multiple_of=self.pad_to_multiple_of,
                 return_tensors=self.return_tensors,
-                truncation=True,  # Add truncation for safety
             )["input_ids"]
             
             # Replace padding token with label_pad_token_id (-100)
