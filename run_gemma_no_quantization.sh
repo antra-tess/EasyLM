@@ -45,7 +45,12 @@ echo "==== End of template file content ===="
 # Set torch distributed environment variables
 export NCCL_DEBUG=INFO
 
-# Define DeepSpeed config with auto optimizer params to avoid conflicts
+# Set environment variables to avoid CUDA compilation for optimizers
+export DS_BUILD_OPS=0
+export DS_BUILD_FUSED_ADAM=0
+export DS_BUILD_FUSED_LAMB=0
+
+# Define DeepSpeed config to use torch's AdamW implementation
 DS_CONFIG='{
   "train_batch_size": "auto",
   "train_micro_batch_size_per_gpu": "auto",
@@ -67,6 +72,7 @@ DS_CONFIG='{
     "reduce_scatter": true,
     "stage3_gather_16bit_weights_on_model_save": true
   },
+  "zero_force_ds_cpu_optimizer": false,
   "optimizer": {
     "type": "AdamW",
     "params": {
@@ -92,7 +98,7 @@ DS_CONFIG='{
   }
 }'
 
-# Also add HuggingFace trainer arguments to set the optimizer params directly
+# Run with AdamW optimizer using torch's implementation
 deepspeed --num_gpus=2 gemma_sft_train.py \
     --model_name_or_path "google/gemma-3-27b-pt" \
     --dataset_path $DATA_PATH \
@@ -120,6 +126,7 @@ deepspeed --num_gpus=2 gemma_sft_train.py \
     --adam_beta1 0.9 \
     --adam_beta2 0.95 \
     --weight_decay 0.01 \
+    --optim adamw_torch \
     --deepspeed "$DS_CONFIG" \
     --load_in_8bit False \
     --load_in_4bit False
