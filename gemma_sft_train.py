@@ -704,6 +704,73 @@ def main():
         **model_kwargs
     )
     
+    # Fix for Gemma-3 embedding issue - check if the embedding layer has correct dimensions
+    if "gemma" in model_args.model_name_or_path.lower():
+        logger.info("Checking Gemma-3 embedding layer dimensions...")
+        # First try direct model.model.embed_tokens path
+        if hasattr(model.model, 'embed_tokens') and hasattr(model.model.embed_tokens, 'weight'):
+            embed_shape = model.model.embed_tokens.weight.shape
+            logger.info(f"Embed tokens weight shape: {embed_shape}")
+            
+            # If the embedding weight is not 2D, fix it
+            if len(embed_shape) != 2:
+                logger.warning(f"Found incorrect embedding shape: {embed_shape}, attempting to fix...")
+                
+                # Get vocab size and hidden size from config
+                vocab_size = model.config.vocab_size
+                hidden_size = model.config.hidden_size
+                
+                # Create a new correctly shaped embedding weight
+                logger.info(f"Creating new embedding layer with shape: ({vocab_size}, {hidden_size})")
+                
+                # Save original data if possible
+                if hasattr(model.model.embed_tokens, '_weight'):
+                    original_data = model.model.embed_tokens._weight.data
+                    logger.info(f"Original weight data shape: {original_data.shape}")
+                    
+                    # Create new weights
+                    if len(original_data.shape) > 2:
+                        # Reshape if possible
+                        new_weight = original_data.reshape(vocab_size, hidden_size)
+                    else:
+                        # Create new random weights if reshape not possible
+                        new_weight = torch.randn(vocab_size, hidden_size, dtype=model_kwargs.get('torch_dtype', torch.float32))
+                        logger.warning("Created random new embedding weights - model may not perform well!")
+                    
+                    # Replace the embedding layer
+                    import torch.nn as nn
+                    new_embed = nn.Embedding(vocab_size, hidden_size)
+                    new_embed.weight.data = new_weight
+                    model.model.embed_tokens = new_embed
+                    logger.info(f"Fixed embedding layer, new shape: {model.model.embed_tokens.weight.shape}")
+                else:
+                    logger.warning("Could not access original embedding weights. Model may not perform correctly.")
+        # Alternative path to handle different model structures
+        elif hasattr(model, 'get_input_embeddings'):
+            logger.info("Checking embedding through get_input_embeddings()...")
+            embed_layer = model.get_input_embeddings()
+            if hasattr(embed_layer, 'weight'):
+                embed_shape = embed_layer.weight.shape
+                logger.info(f"Input embedding weight shape: {embed_shape}")
+                
+                if len(embed_shape) != 2:
+                    logger.warning(f"Found incorrect embedding shape: {embed_shape}, attempting to fix...")
+                    
+                    # Get vocab size and hidden size from config
+                    vocab_size = model.config.vocab_size
+                    hidden_size = model.config.hidden_size
+                    
+                    # Create a new correctly shaped embedding layer
+                    import torch.nn as nn
+                    new_embed = nn.Embedding(vocab_size, hidden_size)
+                    new_embed.weight.data = torch.randn(vocab_size, hidden_size, dtype=model_kwargs.get('torch_dtype', torch.float32))
+                    
+                    # Set the new embedding layer
+                    model.set_input_embeddings(new_embed)
+                    logger.info(f"Fixed embedding layer using set_input_embeddings, new shape: {model.get_input_embeddings().weight.shape}")
+        else:
+            logger.warning("Could not find embedding layer using expected paths. Model may fail during forward pass.")
+
     # Enable gradient checkpointing for memory efficiency
     if training_args.gradient_checkpointing:
         logger.info("Enabling gradient checkpointing")
@@ -863,23 +930,56 @@ def main():
         device = next(model.parameters()).device
         device_batch = {k: v.to(device) if hasattr(v, 'to') else v for k, v in test_batch.items()}
 
-        # Run forward pass
-        with torch.no_grad():
-            outputs = model(**device_batch)
+        # Try run forward pass with error handling
+        try:
+            with torch.no_grad():
+                outputs = model(**device_batch)
 
-        logger.info(f"Debug: Model output keys: {outputs.keys()}")
-        if hasattr(outputs, 'loss'):
-            logger.info(f"Debug: Loss value: {outputs.loss.item()}")
-        else:
-            logger.warning("❌ WARNING: 'loss' not found in model outputs!")
-            logger.info(f"Available keys: {list(outputs.keys())}")
-            # Check if labels are present in input
-            if 'labels' in device_batch:
-                logger.info("Debug: 'labels' are present in input batch")
-                # Sample of labels to check
-                logger.info(f"Debug: Labels sample: {device_batch['labels'][0][:10]}")
+            logger.info(f"Debug: Model output keys: {outputs.keys()}")
+            if hasattr(outputs, 'loss'):
+                logger.info(f"Debug: Loss value: {outputs.loss.item()}")
             else:
-                logger.warning("❌ WARNING: 'labels' not present in input batch!")
+                logger.warning("❌ WARNING: 'loss' not found in model outputs!")
+                logger.info(f"Available keys: {list(outputs.keys())}")
+                # Check if labels are present in input
+                if 'labels' in device_batch:
+                    logger.info("Debug: 'labels' are present in input batch")
+                    # Sample of labels to check
+                    logger.info(f"Debug: Labels sample: {device_batch['labels'][0][:10]}")
+                else:
+                    logger.warning("❌ WARNING: 'labels' not present in input batch!")
+        except Exception as e:
+            logger.error(f"❌ ERROR: Model forward pass failed with error: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
+            # Additional diagnostics
+            logger.info("Attempting additional diagnostics...")
+            try:
+                # Check if we can run the model without labels (might help isolate the issue)
+                if 'labels' in device_batch:
+                    no_labels_batch = {k: v for k, v in device_batch.items() if k != 'labels'}
+                    logger.info("Trying forward pass without labels...")
+                    with torch.no_grad():
+                        output_no_labels = model(**no_labels_batch)
+                    logger.info(f"Forward pass without labels succeeded, keys: {output_no_labels.keys()}")
+                
+                # Try running just the embedding layer
+                logger.info("Testing just the embedding layer...")
+                if hasattr(model.model, 'embed_tokens'):
+                    input_ids = device_batch['input_ids']
+                    embed_output = model.model.embed_tokens(input_ids)
+                    logger.info(f"Embedding layer output shape: {embed_output.shape}")
+                elif hasattr(model, 'get_input_embeddings'):
+                    input_ids = device_batch['input_ids']
+                    embed_layer = model.get_input_embeddings()
+                    embed_output = embed_layer(input_ids)
+                    logger.info(f"Embedding layer (from get_input_embeddings) output shape: {embed_output.shape}")
+            except Exception as inner_e:
+                logger.error(f"Diagnostic tests also failed: {str(inner_e)}")
+                logger.error("Model appears to have serious issues with its architecture.")
+            
+            logger.warning("Since the model forward pass failed, training might fail. Consider using a different model or creating a GitHub issue for Gemma-3 with PEFT.")
 
     # Train
     if training_args.resume_from_checkpoint:
