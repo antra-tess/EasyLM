@@ -7,7 +7,7 @@ import json
 import logging
 import argparse
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Any, Union
 
 import torch
 import torch.distributed as dist
@@ -23,8 +23,11 @@ from transformers import (
     set_seed,
     BitsAndBytesConfig,
     AutoConfig,
+    DataCollatorForLanguageModeling,
 )
 from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import PaddingStrategy
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 from peft import (
     LoraConfig,
@@ -120,6 +123,73 @@ class DataArguments:
         default=1024,
         metadata={"help": "Maximum sequence length to use for data processing"}
     )
+
+@dataclass
+class DataCollatorForCausalLM:
+    """
+    Data collator that will dynamically pad the inputs received, as well as the labels.
+    Args:
+        tokenizer ([`PreTrainedTokenizer`] or [`PreTrainedTokenizerFast`]):
+            The tokenizer used for encoding the data.
+        padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
+            Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
+            among:
+            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
+              is provided).
+            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+              acceptable input length for the model if that argument is not provided.
+            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+              lengths).
+        max_length (`int`, *optional*):
+            Maximum length of the returned list and optionally padding length (see above).
+        pad_to_multiple_of (`int`, *optional*):
+            If set will pad the sequence to a multiple of the provided value.
+            This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5.
+        return_tensors (`str`):
+            The type of Tensor to return. Allowable values are "pt", "tf", "np", "jax".
+        label_pad_token_id (`int`, *optional*, defaults to -100):
+            The id to use when padding the labels (-100 will be automatically ignored by PyTorch loss functions).
+    """
+
+    tokenizer: PreTrainedTokenizerBase
+    padding: Union[bool, str, PaddingStrategy] = True
+    max_length: Optional[int] = None
+    pad_to_multiple_of: Optional[int] = 8
+    return_tensors: str = "pt"
+    label_pad_token_id: int = -100
+
+    def __call__(self, features):
+        if "labels" in features[0]:
+            # Handle labels separately to apply label_pad_token_id
+            labels = [feature["labels"] for feature in features]
+            
+            # Pad labels with label_pad_token_id
+            padded_labels = self.tokenizer.pad(
+                {"input_ids": labels},
+                padding=self.padding,
+                max_length=self.max_length,
+                pad_to_multiple_of=self.pad_to_multiple_of,
+                return_tensors=self.return_tensors,
+            )["input_ids"]
+            
+            # Remove labels from features to avoid conflict
+            for feature in features:
+                del feature["labels"]
+        
+        # Pad input_ids and attention_mask
+        batch = self.tokenizer.pad(
+            features,
+            padding=self.padding,
+            max_length=self.max_length,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            return_tensors=self.return_tensors,
+        )
+        
+        # Add back the labels
+        if "labels" in features[0]:
+            batch["labels"] = padded_labels
+            
+        return batch
 
 class JsonlDataset(Dataset):
     """
@@ -258,7 +328,6 @@ class JsonlDataset(Dataset):
                 logger.error(f"Error processing example {idx}: {e}")
                 raise
             
-            # Rest of the function remains the same
             # Add BOS token if not already present
             if len(text_parts) == 0 or text_parts[0] != self.tokenizer.bos_token_id:
                 text_parts.insert(0, self.tokenizer.bos_token_id)
@@ -268,21 +337,17 @@ class JsonlDataset(Dataset):
             text_parts.append(self.tokenizer.eos_token_id)
             loss_mask_parts.append(1.0)  # Apply loss on EOS token
             
-            # Truncate to max length
-            if len(text_parts) > self.max_seq_length:
-                text_parts = text_parts[:self.max_seq_length]
-                loss_mask_parts = loss_mask_parts[:self.max_seq_length]
-            
-            # Convert to tensor format required by transformer trainer
-            input_ids = torch.tensor(text_parts)
-            attention_mask = torch.ones_like(input_ids)
-            labels = torch.clone(input_ids)
+            # Convert to list format that can be properly padded by data collator
+            input_ids = text_parts
+            attention_mask = [1] * len(input_ids)
+            labels = input_ids.copy()
             
             # Apply loss mask - set tokens with mask=0.0 to -100 in labels
             for i, mask_val in enumerate(loss_mask_parts):
                 if mask_val == 0.0:
                     labels[i] = -100
             
+            # Return as simple lists instead of tensors to allow proper padding by collator
             return {
                 "input_ids": input_ids,
                 "attention_mask": attention_mask,
@@ -298,7 +363,14 @@ class JsonlDataset(Dataset):
             prompt = f"{instruction}\n{model_input}".strip()
             text = f"{prompt}\n{output}"
             
-            encodings = self.tokenizer(text, max_length=self.max_seq_length, truncation=True, padding="max_length")
+            # Use tokenizer with explicit padding and truncation settings
+            encodings = self.tokenizer(
+                text, 
+                max_length=self.max_seq_length, 
+                truncation=True, 
+                padding=False, # Let the data collator handle padding
+                return_tensors=None # Return lists, not tensors
+            )
             
             # Create labels: -100 for prompt tokens (no loss), actual token IDs for output tokens
             prompt_len = len(self.tokenizer(prompt, truncation=True).input_ids)
@@ -306,9 +378,9 @@ class JsonlDataset(Dataset):
             labels[:prompt_len] = [-100] * prompt_len  # No loss for prompt tokens
             
             return {
-                "input_ids": torch.tensor(encodings["input_ids"]),
-                "attention_mask": torch.tensor(encodings["attention_mask"]),
-                "labels": torch.tensor(labels)
+                "input_ids": encodings["input_ids"],
+                "attention_mask": encodings["attention_mask"],
+                "labels": labels
             }
 
 def main():
@@ -545,12 +617,24 @@ def main():
         max_seq_length=data_args.max_seq_length,
     )
     
+    # Create custom data collator with padding and truncation
+    logger.info("Setting up DataCollatorForCausalLM with padding")
+    data_collator = DataCollatorForCausalLM(
+        tokenizer=tokenizer,
+        padding=True,
+        max_length=data_args.max_seq_length,
+        pad_to_multiple_of=8,
+        return_tensors="pt",
+        label_pad_token_id=-100
+    )
+    
     # Initialize Trainer
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         tokenizer=tokenizer,
+        data_collator=data_collator,
     )
     
     # Train
