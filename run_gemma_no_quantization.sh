@@ -359,16 +359,39 @@ else
         
         # Get the CUDA version from our found CUDA installation if possible
         if [[ -z "$CUDA_MAJOR" || -z "$CUDA_MINOR" ]]; then
-            NVCC_PATH="$SYSTEM_CUDA_HOME/bin/nvcc"
-            if [[ -f "$NVCC_PATH" ]]; then
-                NVCC_VERSION=$("$NVCC_PATH" -V 2>&1 | grep "release" | awk '{print $5}' | awk -F, '{print $1}')
-                echo "NVCC version: $NVCC_VERSION"
-                
-                # Parse major.minor
-                if [[ "$NVCC_VERSION" =~ ([0-9]+)\.([0-9]+) ]]; then
+            # Try to find nvcc in multiple locations
+            NVCC_PATHS=(
+                "$SYSTEM_CUDA_HOME/bin/nvcc"
+                "$(which nvcc 2>/dev/null)"
+            )
+            
+            for NVCC_PATH in "${NVCC_PATHS[@]}"; do
+                if [[ -x "$NVCC_PATH" ]]; then
+                    echo "Found NVCC at: $NVCC_PATH"
+                    NVCC_VERSION=$("$NVCC_PATH" -V 2>&1 | grep "release" | awk '{print $5}' | awk -F, '{print $1}')
+                    echo "NVCC version: $NVCC_VERSION"
+                    
+                    # Parse major.minor
+                    if [[ "$NVCC_VERSION" =~ ([0-9]+)\.([0-9]+) ]]; then
+                        CUDA_MAJOR="${BASH_REMATCH[1]}"
+                        CUDA_MINOR="${BASH_REMATCH[2]}"
+                        echo "Parsed CUDA version: $CUDA_MAJOR.$CUDA_MINOR"
+                        break
+                    fi
+                fi
+            done
+        fi
+        
+        # If still no CUDA version, try libcudart.so versioning
+        if [[ -z "$CUDA_MAJOR" || -z "$CUDA_MINOR" ]]; then
+            echo "Trying to determine CUDA version from libcudart.so..."
+            CUDART_PATHS=$(find "$CONDA_PREFIX" -name "libcudart.so*" 2>/dev/null || echo "")
+            if [[ -n "$CUDART_PATHS" ]]; then
+                FIRST_LIB=$(echo "$CUDART_PATHS" | head -n 1)
+                if [[ "$FIRST_LIB" =~ libcudart\.so\.([0-9]+)\.([0-9]+) ]]; then
                     CUDA_MAJOR="${BASH_REMATCH[1]}"
                     CUDA_MINOR="${BASH_REMATCH[2]}"
-                    echo "Parsed CUDA version: $CUDA_MAJOR.$CUDA_MINOR"
+                    echo "CUDA version from library: $CUDA_MAJOR.$CUDA_MINOR"
                 fi
             fi
         fi
@@ -391,6 +414,24 @@ else
         export PATH="$CUDA_HOME/bin:$PATH"
         export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$CUDA_HOME/lib:$LD_LIBRARY_PATH"
         export CPATH="$CUDA_HOME/include:$CPATH"
+        
+        # Check if nvcc exists in the expected location, if not try to find it in PATH
+        if [[ ! -f "$CUDA_HOME/bin/nvcc" ]]; then
+            NVCC_PATH=$(which nvcc 2>/dev/null || echo "")
+            if [[ -n "$NVCC_PATH" ]]; then
+                echo "NVCC not found in CUDA_HOME/bin, but found in PATH: $NVCC_PATH"
+                # Get the directory containing nvcc
+                NVCC_DIR=$(dirname "$NVCC_PATH")
+                # Add nvcc directory to PATH
+                export PATH="$NVCC_DIR:$PATH"
+                # Create a symbolic link to nvcc in CUDA_HOME/bin if the directory exists
+                if [[ -d "$CUDA_HOME/bin" ]]; then
+                    echo "Creating symbolic link to nvcc in $CUDA_HOME/bin"
+                    mkdir -p "$CUDA_HOME/bin"
+                    ln -sf "$NVCC_PATH" "$CUDA_HOME/bin/nvcc" 2>/dev/null || true
+                fi
+            fi
+        fi
         
         # Add PyTorch's CUDA include paths to help DeepSpeed find the right headers
         TORCH_CUDA_INCLUDE=$(python -c "import torch; from pathlib import Path; print(Path(torch.__file__).parent/'include')" 2>/dev/null || echo "")
@@ -457,6 +498,34 @@ else
         echo "TORCH_EXTENSIONS_DIR=$TORCH_EXTENSIONS_DIR"
         echo "DS_SKIP_CUDA_CHECK=$DS_SKIP_CUDA_CHECK"
         echo "TORCH_CUDA_VERSION=$TORCH_CUDA_VERSION"
+        
+        # Final check for necessary CUDA components
+        echo "Running final CUDA component checks:"
+        echo "- NVCC location: $(which nvcc 2>/dev/null || echo 'Not found')"
+        if [ -x "$(which nvcc 2>/dev/null)" ]; then
+            echo "- NVCC version: $(nvcc --version | grep "release" || echo 'Cannot determine')"
+        fi
+        echo "- CUDA includes: $(find $CPATH -name "cuda_runtime.h" 2>/dev/null | head -n1 || echo 'Not found')"
+        echo "- CUDA libraries: $(find $LD_LIBRARY_PATH -name "libcudart.so*" 2>/dev/null | head -n1 || echo 'Not found')"
+
+        # Set additional options for deepspeed
+        export TORCH_DISTRIBUTED_DEBUG=DETAIL
+        export CUDA_DEVICE_DEBUG=1
+
+        # Configure DS_BUILD vars to avoid unnecessary compilation issues
+        # If we can't find nvcc in a reliable location, disable building the ops
+        if [[ ! -x "$(which nvcc 2>/dev/null)" ]]; then
+            echo "⚠️ NVCC not found in PATH, disabling DeepSpeed CUDA ops compilation"
+            export DS_BUILD_OPS=0
+            export DS_BUILD_FUSED_ADAM=0
+            export DS_BUILD_FUSED_LAMB=0
+            ADDITIONAL_ARGS="--optim adamw_torch ${ADDITIONAL_ARGS:-""}"
+        else
+            # If NVCC is found, ensure we use it by explicitly setting NVCC_PREPEND_FLAGS
+            echo "✅ NVCC found at $(which nvcc), enabling DeepSpeed ops compilation"
+            export NVCC_PREPEND_FLAGS="-ccbin=$(dirname $(which nvcc))"
+            export DS_BUILD_OPS=1
+        fi
         
         # Create standard DeepSpeed config with FusedAdam
         cat > ds_config.json << EOF
