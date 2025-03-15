@@ -4,6 +4,11 @@ set -eu
 
 echo "Starting Gemma-3 multi-GPU training OPTIMIZED FOR SPEED (bf16 precision)..."
 
+# Initialize environment variables to prevent "unbound variable" errors
+export LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-""}
+export PATH=${PATH:-""}
+export CPATH=${CPATH:-""}
+
 # Create directories (with configurable paths)
 OUTPUT_DIR=${OUTPUT_DIR:-"./gemma3_full_precision_output"}
 TEMPLATE_PATH=${TEMPLATE_PATH:-"templates/borg_chat_exp.yaml"}
