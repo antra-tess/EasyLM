@@ -271,16 +271,13 @@ def main():
     }
     
     # Add device_map for optimal memory usage on multi-GPU setup
-    # For DeepSpeed ZeRO-3, we don't need to specify the device_map as the model will be 
+    # For DeepSpeed, we don't need to specify the device_map as the model will be 
     # distributed across GPUs by DeepSpeed
     if not training_args.deepspeed:
         logger.info("Setting device map for non-DeepSpeed training")
         if torch.cuda.device_count() > 1:
             # For multiple GPUs, use device_map="auto"
             model_kwargs["device_map"] = "auto"
-        elif is_xpu_available():
-            logger.info("Intel XPU detected")
-            model_kwargs["device_map"] = {"": 0}  # For Intel XPU
         else:
             # For single GPU, place everything on cuda:0
             model_kwargs["device_map"] = {"": 0}
@@ -346,7 +343,7 @@ def main():
         max_seq_length=data_args.max_seq_length,
     )
     
-    # Initialize Trainer with DeepSpeed integration
+    # Initialize Trainer
     trainer = Trainer(
         model=model,
         args=training_args,
