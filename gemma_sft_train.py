@@ -317,9 +317,14 @@ def main():
         "trust_remote_code": model_args.trust_remote_code,
     }
     
-    # Add use_cache parameter conditionally - Gemma-3 models don't accept this parameter
-    if not "gemma-3" in model_args.model_name_or_path.lower():
+    # Add use_cache parameter conditionally - Gemma models don't accept this parameter
+    # Print the model name for debugging
+    logger.info(f"Model name: {model_args.model_name_or_path}")
+    if "gemma" not in model_args.model_name_or_path.lower():
+        logger.info("Adding use_cache parameter for non-Gemma model")
         model_kwargs["use_cache"] = False if training_args.gradient_checkpointing else True
+    else:
+        logger.info("Skipping use_cache parameter for Gemma model")
         
     # Add device_map for optimal memory usage on multi-GPU setup
     # For DeepSpeed, we don't need to specify the device_map as the model will be 
