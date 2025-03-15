@@ -328,8 +328,8 @@ EOF
         --lora_rank 48 \
         --lora_alpha 96 \
         --lora_dropout 0.05 \
-        --per_device_train_batch_size 16 \
-        --gradient_accumulation_steps 1 \
+        --per_device_train_batch_size 12 \
+        --gradient_accumulation_steps 2 \
         --num_train_epochs 3 \
         --learning_rate 3e-4 \
         --warmup_steps 100 \
@@ -596,21 +596,21 @@ else
         "stage": 3,
         "offload_optimizer": {
             "device": "cpu",
-            "pin_memory": true
+            "pin_memory": false
         },
         "offload_param": {
             "device": "cpu",
-            "pin_memory": true
+            "pin_memory": false
         },
         "overlap_comm": true,
         "contiguous_gradients": true,
-        "stage3_param_persistence_threshold": 1e5,
-        "stage3_max_live_parameters": 1e9
+        "stage3_param_persistence_threshold": 1e6,
+        "stage3_max_live_parameters": 5e9
     },
     "gradient_clipping": 1.0,
-    "train_batch_size": 32,
-    "train_micro_batch_size_per_gpu": 4,
-    "gradient_accumulation_steps": 4,
+    "train_batch_size": 48,
+    "train_micro_batch_size_per_gpu": 12,
+    "gradient_accumulation_steps": 2,
     "optimizer": {
         "type": "AdamW",
         "params": {
@@ -657,14 +657,14 @@ EOF
                 --model_name_or_path "google/gemma-3-27b-pt" \
                 --dataset_path $DATA_PATH \
                 --template_path $TEMPLATE_PATH \
-                --max_seq_length 512 \
-                --lora_rank 32 \
-                --lora_alpha 64 \
+                --max_seq_length 1024 \
+                --lora_rank 48 \
+                --lora_alpha 96 \
                 --lora_dropout 0.05 \
-                --per_device_train_batch_size 4 \
-                --gradient_accumulation_steps 4 \
+                --per_device_train_batch_size 12 \
+                --gradient_accumulation_steps 2 \
                 --num_train_epochs 3 \
-                --learning_rate 2e-4 \
+                --learning_rate 3e-4 \
                 --warmup_steps 100 \
                 --lr_scheduler_type "cosine" \
                 --logging_steps 10 \
@@ -692,14 +692,14 @@ EOF
             --model_name_or_path "google/gemma-3-27b-pt" \
             --dataset_path $DATA_PATH \
             --template_path $TEMPLATE_PATH \
-            --max_seq_length 512 \
-            --lora_rank 32 \
-            --lora_alpha 64 \
+            --max_seq_length 1024 \
+            --lora_rank 48 \
+            --lora_alpha 96 \
             --lora_dropout 0.05 \
-            --per_device_train_batch_size 4 \
-            --gradient_accumulation_steps 4 \
+            --per_device_train_batch_size 12 \
+            --gradient_accumulation_steps 2 \
             --num_train_epochs 3 \
-            --learning_rate 2e-4 \
+            --learning_rate 3e-4 \
             --warmup_steps 100 \
             --lr_scheduler_type "cosine" \
             --logging_steps 10 \
