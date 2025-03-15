@@ -90,3 +90,100 @@ If you found EasyLM useful in your research or applications, please cite using t
 * The JAX/Flax GPT-J and RoBERTa implementation are from [transformers](https://huggingface.co/docs/transformers/main/en/index)
 * Most of the JAX utilities are from [mlxu](https://github.com/young-geng/mlxu)
 * The codebase is heavily inspired by [JAXSeq](https://github.com/Sea-Snell/JAXSeq)
+
+# Gemma-3-27B Fine-Tuning with Hugging Face
+
+This repository contains scripts for fine-tuning the Google Gemma-3-27B model using Hugging Face's Transformers and PEFT libraries. The setup is optimized for 2x A100 80GB GPUs.
+
+## Setup Overview
+
+- **Model**: google/gemma-3-27b-pt (27B parameters)
+- **Training Method**: LoRA fine-tuning with 4-bit quantization
+- **Hardware**: 2x NVIDIA A100 80GB GPUs
+- **Distributed Training**: DeepSpeed ZeRO-3 with parameter and optimizer offloading
+
+## Requirements
+
+Make sure you have:
+
+1. 2x A100 80GB GPUs
+2. CUDA 12.x installed
+3. Python 3.10+
+4. Hugging Face account with access to Gemma-3 models
+5. WANDB account (optional but recommended for tracking)
+
+## Installation
+
+Install dependencies with the provided script:
+
+```bash
+bash install_requirements.sh
+```
+
+## Data Format
+
+The training scripts expect a JSONL file with examples and a YAML template file. The default template format is:
+
+```yaml
+sequence:
+  - no_loss: "{instruction}{input}\n"
+  - no_loss: '<msg username="{author}">'
+  - with_loss: "{output}"
+  - with_loss: '</msg>\n'
+```
+
+Make sure your JSONL file has the corresponding fields (instruction, input, author, output).
+
+## Training
+
+To run the training:
+
+```bash
+bash run_gemma_sft.sh
+```
+
+This script:
+1. Creates necessary directories
+2. Configures DeepSpeed ZeRO-3 with optimal settings for 2x A100 GPUs
+3. Launches distributed training with 4-bit quantization
+4. Uses gradient checkpointing and other memory optimizations
+5. Logs metrics to WANDB
+
+## Key Configuration Settings
+
+For 2x A100 80GB GPUs:
+- Batch size: 1 per GPU
+- Gradient accumulation steps: 16
+- Effective batch size: 32 (1 × 2 GPUs × 16 accumulation steps)
+- 4-bit quantization (NF4)
+- Gradient checkpointing enabled
+- LoRA rank: 32, alpha: 64
+
+## Inference
+
+To run inference with your fine-tuned model:
+
+```bash
+python inference.py --adapter_path /mnt/disk2/gemma_sft_output --load_in_4bit --interactive
+```
+
+## Additional Tools
+
+- **trl_example.py**: Example script for TRL (RLHF) fine-tuning
+- **merge_lora.py**: Utility to merge LoRA weights with the base model
+
+## Memory Considerations
+
+The configuration is optimized for 2x A100 80GB GPUs. Key memory optimizations:
+- 4-bit quantization
+- DeepSpeed ZeRO-3 with CPU offloading
+- Gradient checkpointing
+- Small per-device batch size with gradient accumulation
+
+## Troubleshooting
+
+If you encounter out-of-memory errors:
+1. Reduce per_device_train_batch_size to 1 (already set)
+2. Increase gradient_accumulation_steps (e.g., 16 to 24)
+3. Enable more aggressive CPU offloading in DeepSpeed config
+4. Reduce sequence length if possible

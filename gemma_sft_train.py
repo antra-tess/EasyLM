@@ -22,6 +22,7 @@ from transformers import (
     TrainingArguments,
     set_seed,
     BitsAndBytesConfig,
+    AutoConfig,
 )
 from transformers.trainer_utils import get_last_checkpoint
 
@@ -349,6 +350,27 @@ def main():
     
     # Load model
     logger.info(f"Loading model from {model_args.model_name_or_path} with kwargs: {model_kwargs}")
+    
+    # Check for and fix missing vocab_size in Gemma-3 config
+    if "gemma" in model_args.model_name_or_path.lower():
+        try:
+            # First load config to check for issues
+            config = AutoConfig.from_pretrained(
+                model_args.model_name_or_path,
+                trust_remote_code=model_args.trust_remote_code
+            )
+            
+            # For Gemma-3 models, check and fix missing vocab_size attribute
+            if not hasattr(config, 'vocab_size'):
+                logger.warning("Gemma config is missing vocab_size attribute - adding it from tokenizer")
+                vocab_size = len(tokenizer.get_vocab())
+                logger.info(f"Setting vocab_size to {vocab_size} from tokenizer vocabulary")
+                config.vocab_size = vocab_size
+                model_kwargs["config"] = config
+        except Exception as e:
+            logger.warning(f"Error while checking config: {e}")
+    
+    # Load the model with our potentially modified config
     model = AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         **model_kwargs
