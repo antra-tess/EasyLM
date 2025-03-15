@@ -2,7 +2,7 @@
 
 set -eu
 
-echo "Starting Gemma-3 multi-GPU training WITHOUT quantization (bf16 precision)..."
+echo "Starting Gemma-3 multi-GPU training OPTIMIZED FOR SPEED (bf16 precision)..."
 
 # Create directories (with configurable paths)
 OUTPUT_DIR=${OUTPUT_DIR:-"./gemma3_full_precision_output"}
@@ -45,24 +45,71 @@ echo "==== End of template file content ===="
 # Set torch distributed environment variables
 export NCCL_DEBUG=INFO
 
-# Define DeepSpeed config inline as a JSON string
+# Define optimized DeepSpeed config for speed with A100 80GB GPUs
 DS_CONFIG='{
   "train_batch_size": "auto",
   "train_micro_batch_size_per_gpu": "auto",
   "gradient_accumulation_steps": "auto",
-  "gradient_clipping": "auto",
-  "bf16": {"enabled": "auto"},
+  "gradient_clipping": 1.0,
+  "bf16": {
+    "enabled": true
+  },
   "zero_optimization": {
     "stage": 3,
-    "offload_optimizer": {"device": "cpu", "pin_memory": true},
-    "offload_param": {"device": "cpu", "pin_memory": true},
-    "overlap_comm": true,
+    "offload_optimizer": {
+      "device": "none"
+    },
+    "offload_param": {
+      "device": "none"
+    },
     "contiguous_gradients": true,
-    "stage3_gather_16bit_weights_on_model_save": true
+    "overlap_comm": true,
+    "reduce_scatter": true,
+    "reduce_bucket_size": 5e8,
+    "prefetch_bucket_size": 5e8,
+    "stage3_prefetch_bucket_size": 5e8,
+    "stage3_param_persistence_threshold": 1e6
+  },
+  "optimizer": {
+    "type": "AdamW",
+    "params": {
+      "lr": "auto",
+      "betas": [0.9, 0.95],
+      "eps": 1e-8,
+      "weight_decay": 0.01
+    }
+  },
+  "scheduler": {
+    "type": "WarmupDecayLR",
+    "params": {
+      "warmup_min_lr": 0,
+      "warmup_max_lr": "auto",
+      "warmup_num_steps": "auto",
+      "total_num_steps": "auto"
+    }
+  },
+  "activation_checkpointing": {
+    "partition_activations": true,
+    "cpu_checkpointing": false,
+    "contiguous_memory_optimization": true
+  },
+  "aio": {
+    "block_size": 1048576,
+    "queue_depth": 16,
+    "thread_count": 1,
+    "single_submit": false,
+    "overlap_events": true
+  },
+  "flops_profiler": {
+    "enabled": false,
+    "profile_step": 1,
+    "module_depth": -1,
+    "top_modules": 3,
+    "detailed": false
   }
 }'
 
-# Run the training script with DeepSpeed for multi-GPU
+# Run the training script with DeepSpeed for multi-GPU with speed optimizations
 deepspeed --num_gpus=2 gemma_sft_train.py \
     --model_name_or_path "google/gemma-3-27b-pt" \
     --dataset_path $DATA_PATH \
@@ -70,17 +117,18 @@ deepspeed --num_gpus=2 gemma_sft_train.py \
     --max_seq_length 1024 \
     --lora_rank 32 \
     --lora_alpha 64 \
-    --lora_dropout 0.1 \
-    --per_device_train_batch_size 1 \
-    --gradient_accumulation_steps 8 \
+    --lora_dropout 0.05 \
+    --per_device_train_batch_size 4 \
+    --gradient_accumulation_steps 2 \
     --num_train_epochs 3 \
-    --learning_rate 1e-4 \
-    --warmup_steps 75 \
+    --learning_rate 3e-4 \
+    --warmup_steps 100 \
     --lr_scheduler_type "cosine" \
     --logging_steps 10 \
     --save_steps 100 \
     --output_dir $OUTPUT_DIR \
     --bf16 True \
+    --tf32 True \
     --overwrite_output_dir \
     --gradient_checkpointing True \
     --save_total_limit 3 \
@@ -88,6 +136,7 @@ deepspeed --num_gpus=2 gemma_sft_train.py \
     --ddp_find_unused_parameters False \
     --deepspeed "$DS_CONFIG" \
     --load_in_8bit False \
-    --load_in_4bit False
+    --load_in_4bit False \
+    --use_flash_attn True
 
 echo "Training complete!" 
