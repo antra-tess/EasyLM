@@ -232,6 +232,24 @@ def main():
     # Set seed for reproducibility
     set_seed(training_args.seed)
     
+    # Check for DeepSpeed compatibility
+    deepspeed_fallback = False
+    if training_args.deepspeed:
+        try:
+            # Try to import DeepSpeed to see if it's compatible
+            import deepspeed
+            logger.info(f"Successfully imported DeepSpeed version: {deepspeed.__version__}")
+        except ImportError as e:
+            logger.warning(f"Failed to import DeepSpeed: {e}")
+            logger.warning("Falling back to regular PyTorch training without DeepSpeed")
+            training_args.deepspeed = None
+            deepspeed_fallback = True
+        except Exception as e:
+            logger.warning(f"DeepSpeed initialization error: {e}")
+            logger.warning("Falling back to regular PyTorch training without DeepSpeed")
+            training_args.deepspeed = None
+            deepspeed_fallback = True
+    
     # Load pretrained model and tokenizer
     tokenizer_name = model_args.tokenizer_name_or_path or model_args.model_name_or_path
     tokenizer = AutoTokenizer.from_pretrained(
@@ -275,7 +293,7 @@ def main():
     # distributed across GPUs by DeepSpeed
     if not training_args.deepspeed:
         logger.info("Setting device map for non-DeepSpeed training")
-        if torch.cuda.device_count() > 1:
+        if torch.cuda.device_count() > 1 and not deepspeed_fallback:
             # For multiple GPUs, use device_map="auto"
             model_kwargs["device_map"] = "auto"
         else:

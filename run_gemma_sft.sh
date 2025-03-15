@@ -9,9 +9,9 @@ echo "WANDB_API_KEY is${WANDB_API_KEY:+ set}${WANDB_API_KEY:-" not set"}"
 echo "HF_TOKEN is${HF_TOKEN:+ set}${HF_TOKEN:-" not set"}"
 
 # Create directories
-OUTPUT_DIR="/mnt/disk2/gemma_sft_output"
+OUTPUT_DIR="./gemma_sft_output"
 TEMPLATE_PATH="templates/borg_chat_exp.yaml"
-DATA_PATH="/mnt/disk2/conversations_all.jsonl"
+DATA_PATH="conversations_all.jsonl"
 
 # Make sure directories exist
 mkdir -p $OUTPUT_DIR
