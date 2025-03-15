@@ -8,8 +8,12 @@ echo "Installing dependencies for Hugging Face training with Gemma..."
 # python -m venv venv
 # source venv/bin/activate
 
-# Install transformers, datasets, and other HF libraries
-pip install transformers==4.38.0
+# Install PyTorch with CUDA
+pip3 install torch torchvision torchaudio
+# Install transformers with Gemma-3 support (specific branch)
+pip install git+https://github.com/huggingface/transformers@v4.49.0-Gemma-3
+
+# Install other HF libraries
 pip install datasets==2.16.1
 pip install accelerate==0.25.0
 pip install peft==0.7.1
@@ -18,7 +22,7 @@ pip install wandb
 pip install PyYAML
 
 # Install compatible DeepSpeed version for PyTorch 2.1.x
-pip install deepspeed==0.9.5 --no-build-isolation
+pip install deepspeed==0.16.4 --no-build-isolation
 
 # Install additional dependencies for efficient training
 pip install ninja  # For faster compilation

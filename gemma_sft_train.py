@@ -252,11 +252,41 @@ def main():
     
     # Load pretrained model and tokenizer
     tokenizer_name = model_args.tokenizer_name_or_path or model_args.model_name_or_path
-    tokenizer = AutoTokenizer.from_pretrained(
-        tokenizer_name,
-        trust_remote_code=model_args.trust_remote_code,
-        use_fast=True,
-    )
+    
+    # Try to load tokenizer with different configurations to handle compatibility issues
+    try:
+        logger.info(f"Loading tokenizer from {tokenizer_name}")
+        tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_name,
+            trust_remote_code=model_args.trust_remote_code,
+            use_fast=True,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to load fast tokenizer: {e}")
+        logger.info("Trying to load with slow tokenizer...")
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer_name,
+                trust_remote_code=model_args.trust_remote_code,
+                use_fast=False,
+            )
+        except Exception as e2:
+            logger.warning(f"Failed to load slow tokenizer: {e2}")
+            if "gemma" in tokenizer_name.lower():
+                logger.info("Trying with specific Gemma-3 configuration...")
+                try:
+                    # For Gemma-3, we might need to specify the revision and other parameters
+                    tokenizer = AutoTokenizer.from_pretrained(
+                        tokenizer_name,
+                        trust_remote_code=True,
+                        use_fast=False,
+                        padding_side="right",
+                        revision="main",
+                    )
+                except Exception as e3:
+                    raise ValueError(f"Could not load tokenizer after multiple attempts. Last error: {e3}")
+            else:
+                raise ValueError(f"Could not load tokenizer after multiple attempts. Last error: {e2}")
     
     # Ensure tokenizer has pad token
     if tokenizer.pad_token is None:
@@ -285,9 +315,12 @@ def main():
         "quantization_config": quant_config,
         "torch_dtype": compute_dtype,
         "trust_remote_code": model_args.trust_remote_code,
-        "use_cache": False if training_args.gradient_checkpointing else True,
     }
     
+    # Add use_cache parameter conditionally - Gemma-3 models don't accept this parameter
+    if not "gemma-3" in model_args.model_name_or_path.lower():
+        model_kwargs["use_cache"] = False if training_args.gradient_checkpointing else True
+        
     # Add device_map for optimal memory usage on multi-GPU setup
     # For DeepSpeed, we don't need to specify the device_map as the model will be 
     # distributed across GPUs by DeepSpeed
