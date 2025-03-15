@@ -219,7 +219,8 @@ DS_CONFIG='{
   "zero_optimization": {
     "stage": 2,
     "offload_optimizer": {
-      "device": "none"
+      "device": "cpu",
+      "pin_memory": true
     },
     "offload_param": {
       "device": "none"
@@ -229,7 +230,9 @@ DS_CONFIG='{
     "allgather_partitions": true,
     "reduce_scatter": true,
     "reduce_bucket_size": 5e8,
-    "prefetch_bucket_size": 5e8
+    "prefetch_bucket_size": 5e8,
+    "sub_group_size": 1e9,
+    "round_robin_gradients": true
   },
   "optimizer": {
     "type": "AdamW",
@@ -250,8 +253,9 @@ DS_CONFIG='{
     }
   },
   "activation_checkpointing": {
-    "partition_activations": false,
+    "partition_activations": true,
     "contiguous_memory_optimization": true,
+    "cpu_checkpointing": false,
     "number_checkpoints": 1,
     "synchronize_checkpoint_boundary": false,
     "profile": false
@@ -261,7 +265,8 @@ DS_CONFIG='{
   "tensorboard": {
     "enabled": true,
     "output_path": "./logs/tensorboard"
-  }
+  },
+  "memory_breakdown": true
 }'
 
 # Set default additional args if not defined
@@ -273,10 +278,10 @@ deepspeed --num_gpus=2 gemma_sft_train.py \
     --dataset_path $DATA_PATH \
     --template_path $TEMPLATE_PATH \
     --max_seq_length 1024 \
-    --lora_rank 64 \
-    --lora_alpha 128 \
+    --lora_rank 48 \
+    --lora_alpha 96 \
     --lora_dropout 0.05 \
-    --per_device_train_batch_size 20 \
+    --per_device_train_batch_size 16 \
     --gradient_accumulation_steps 1 \
     --num_train_epochs 3 \
     --learning_rate 3e-4 \
