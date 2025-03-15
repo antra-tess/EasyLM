@@ -276,7 +276,7 @@ deepspeed --num_gpus=2 gemma_sft_train.py \
     --lora_rank 64 \
     --lora_alpha 128 \
     --lora_dropout 0.05 \
-    --per_device_train_batch_size 32 \
+    --per_device_train_batch_size 20 \
     --gradient_accumulation_steps 1 \
     --num_train_epochs 3 \
     --learning_rate 3e-4 \
@@ -288,7 +288,7 @@ deepspeed --num_gpus=2 gemma_sft_train.py \
     --bf16 True \
     --tf32 True \
     --overwrite_output_dir \
-    --gradient_checkpointing False \
+    --gradient_checkpointing True \
     --save_total_limit 3 \
     --max_grad_norm 1.0 \
     --ddp_find_unused_parameters False \
