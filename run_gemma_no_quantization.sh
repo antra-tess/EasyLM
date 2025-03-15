@@ -38,7 +38,7 @@ DS_CONFIG='{
 }'
 
 # Run the training script with DeepSpeed for multi-GPU
-deepspeed --num_gpus=4 gemma_sft_train.py \
+deepspeed --num_gpus=2 gemma_sft_train.py \
     --model_name_or_path "google/gemma-3-27b-pt" \
     --dataset_path $DATA_PATH \
     --template_path $TEMPLATE_PATH \
