@@ -273,31 +273,52 @@ if [[ "$TORCH_CUDA_VERSION" != "NA" && "$CUDA_FOUND" = false ]]; then
         "enabled": true
     },
     "train_batch_size": 32,
-    "train_micro_batch_size_per_gpu": 16,
-    "gradient_accumulation_steps": 1,
+    "train_micro_batch_size_per_gpu": 8,
+    "gradient_accumulation_steps": 2,
     "gradient_clipping": 1.0,
     "zero_optimization": {
-        "stage": 2,
+        "stage": 3,
         "offload_optimizer": {
             "device": "cpu",
             "pin_memory": true
         },
         "offload_param": {
-            "device": "none"
+            "device": "cpu",
+            "pin_memory": true
         },
-        "contiguous_gradients": true,
         "overlap_comm": true,
-        "allgather_partitions": true,
-        "reduce_scatter": true,
-        "reduce_bucket_size": 5e8,
-        "prefetch_bucket_size": 5e8,
-        "sub_group_size": 1e9,
-        "round_robin_gradients": true
+        "contiguous_gradients": true,
+        "reduce_bucket_size": 5e7,
+        "prefetch_bucket_size": 5e7,
+        "stage3_prefetch_bucket_size": 5e7,
+        "stage3_param_persistence_threshold": 1e5,
+        "stage3_max_live_parameters": 1e9,
+        "stage3_max_reuse_distance": 1e9,
+        "gather_16bit_weights_on_model_save": true
+    },
+    "optimizer": {
+        "type": "AdamW",
+        "params": {
+            "lr": "auto",
+            "betas": "auto",
+            "eps": "auto",
+            "weight_decay": "auto"
+        }
+    },
+    "scheduler": {
+        "type": "WarmupDecayLR",
+        "params": {
+            "warmup_min_lr": 0,
+            "warmup_max_lr": "auto",
+            "warmup_num_steps": "auto",
+            "total_num_steps": "auto"
+        }
     },
     "activation_checkpointing": {
         "partition_activations": true,
+        "cpu_checkpointing": true,
         "contiguous_memory_optimization": true,
-        "number_checkpoints": 1,
+        "number_checkpoints": 2,
         "synchronize_checkpoint_boundary": false,
         "profile": false
     },
@@ -307,7 +328,10 @@ if [[ "$TORCH_CUDA_VERSION" != "NA" && "$CUDA_FOUND" = false ]]; then
         "enabled": true,
         "output_path": "./logs/tensorboard"
     },
-    "memory_breakdown": true
+    "memory_breakdown": true,
+    "fp16": {
+        "enabled": false
+    }
 }
 EOF
 
@@ -536,9 +560,49 @@ else
             ADDITIONAL_ARGS="--optim adamw_torch ${ADDITIONAL_ARGS:-""}"
         else
             # If NVCC is found, ensure we use it by explicitly setting NVCC_PREPEND_FLAGS
-            echo "✅ NVCC found at $(which nvcc), enabling DeepSpeed ops compilation"
-            export NVCC_PREPEND_FLAGS="-ccbin=$(dirname $(which nvcc))"
+            NVCC_PATH=$(which nvcc)
+            echo "✅ NVCC found at $NVCC_PATH, enabling DeepSpeed ops compilation"
+            
+            # Extract exact CUDA version from nvcc
+            NVCC_VERSION_STR=$($NVCC_PATH --version | grep "release" | awk '{print $5}' | awk -F, '{print $1}')
+            echo "NVCC reports CUDA version: $NVCC_VERSION_STR"
+            
+            # Set exact CUDA version from nvcc output to help with compilation
+            export NVCC_CUDA_VERSION="$NVCC_VERSION_STR"
+            export CUDA_VERSION="$NVCC_VERSION_STR"
+            
+            # Find a suitable C compiler (gcc)
+            GCC_PATH=$(which gcc 2>/dev/null || echo "")
+            if [[ -n "$GCC_PATH" ]]; then
+                echo "Found GCC at: $GCC_PATH"
+                GCC_VERSION=$($GCC_PATH --version | head -n1)
+                echo "GCC version: $GCC_VERSION"
+                
+                # Set compiler paths for CUDA
+                export CC="$GCC_PATH"
+                export CXX="$(which g++ 2>/dev/null || echo "")"
+                export CUDAHOSTCXX="$CXX"
+                echo "Set CC=$CC"
+                echo "Set CXX=$CXX"
+                echo "Set CUDAHOSTCXX=$CUDAHOSTCXX"
+            fi
+            
+            # Set NVCC options to ensure proper compilation
+            export NVCC_PREPEND_FLAGS="-ccbin=$(dirname $NVCC_PATH)"
             export DS_BUILD_OPS=1
+            
+            echo "Setting CUDA environment variables for building:"
+            echo "NVCC_CUDA_VERSION=$NVCC_CUDA_VERSION"
+            echo "CUDA_VERSION=$CUDA_VERSION"
+            echo "NVCC_PREPEND_FLAGS=$NVCC_PREPEND_FLAGS"
+            
+            # Create a symlink from nvcc to a location DeepSpeed will look for it
+            if [[ ! -f "$CUDA_HOME/bin/nvcc" && "$NVCC_PATH" != "$CUDA_HOME/bin/nvcc" ]]; then
+                echo "Creating directory structure in CUDA_HOME ($CUDA_HOME) if needed"
+                mkdir -p "$CUDA_HOME/bin"
+                echo "Creating symlink from $NVCC_PATH to $CUDA_HOME/bin/nvcc"
+                ln -sf "$NVCC_PATH" "$CUDA_HOME/bin/nvcc" 2>/dev/null || echo "Failed to create symlink (permission issue)"
+            fi
         fi
         
         # Create standard DeepSpeed config with FusedAdam
@@ -548,26 +612,28 @@ else
         "enabled": true
     },
     "train_batch_size": 32,
-    "train_micro_batch_size_per_gpu": 16,
-    "gradient_accumulation_steps": 1,
+    "train_micro_batch_size_per_gpu": 8,
+    "gradient_accumulation_steps": 2,
     "gradient_clipping": 1.0,
     "zero_optimization": {
-        "stage": 2,
+        "stage": 3,
         "offload_optimizer": {
             "device": "cpu",
             "pin_memory": true
         },
         "offload_param": {
-            "device": "none"
+            "device": "cpu",
+            "pin_memory": true
         },
-        "contiguous_gradients": true,
         "overlap_comm": true,
-        "allgather_partitions": true,
-        "reduce_scatter": true,
-        "reduce_bucket_size": 5e8,
-        "prefetch_bucket_size": 5e8,
-        "sub_group_size": 1e9,
-        "round_robin_gradients": true
+        "contiguous_gradients": true,
+        "reduce_bucket_size": 5e7,
+        "prefetch_bucket_size": 5e7,
+        "stage3_prefetch_bucket_size": 5e7,
+        "stage3_param_persistence_threshold": 1e5,
+        "stage3_max_live_parameters": 1e9,
+        "stage3_max_reuse_distance": 1e9,
+        "gather_16bit_weights_on_model_save": true
     },
     "optimizer": {
         "type": "AdamW",
@@ -589,8 +655,9 @@ else
     },
     "activation_checkpointing": {
         "partition_activations": true,
+        "cpu_checkpointing": true,
         "contiguous_memory_optimization": true,
-        "number_checkpoints": 1,
+        "number_checkpoints": 2,
         "synchronize_checkpoint_boundary": false,
         "profile": false
     },
@@ -600,14 +667,65 @@ else
         "enabled": true,
         "output_path": "./logs/tensorboard"
     },
-    "memory_breakdown": true
+    "memory_breakdown": true,
+    "fp16": {
+        "enabled": false
+    }
 }
 EOF
 
         # Set default additional args if not defined
         ADDITIONAL_ARGS=${ADDITIONAL_ARGS:-""}
 
-        # Run using deepspeed
+        # Function to run torch.distributed.run as a fallback
+        run_with_torch_distributed() {
+            echo "Falling back to torch.distributed.run with CPU optimizer..."
+            
+            # Disable CUDA ops when falling back
+            export DS_BUILD_OPS=0 
+            export DS_BUILD_FUSED_ADAM=0
+            export DS_BUILD_FUSED_LAMB=0
+            
+            # Set default additional args to use PyTorch optimizer
+            FALLBACK_ARGS="--optim adamw_torch ${ADDITIONAL_ARGS}"
+            
+            python -m torch.distributed.run \
+                --nproc_per_node=2 \
+                gemma_sft_train.py \
+                --model_name_or_path "google/gemma-3-27b-pt" \
+                --dataset_path $DATA_PATH \
+                --template_path $TEMPLATE_PATH \
+                --max_seq_length 1024 \
+                --lora_rank 48 \
+                --lora_alpha 96 \
+                --lora_dropout 0.05 \
+                --per_device_train_batch_size 8 \
+                --gradient_accumulation_steps 2 \
+                --num_train_epochs 3 \
+                --learning_rate 2e-4 \
+                --warmup_steps 100 \
+                --lr_scheduler_type "cosine" \
+                --logging_steps 10 \
+                --save_steps 100 \
+                --output_dir $OUTPUT_DIR \
+                --bf16 True \
+                --tf32 True \
+                --overwrite_output_dir \
+                --gradient_checkpointing True \
+                --save_total_limit 3 \
+                --max_grad_norm 1.0 \
+                --ddp_find_unused_parameters False \
+                --adam_beta1 0.9 \
+                --adam_beta2 0.95 \
+                --weight_decay 0.01 \
+                --deepspeed ds_config.json \
+                --load_in_8bit False \
+                --load_in_4bit False \
+                $FALLBACK_ARGS
+        }
+
+        # Try running with deepspeed first
+        echo "Attempting to run with deepspeed..."
         deepspeed --num_gpus=2 gemma_sft_train.py \
             --model_name_or_path "google/gemma-3-27b-pt" \
             --dataset_path $DATA_PATH \
@@ -616,10 +734,10 @@ EOF
             --lora_rank 48 \
             --lora_alpha 96 \
             --lora_dropout 0.05 \
-            --per_device_train_batch_size 16 \
-            --gradient_accumulation_steps 1 \
+            --per_device_train_batch_size 8 \
+            --gradient_accumulation_steps 2 \
             --num_train_epochs 3 \
-            --learning_rate 3e-4 \
+            --learning_rate 2e-4 \
             --warmup_steps 100 \
             --lr_scheduler_type "cosine" \
             --logging_steps 10 \
@@ -639,6 +757,12 @@ EOF
             --load_in_8bit False \
             --load_in_4bit False \
             $ADDITIONAL_ARGS
+
+        # If deepspeed fails, try the fallback
+        if [ $? -ne 0 ]; then
+            echo "DeepSpeed failed with exit code $?, trying fallback method..."
+            run_with_torch_distributed
+        fi
     else
         echo "⚠️ Could not find any CUDA installation with cuda_runtime.h"
         echo "Switching to torch.distributed with CPU optimizer"
@@ -662,29 +786,29 @@ EOF
         "enabled": true
     },
     "train_batch_size": 32,
-    "train_micro_batch_size_per_gpu": 16,
-    "gradient_accumulation_steps": 1,
+    "train_micro_batch_size_per_gpu": 8,
+    "gradient_accumulation_steps": 2,
     "gradient_clipping": 1.0,
     "zero_optimization": {
-        "stage": 2,
+        "stage": 3,
         "offload_optimizer": {
             "device": "cpu",
             "pin_memory": true
         },
         "offload_param": {
-            "device": "none"
+            "device": "cpu",
+            "pin_memory": true
         },
-        "contiguous_gradients": true,
         "overlap_comm": true,
-        "allgather_partitions": true,
-        "reduce_scatter": true,
-        "reduce_bucket_size": 5e8,
-        "prefetch_bucket_size": 5e8
+        "contiguous_gradients": true,
+        "reduce_bucket_size": 5e7,
+        "prefetch_bucket_size": 5e7
     },
     "activation_checkpointing": {
         "partition_activations": true,
+        "cpu_checkpointing": true,
         "contiguous_memory_optimization": true,
-        "number_checkpoints": 1,
+        "number_checkpoints": 2,
         "synchronize_checkpoint_boundary": false,
         "profile": false
     },
@@ -704,10 +828,10 @@ EOF
             --lora_rank 48 \
             --lora_alpha 96 \
             --lora_dropout 0.05 \
-            --per_device_train_batch_size 16 \
-            --gradient_accumulation_steps 1 \
+            --per_device_train_batch_size 8 \
+            --gradient_accumulation_steps 2 \
             --num_train_epochs 3 \
-            --learning_rate 3e-4 \
+            --learning_rate 2e-4 \
             --warmup_steps 100 \
             --lr_scheduler_type "cosine" \
             --logging_steps 10 \
