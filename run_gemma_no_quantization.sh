@@ -54,8 +54,11 @@ echo "Checking for CUDA installation..."
 # Check for CUDA installations with priority on matching PyTorch's version
 echo "Searching for CUDA installations..."
 
-# Initialize CUDA_FOUND to false
+# Initialize variables
 CUDA_FOUND=false
+# Get PyTorch's CUDA version upfront
+TORCH_CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda if torch.cuda.is_available() else 'NA')")
+echo "PyTorch CUDA version: $TORCH_CUDA_VERSION"
 
 # First check if we're in a conda environment and prioritize that
 CONDA_PREFIX=${CONDA_PREFIX:-""}
