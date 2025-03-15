@@ -217,7 +217,7 @@ DS_CONFIG='{
     "enabled": true
   },
   "zero_optimization": {
-    "stage": 3,
+    "stage": 2,
     "offload_optimizer": {
       "device": "none"
     },
@@ -226,11 +226,10 @@ DS_CONFIG='{
     },
     "contiguous_gradients": true,
     "overlap_comm": true,
+    "allgather_partitions": true,
     "reduce_scatter": true,
     "reduce_bucket_size": 5e8,
-    "prefetch_bucket_size": 5e8,
-    "stage3_param_persistence_threshold": 1e6,
-    "stage3_gather_16bit_weights_on_model_save": true
+    "prefetch_bucket_size": 5e8
   },
   "optimizer": {
     "type": "AdamW",
@@ -251,8 +250,7 @@ DS_CONFIG='{
     }
   },
   "activation_checkpointing": {
-    "partition_activations": true,
-    "cpu_checkpointing": false,
+    "partition_activations": false,
     "contiguous_memory_optimization": true,
     "number_checkpoints": 1,
     "synchronize_checkpoint_boundary": false,
@@ -275,10 +273,10 @@ deepspeed --num_gpus=2 gemma_sft_train.py \
     --dataset_path $DATA_PATH \
     --template_path $TEMPLATE_PATH \
     --max_seq_length 1024 \
-    --lora_rank 32 \
-    --lora_alpha 64 \
+    --lora_rank 64 \
+    --lora_alpha 128 \
     --lora_dropout 0.05 \
-    --per_device_train_batch_size 16 \
+    --per_device_train_batch_size 32 \
     --gradient_accumulation_steps 1 \
     --num_train_epochs 3 \
     --learning_rate 3e-4 \
@@ -290,7 +288,7 @@ deepspeed --num_gpus=2 gemma_sft_train.py \
     --bf16 True \
     --tf32 True \
     --overwrite_output_dir \
-    --gradient_checkpointing True \
+    --gradient_checkpointing False \
     --save_total_limit 3 \
     --max_grad_norm 1.0 \
     --ddp_find_unused_parameters False \
