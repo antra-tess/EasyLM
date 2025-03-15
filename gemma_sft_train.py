@@ -449,6 +449,7 @@ class DebugCallback(TrainerCallback):
         self.loss_counter = 0
         self.static_loss_count = 0
         self.step_counter = 0
+        self.detailed_logging = True  # Always do detailed logging to diagnose issues
         
     def on_step_end(self, args, state, control, model=None, **kwargs):
         """Monitor loss changes and gradients during training."""
@@ -466,46 +467,155 @@ class DebugCallback(TrainerCallback):
                 # Check if loss is changing
                 if self.last_loss is not None and abs(current_loss - self.last_loss) < 1e-6:
                     self.static_loss_count += 1
-                    if self.static_loss_count >= 10:
-                        logger.warning(f"⚠️ Loss has been static at {current_loss:.4f} for {self.static_loss_count} steps!")
+                    if self.static_loss_count >= 5:
+                        logger.warning(f"⚠️ Loss has been static at {current_loss:.6f} for {self.static_loss_count} steps!")
+                        
+                        # If loss is static, do more detailed debugging
+                        if model is not None and self.detailed_logging:
+                            logger.warning("Performing detailed gradient inspection due to static loss:")
+                            self._inspect_model_and_gradients(model)
                 else:
+                    if self.last_loss is not None:
+                        logger.info(f"Loss changed from {self.last_loss:.6f} to {current_loss:.6f} (delta: {current_loss - self.last_loss:.6f})")
                     self.static_loss_count = 0
                 
                 self.last_loss = current_loss
         
-        # Every 10 steps, check for gradient flow
-        if model is not None and self.step_counter % 10 == 0:
-            # Check for proper gradient flow
-            has_grad = False
-            zero_grad_count = 0
-            non_zero_grad_count = 0
-            lora_layer_count = 0
+        # Check gradients regularly
+        if model is not None and (self.step_counter <= 10 or self.step_counter % 10 == 0):
+            self._check_gradients(model)
+    
+    def _check_gradients(self, model):
+        """Check gradients in LoRA layers."""
+        has_grad = False
+        zero_grad_count = 0
+        non_zero_grad_count = 0
+        lora_layer_count = 0
+        
+        # Track maximum gradient norm for reporting
+        max_grad_norm = 0.0
+        max_grad_name = ""
+        
+        # First check if we can find any lora parameters at all
+        lora_params = [name for name, param in model.named_parameters() 
+                      if param.requires_grad and ('lora_' in name or 'adapter' in name)]
+        
+        if not lora_params:
+            logger.error("❌ NO LORA PARAMETERS FOUND! Model appears not to have LoRA layers properly initialized")
+            # List some of the actual trainable parameters to help diagnose
+            trainable_params = [name for name, param in model.named_parameters() if param.requires_grad]
+            if trainable_params:
+                logger.error(f"Found {len(trainable_params)} trainable parameters, but none are LoRA parameters")
+                logger.error(f"First few trainable parameters: {trainable_params[:5]}")
+            else:
+                logger.error("No trainable parameters found at all!")
+            return
             
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if 'lora_' in name:
-                        lora_layer_count += 1
-                        if param.grad is not None:
-                            grad_norm = param.grad.data.norm().item()
-                            if grad_norm > 0:
-                                has_grad = True
-                                non_zero_grad_count += 1
-                            else:
-                                zero_grad_count += 1
+        logger.info(f"Found {len(lora_params)} LoRA trainable parameters to check for gradients")
+        
+        # Now check gradients for those parameters
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                if 'lora_' in name or 'adapter' in name:
+                    lora_layer_count += 1
+                    if param.grad is not None:
+                        grad_norm = param.grad.data.norm().item()
+                        
+                        if grad_norm > 0:
+                            has_grad = True
+                            non_zero_grad_count += 1
                             
-                            # Log a sample of gradient norms
-                            if lora_layer_count <= 3:  # Just log first few layers as samples
-                                logger.info(f"Grad norm for {name}: {grad_norm:.6f}")
+                            # Track maximum gradient
+                            if grad_norm > max_grad_norm:
+                                max_grad_norm = grad_norm
+                                max_grad_name = name
+                        else:
+                            zero_grad_count += 1
+                        
+                        # Log a sample of gradient norms
+                        if lora_layer_count <= 3 or grad_norm > 0:  # Log first few layers and any non-zero gradients
+                            logger.info(f"Step {self.step_counter} - Grad norm for {name}: {grad_norm:.6f}")
+        
+        # Show summary stats for this step
+        grad_status = "✅ GRADIENTS DETECTED" if has_grad else "❌ NO GRADIENTS"
+        logger.info(f"Step {self.step_counter}: {grad_status} - LoRA layers with zero gradients: {zero_grad_count}/{lora_layer_count}")
+        
+        if has_grad:
+            logger.info(f"Step {self.step_counter}: Max gradient: {max_grad_norm:.6f} in {max_grad_name}")
+        
+        if not has_grad and lora_layer_count > 0:
+            logger.warning("❌ NO GRADIENT FLOW DETECTED! All trainable parameters have zero gradients.")
+    
+    def _inspect_model_and_gradients(self, model):
+        """Do a deep inspection of the model and its gradients."""
+        logger.warning("=== DETAILED MODEL INSPECTION ===")
+        
+        # Check if model is in training mode
+        logger.warning(f"Model training mode: {model.training}")
+        
+        # Try to detect if we're using DeepSpeed and inspect its state
+        try:
+            if hasattr(model, 'optimizer') and hasattr(model.optimizer, 'loss_scale'):
+                logger.warning(f"Loss scale: {model.optimizer.loss_scale}")
+                if hasattr(model.optimizer, 'cur_scale'):
+                    logger.warning(f"Current scale: {model.optimizer.cur_scale}")
+                if hasattr(model.optimizer, 'inf_has_occurred'):
+                    logger.warning(f"Infinity detected: {model.optimizer.inf_has_occurred}")
+        except Exception as e:
+            logger.warning(f"Error inspecting optimizer: {e}")
+        
+        # Log extreme parameter values that might cause gradient issues
+        try:
+            for name, param in model.named_parameters():
+                if param.requires_grad and 'lora_' in name:
+                    # Check for NaN or extreme values in parameters
+                    has_nan = torch.isnan(param.data).any().item()
+                    has_inf = torch.isinf(param.data).any().item()
+                    max_val = param.data.abs().max().item()
+                    
+                    if has_nan or has_inf or max_val > 1000:
+                        logger.warning(f"Parameter {name}: NaN={has_nan}, Inf={has_inf}, Max abs value={max_val}")
+                    
+                    # Check for NaN or extreme values in gradients if they exist
+                    if param.grad is not None:
+                        grad_has_nan = torch.isnan(param.grad.data).any().item()
+                        grad_has_inf = torch.isinf(param.grad.data).any().item()
+                        grad_max_val = param.grad.data.abs().max().item() if param.grad.data.numel() > 0 else 0
+                        
+                        if grad_has_nan or grad_has_inf:
+                            logger.warning(f"Gradient for {name}: NaN={grad_has_nan}, Inf={grad_has_inf}, Max abs value={grad_max_val}")
+        except Exception as e:
+            logger.warning(f"Error inspecting parameters: {e}")
+        
+        logger.warning("=== END DETAILED INSPECTION ===")
+
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
+        """Called at the beginning of training."""
+        if model is not None:
+            logger.info("Initial model check at start of training:")
+            self._check_gradients(model)
             
-            logger.info(f"Step {self.step_counter}: LoRA layers with zero gradients: {zero_grad_count}/{zero_grad_count+non_zero_grad_count}")
+            # Add hook to track gradient norms
+            def gradient_hook(grad):
+                if grad is not None:
+                    grad_norm = grad.norm().item()
+                    if grad_norm == 0:
+                        logger.info(f"Zero gradient detected in hook during backward pass")
+                    return grad
             
-            if not has_grad and lora_layer_count > 0:
-                logger.warning("❌ NO GRADIENT FLOW DETECTED! All trainable parameters have zero gradients.")
-                # Suggest possible fixes
-                logger.warning("Possible issues:")
-                logger.warning("1. Labels might be incorrectly formatted or all -100 (masked)")
-                logger.warning("2. Optimizer might not be connected to trainable parameters")
-                logger.warning("3. Loss function might not be properly connected")
+            # Add hooks to a sample of parameters
+            hook_count = 0
+            for name, param in model.named_parameters():
+                if param.requires_grad and 'lora_' in name and hook_count < 5:
+                    param.register_hook(gradient_hook)
+                    hook_count += 1
+                    logger.info(f"Added gradient hook to {name}")
+        
+    def on_train_end(self, args, state, control, model=None, **kwargs):
+        """Called at the end of training."""
+        logger.info(f"Training completed after {self.step_counter} steps")
+        if model is not None:
+            self._check_gradients(model)
 
 def main():
     parser = HfArgumentParser((ModelArguments, LoRAArguments, DataArguments, TrainingArguments))
@@ -713,47 +823,72 @@ def main():
             logger.info(f"Embed tokens weight shape: {embed_shape}")
             
             # If the embedding weight is not 2D, fix it
-            if len(embed_shape) != 2:
+            if len(embed_shape) != 2 or embed_shape[0] == 0:
                 logger.warning(f"Found incorrect embedding shape: {embed_shape}, attempting to fix...")
                 
                 # Get vocab size and hidden size from config
                 vocab_size = model.config.vocab_size
                 hidden_size = model.config.hidden_size
                 
-                # Create a new correctly shaped embedding weight
                 logger.info(f"Creating new embedding layer with shape: ({vocab_size}, {hidden_size})")
                 
-                # Save original data if possible
-                if hasattr(model.model.embed_tokens, '_weight'):
-                    original_data = model.model.embed_tokens._weight.data
-                    logger.info(f"Original weight data shape: {original_data.shape}")
-                    
-                    # Create new weights
-                    if len(original_data.shape) > 2:
-                        # Reshape if possible
-                        new_weight = original_data.reshape(vocab_size, hidden_size)
-                    else:
-                        # Create new random weights if reshape not possible
-                        new_weight = torch.randn(vocab_size, hidden_size, dtype=model_kwargs.get('torch_dtype', torch.float32))
-                        logger.warning("Created random new embedding weights - model may not perform well!")
-                    
-                    # Replace the embedding layer
-                    import torch.nn as nn
-                    new_embed = nn.Embedding(vocab_size, hidden_size)
-                    new_embed.weight.data = new_weight
-                    model.model.embed_tokens = new_embed
-                    logger.info(f"Fixed embedding layer, new shape: {model.model.embed_tokens.weight.shape}")
+                # Create completely new embedding layer with proper initialization
+                import torch.nn as nn
+                from torch.nn.init import normal_
+                
+                # Create a new embedding layer and initialize weights properly
+                new_embed = nn.Embedding(vocab_size, hidden_size)
+                # Use Xavier/Glorot initialization with gain=1.0
+                if hasattr(model.config, 'initializer_range'):
+                    initializer_range = model.config.initializer_range
                 else:
-                    logger.warning("Could not access original embedding weights. Model may not perform correctly.")
+                    initializer_range = 0.02  # Default value
+                    
+                logger.info(f"Initializing new embedding with range: {initializer_range}")
+                
+                # Initialize using normal distribution
+                normal_(new_embed.weight.data, mean=0.0, std=initializer_range)
+                
+                # Replace the embedding layer
+                model.model.embed_tokens = new_embed
+                logger.info(f"Replaced embedding layer, new shape: {model.model.embed_tokens.weight.shape}")
+                
+                # If the model has a get_input_embeddings method, update its reference too
+                if hasattr(model, 'set_input_embeddings'):
+                    logger.info("Updating model's input_embeddings reference")
+                    model.set_input_embeddings(new_embed)
+                
         # Alternative path to handle different model structures
         elif hasattr(model, 'get_input_embeddings'):
             logger.info("Checking embedding through get_input_embeddings()...")
             embed_layer = model.get_input_embeddings()
-            if hasattr(embed_layer, 'weight'):
+            if embed_layer is None:
+                logger.warning("get_input_embeddings() returned None - creating new embedding layer")
+                # Create new embedding layer using config
+                vocab_size = model.config.vocab_size
+                hidden_size = model.config.hidden_size
+                
+                import torch.nn as nn
+                from torch.nn.init import normal_
+                
+                # Create proper embedding layer
+                new_embed = nn.Embedding(vocab_size, hidden_size)
+                # Initialize properly
+                if hasattr(model.config, 'initializer_range'):
+                    initializer_range = model.config.initializer_range
+                else:
+                    initializer_range = 0.02  # Default value
+                
+                normal_(new_embed.weight.data, mean=0.0, std=initializer_range)
+                
+                # Set the new embedding layer
+                model.set_input_embeddings(new_embed)
+                logger.info(f"Created and set new input embeddings: {model.get_input_embeddings().weight.shape}")
+            elif hasattr(embed_layer, 'weight'):
                 embed_shape = embed_layer.weight.shape
                 logger.info(f"Input embedding weight shape: {embed_shape}")
                 
-                if len(embed_shape) != 2:
+                if len(embed_shape) != 2 or embed_shape[0] == 0:
                     logger.warning(f"Found incorrect embedding shape: {embed_shape}, attempting to fix...")
                     
                     # Get vocab size and hidden size from config
@@ -762,14 +897,43 @@ def main():
                     
                     # Create a new correctly shaped embedding layer
                     import torch.nn as nn
+                    from torch.nn.init import normal_
+                    
                     new_embed = nn.Embedding(vocab_size, hidden_size)
-                    new_embed.weight.data = torch.randn(vocab_size, hidden_size, dtype=model_kwargs.get('torch_dtype', torch.float32))
+                    # Initialize properly
+                    if hasattr(model.config, 'initializer_range'):
+                        initializer_range = model.config.initializer_range
+                    else:
+                        initializer_range = 0.02  # Default
+                    
+                    normal_(new_embed.weight.data, mean=0.0, std=initializer_range)
                     
                     # Set the new embedding layer
                     model.set_input_embeddings(new_embed)
                     logger.info(f"Fixed embedding layer using set_input_embeddings, new shape: {model.get_input_embeddings().weight.shape}")
         else:
             logger.warning("Could not find embedding layer using expected paths. Model may fail during forward pass.")
+            logger.warning("Attempting to search for embed_tokens in model structure...")
+            
+            # Recursive search for embed_tokens in model
+            def find_embed_tokens(model, path=""):
+                results = []
+                for name, child in model.named_children():
+                    current_path = f"{path}.{name}" if path else name
+                    if "embed_tokens" in name or "embeddings" in name:
+                        results.append((current_path, child))
+                    results.extend(find_embed_tokens(child, current_path))
+                return results
+            
+            embed_candidates = find_embed_tokens(model)
+            logger.info(f"Found {len(embed_candidates)} potential embedding layers:")
+            for path, module in embed_candidates:
+                logger.info(f"  {path}: {type(module)}")
+                if hasattr(module, 'weight'):
+                    logger.info(f"  Weight shape: {module.weight.shape}")
+            
+            if embed_candidates:
+                logger.warning("Please check these paths and update the code to fix them properly.")
 
     # Enable gradient checkpointing for memory efficiency
     if training_args.gradient_checkpointing:
@@ -803,7 +967,35 @@ def main():
     )
     
     # Apply LoRA to model
+    logger.info("Applying LoRA to model...")
+    
+    # Explicitly ensure all base parameters are frozen before adding LoRA
+    for param in model.parameters():
+        param.requires_grad = False
+        
     model = get_peft_model(model, peft_config)
+    
+    # Explicitly verify parameter freezing after LoRA
+    base_params_trainable = []
+    lora_params_trainable = []
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            if 'lora_' in name:
+                lora_params_trainable.append(name)
+            else:
+                base_params_trainable.append(name)
+    
+    if base_params_trainable:
+        logger.warning(f"WARNING: Found {len(base_params_trainable)} base model parameters still trainable after LoRA application!")
+        logger.warning(f"First few: {base_params_trainable[:3]}")
+        
+        # Re-freeze any base parameters that might have been accidentally unfrozen
+        logger.info("Re-freezing base model parameters...")
+        for name, param in model.named_parameters():
+            if 'lora_' not in name:
+                param.requires_grad = False
+    
+    logger.info(f"LoRA trainable parameters: {len(lora_params_trainable)}")
     
     # Debug: Count trainable parameters and verify LoRA is properly applied
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -855,186 +1047,162 @@ def main():
     )
     
     # Initialize Trainer
+    callbacks = []
+    if model_args.enable_debug:
+        debug_callback = DebugCallback()
+        callbacks.append(debug_callback)
+        
+        # Also add a callback to track batch-level details
+        class BatchDebugCallback(TrainerCallback):
+            def on_step_begin(self, args, state, control, **kwargs):
+                logger.info(f"Beginning step {state.global_step}")
+                
+            def on_step_end(self, args, state, control, **kwargs):
+                if state.log_history and len(state.log_history) > 0:
+                    for entry in reversed(state.log_history):
+                        if 'loss' in entry:
+                            logger.info(f"Step {state.global_step} completed with loss: {entry['loss']:.6f}")
+                            break
+                    
+            def on_substep_end(self, args, state, control, **kwargs):
+                logger.info(f"Substep completed in step {state.global_step}")
+        
+        callbacks.append(BatchDebugCallback())
+        
+        # Add a learning rate monitor callback
+        class LRCallback(TrainerCallback):
+            def on_step_begin(self, args, state, control, optimizer=None, **kwargs):
+                if optimizer:
+                    for param_group in optimizer.param_groups:
+                        logger.info(f"Current learning rate: {param_group['lr']:.8f}")
+                        return
+        
+        callbacks.append(LRCallback())
+        
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         tokenizer=tokenizer,
         data_collator=data_collator,
+        callbacks=callbacks,
     )
     
-    # Add the debug callback if debug mode is enabled
-    if model_args.enable_debug:
-        debug_callback = DebugCallback()
-        trainer.add_callback(debug_callback)
-        
-        # Debug: Examine data to ensure labels are properly formatted
-        logger.info("Debug: Examining training data...")
-        
-        # Check a few examples from the dataset
-        for i in range(min(3, len(train_dataset))):
-            example = train_dataset[i]
-            
-            # Count non-masked tokens in labels
-            if 'labels' in example:
-                label_tokens = [l for l in example['labels'] if l != -100]
-                masked_tokens = [l for l in example['labels'] if l == -100]
-                
-                logger.info(f"Example {i}:")
-                logger.info(f"  Total tokens: {len(example['input_ids'])}")
-                logger.info(f"  Non-masked label tokens: {len(label_tokens)} ({len(label_tokens)/len(example['input_ids'])*100:.1f}%)")
-                logger.info(f"  Masked tokens (-100): {len(masked_tokens)} ({len(masked_tokens)/len(example['input_ids'])*100:.1f}%)")
-                
-                # Severe warning if no non-masked tokens
-                if len(label_tokens) == 0:
-                    logger.error("❌ CRITICAL ERROR: Example has no non-masked tokens in labels!")
-                    logger.error("The model cannot learn if all labels are masked (-100)")
-                
-                # Sample input and output
-                input_sample = tokenizer.decode(example['input_ids'][:50])
-                label_indices = [i for i, l in enumerate(example['labels']) if l != -100]
-                if label_indices:
-                    start_idx = max(0, min(label_indices) - 5)
-                    end_idx = min(len(example['input_ids']), start_idx + 50)
-                    target_sample = tokenizer.decode([t for t, l in zip(example['input_ids'][start_idx:end_idx], 
-                                                                      example['labels'][start_idx:end_idx]) if l != -100])
-                    logger.info(f"  Input sample: {input_sample}...")
-                    logger.info(f"  Target sample: {target_sample}...")
-        
-        # Debug: Test collation on a batch
-        logger.info("Debug: Testing batch collation...")
-        test_batch_size = min(4, len(train_dataset))
-        test_samples = [train_dataset[i] for i in range(test_batch_size)]
-        test_batch = data_collator(test_samples)
-        
-        # Check batch shapes
-        logger.info(f"Batch input_ids shape: {test_batch['input_ids'].shape}")
-        logger.info(f"Batch attention_mask shape: {test_batch['attention_mask'].shape}")
-        if 'labels' in test_batch:
-            logger.info(f"Batch labels shape: {test_batch['labels'].shape}")
-            
-            # Count non-masked tokens in the batch
-            non_masked = (test_batch['labels'] != -100).sum().item()
-            total = test_batch['labels'].numel()
-            logger.info(f"Batch non-masked tokens: {non_masked}/{total} ({non_masked/total*100:.1f}%)")
-            
-            if non_masked == 0:
-                logger.error("❌ CRITICAL ERROR: Entire batch has no non-masked tokens in labels!")
-        else:
-            logger.error("❌ CRITICAL ERROR: 'labels' key missing from collated batch!")
+    # Add DeepSpeed debugging code after setup but before training starts
+    if model_args.enable_debug and training_args.deepspeed:
+        logger.info("Adding special DeepSpeed hooks for debug mode")
 
-        # Debug: Check if the model outputs have 'loss' in their keys
-        logger.info("Debug: Testing model forward pass...")
-        # Use the test batch we already created
-        # Move to the same device as the model
-        device = next(model.parameters()).device
-        device_batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in test_batch.items()}
+        # Register a callback to add hooks once DeepSpeed is initialized
+        class DeepSpeedDebuggerCallback(TrainerCallback):
+            def on_train_begin(self, args, state, control, model=None, **kwargs):
+                logger.info("Training beginning, setting up DeepSpeed hooks...")
+                
+                # Function to add DeepSpeed hooks once the engine is available
+                def setup_deepspeed_hooks():
+                    if not hasattr(trainer, 'accelerator') or not hasattr(trainer.accelerator, 'deepspeed_engine'):
+                        logger.warning("DeepSpeed engine not initialized yet, will try again later")
+                        return False
+                    
+                    # Log DeepSpeed configuration
+                    engine = trainer.accelerator.deepspeed_engine
+                    config = engine.config
+                    logger.info("DeepSpeed configuration:")
+                    logger.info(f"- Zero stage: {config.get('zero_optimization', {}).get('stage', 'None')}")
+                    logger.info(f"- Offload params: {config.get('zero_optimization', {}).get('offload_param', False)}")
+                    logger.info(f"- FP16 enabled: {config.get('fp16', {}).get('enabled', False)}")
+                    logger.info(f"- Initial loss scale: {config.get('fp16', {}).get('initial_scale_power', 'Not found')}")
+                    logger.info(f"- Loss scale window: {config.get('fp16', {}).get('loss_scale_window', 'Not found')}")
+                    
+                    # Modify loss scale if needed
+                    if config.get('fp16', {}).get('enabled', False):
+                        # Check if loss scale is too high for Gemma
+                        if hasattr(engine, 'optimizer') and hasattr(engine.optimizer, 'loss_scaler'):
+                            loss_scaler = engine.optimizer.loss_scaler
+                            if hasattr(loss_scaler, 'loss_scale'):
+                                current_scale = loss_scaler.loss_scale
+                                logger.info(f"Current loss scale: {current_scale}")
+                                
+                                # If loss scale is too high, reduce it (common issue with Gemma)
+                                if current_scale > 2**16:
+                                    new_scale = 2**16
+                                    logger.warning(f"⚠️ Reducing loss scale from {current_scale} to {new_scale}")
+                                    loss_scaler.loss_scale = new_scale
+                                    logger.info(f"New loss scale: {loss_scaler.loss_scale}")
+                    
+                    # Monkey-patch DeepSpeed step function to print gradient information
+                    if hasattr(engine, 'step'):
+                        original_step = engine.step
+                        
+                        def debug_step():
+                            logger.info("DeepSpeed step called - checking gradients before step")
+                            # Log PEFT module gradients before step
+                            for name, param in model.named_parameters():
+                                if param.requires_grad and ('lora_' in name or 'adapter' in name):
+                                    if param.grad is not None:
+                                        grad_norm = param.grad.data.norm().item()
+                                        if grad_norm > 0:
+                                            logger.info(f"✅ Non-zero gradient in {name}: {grad_norm:.6f}")
+                                        else:
+                                            logger.info(f"❌ Zero gradient in {name}")
+                                    else:
+                                        logger.warning(f"No gradient computed for {name}")
+                            
+                            # Check loss scale
+                            if hasattr(engine.optimizer, 'loss_scaler'):
+                                loss_scaler = engine.optimizer.loss_scaler
+                                if hasattr(loss_scaler, 'loss_scale'):
+                                    logger.info(f"Current loss scale: {loss_scaler.loss_scale}")
+                                if hasattr(loss_scaler, 'has_overflow_serial'):
+                                    logger.info(f"Overflow detected: {loss_scaler.has_overflow_serial}")
+                                    
+                                    # If we detect overflow, reduce the loss scale
+                                    if loss_scaler.has_overflow_serial and hasattr(loss_scaler, 'loss_scale'):
+                                        current_scale = loss_scaler.loss_scale
+                                        if current_scale > 1:
+                                            new_scale = current_scale / 2
+                                            logger.warning(f"⚠️ Overflow detected! Reducing loss scale to {new_scale}")
+                                            loss_scaler.loss_scale = new_scale
+                            
+                            # Call original step
+                            result = original_step()
+                            logger.info("DeepSpeed step completed")
+                            return result
+                        
+                        # Replace the step function
+                        engine.step = debug_step
+                        logger.info("Replaced DeepSpeed step function with debug version")
+                    
+                    # Hook into backward pass
+                    if hasattr(engine, 'backward'):
+                        original_backward = engine.backward
+                        
+                        def debug_backward(loss, **kwargs):
+                            if hasattr(loss, 'item'):
+                                logger.info(f"DeepSpeed backward called with loss: {loss.item()}")
+                            result = original_backward(loss, **kwargs)
+                            logger.info("DeepSpeed backward completed")
+                            return result
+                        
+                        engine.backward = debug_backward
+                        logger.info("Replaced DeepSpeed backward function with debug version")
+                    
+                    return True
+                    
+                # Try to set up hooks now
+                if not setup_deepspeed_hooks():
+                    # If not successful, try again after a step begins
+                    logger.info("Will try to set up DeepSpeed hooks again after first step")
+            
+            def on_step_begin(self, args, state, control, model=None, **kwargs):
+                if state.global_step == 0:
+                    logger.info("First step beginning, setting up DeepSpeed hooks if not already done")
+                    # Function from on_train_begin
+                    if hasattr(self, 'setup_deepspeed_hooks'):
+                        self.setup_deepspeed_hooks()
         
-        # Double-check embeddings before forward pass
-        logger.info("Double-checking embedding dimensions before forward pass...")
-        try:
-            if hasattr(model.model, 'embed_tokens'):
-                embed_shape = model.model.embed_tokens.weight.shape
-                logger.info(f"Pre-forward pass: embed_tokens weight shape = {embed_shape}")
-                if len(embed_shape) != 2:
-                    logger.error(f"❌ Embedding weight is not 2D: {embed_shape}")
-            elif hasattr(model, 'get_input_embeddings'):
-                embed_layer = model.get_input_embeddings()
-                if hasattr(embed_layer, 'weight'):
-                    embed_shape = embed_layer.weight.shape
-                    logger.info(f"Pre-forward pass: input embeddings weight shape = {embed_shape}")
-                    if len(embed_shape) != 2:
-                        logger.error(f"❌ Embedding weight is not 2D: {embed_shape}")
-        except Exception as e:
-            logger.error(f"Error while checking embeddings: {e}")
-
-        # Try run forward pass with error handling
-        try:
-            logger.info("Attempting model forward pass...")
-            with torch.no_grad():
-                outputs = model(**device_batch)
-
-            logger.info(f"Debug: Model output keys: {outputs.keys()}")
-            if hasattr(outputs, 'loss'):
-                logger.info(f"Debug: Loss value: {outputs.loss.item()}")
-            else:
-                logger.warning("❌ WARNING: 'loss' not found in model outputs!")
-                logger.info(f"Available keys: {list(outputs.keys())}")
-                # Check if labels are present in input
-                if 'labels' in device_batch:
-                    logger.info("Debug: 'labels' are present in input batch")
-                    # Sample of labels to check
-                    logger.info(f"Debug: Labels sample: {device_batch['labels'][0][:10].tolist()}")
-                    logger.info(f"Debug: Non-masked labels count: {(device_batch['labels'][0] != -100).sum().item()}")
-                else:
-                    logger.warning("❌ WARNING: 'labels' not present in input batch!")
-        except Exception as e:
-            logger.error(f"❌ ERROR: Model forward pass failed with error: {str(e)}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            
-            # Additional diagnostics
-            logger.info("Attempting additional diagnostics...")
-            try:
-                # Try running with smaller batch size
-                logger.info("Trying with a single example instead of batch...")
-                single_example = {k: v[0:1] if isinstance(v, torch.Tensor) else v for k, v in device_batch.items()}
-                with torch.no_grad():
-                    try:
-                        single_output = model(**single_example)
-                        logger.info(f"Single example forward pass succeeded, keys: {single_output.keys()}")
-                    except Exception as single_e:
-                        logger.error(f"Single example also failed: {str(single_e)}")
-                
-                # Check if we can run the model without labels (might help isolate the issue)
-                if 'labels' in device_batch:
-                    no_labels_batch = {k: v for k, v in device_batch.items() if k != 'labels'}
-                    logger.info("Trying forward pass without labels...")
-                    with torch.no_grad():
-                        try:
-                            output_no_labels = model(**no_labels_batch)
-                            logger.info(f"Forward pass without labels succeeded, keys: {output_no_labels.keys()}")
-                        except Exception as no_labels_e:
-                            logger.error(f"Forward pass without labels failed: {str(no_labels_e)}")
-                
-                # Try running just the embedding layer
-                logger.info("Testing just the embedding layer...")
-                if hasattr(model.model, 'embed_tokens'):
-                    try:
-                        input_ids = device_batch['input_ids']
-                        embed_output = model.model.embed_tokens(input_ids)
-                        logger.info(f"Embedding layer output shape: {embed_output.shape}")
-                    except Exception as embed_e:
-                        logger.error(f"Embedding layer test failed: {str(embed_e)}")
-                        # Try to get more details about the layer
-                        embed_layer = model.model.embed_tokens
-                        logger.info(f"Embedding layer type: {type(embed_layer)}")
-                        if hasattr(embed_layer, 'weight'):
-                            logger.info(f"Embedding weight shape: {embed_layer.weight.shape}")
-                            logger.info(f"Embedding weight type: {type(embed_layer.weight)}")
-                
-                elif hasattr(model, 'get_input_embeddings'):
-                    try:
-                        input_ids = device_batch['input_ids']
-                        embed_layer = model.get_input_embeddings()
-                        embed_output = embed_layer(input_ids)
-                        logger.info(f"Embedding layer (from get_input_embeddings) output shape: {embed_output.shape}")
-                    except Exception as get_embed_e:
-                        logger.error(f"get_input_embeddings test failed: {str(get_embed_e)}")
-                        embed_layer = model.get_input_embeddings()
-                        logger.info(f"Embedding layer type: {type(embed_layer)}")
-                        if hasattr(embed_layer, 'weight'):
-                            logger.info(f"Embedding weight shape: {embed_layer.weight.shape}")
-                            logger.info(f"Embedding weight type: {type(embed_layer.weight)}")
-            except Exception as inner_e:
-                logger.error(f"Diagnostic tests also failed: {str(inner_e)}")
-                logger.error(f"Detailed traceback: {traceback.format_exc()}")
-                logger.error("Model appears to have serious issues with its architecture.")
-            
-            logger.warning("Since the model forward pass failed, training might fail. Consider using a different model or creating a GitHub issue for Gemma-3 with PEFT.")
-            logger.warning("You may be able to continue training despite this debug error.")
-            # Don't raise an exception here - let training proceed anyway
-
+        # Add the callback
+        trainer.add_callback(DeepSpeedDebuggerCallback())
+    
     # Train
     if training_args.resume_from_checkpoint:
         checkpoint = training_args.resume_from_checkpoint
