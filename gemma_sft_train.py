@@ -964,6 +964,9 @@ def main():
         lora_alpha=lora_args.lora_alpha,
         lora_dropout=lora_args.lora_dropout,
         target_modules=target_modules,
+        modules_to_save=None,  # Don't save any modules outside of LoRA parameters
+        bias="none",  # Don't train bias parameters
+        fan_in_fan_out=False,  # For PyTorch Linear weights that have shape [in, out], set to True
     )
     
     # Apply LoRA to model
@@ -980,22 +983,60 @@ def main():
     lora_params_trainable = []
     for name, param in model.named_parameters():
         if param.requires_grad:
-            if 'lora_' in name:
+            if 'lora_' in name or 'adapter' in name:
                 lora_params_trainable.append(name)
             else:
                 base_params_trainable.append(name)
     
     if base_params_trainable:
         logger.warning(f"WARNING: Found {len(base_params_trainable)} base model parameters still trainable after LoRA application!")
-        logger.warning(f"First few: {base_params_trainable[:3]}")
+        logger.warning(f"First few: {base_params_trainable[:10]}")
         
         # Re-freeze any base parameters that might have been accidentally unfrozen
         logger.info("Re-freezing base model parameters...")
         for name, param in model.named_parameters():
-            if 'lora_' not in name:
+            if not any(lora_name in name for lora_name in ['lora_', 'adapter']):
                 param.requires_grad = False
+                if param.requires_grad:
+                    logger.error(f"FAILED to freeze parameter: {name}")
     
+    # Check module-level requires_grad attributes (some models set these)
+    module_requires_grad = []
+    for name, module in model.named_modules():
+        if hasattr(module, 'requires_grad') and module.requires_grad:
+            module_requires_grad.append(name)
+    
+    if module_requires_grad:
+        logger.warning(f"Found {len(module_requires_grad)} modules with requires_grad=True at module level")
+        logger.warning(f"First few: {module_requires_grad[:5]}")
+        
+        # Try to fix module-level requires_grad as well
+        for name, module in model.named_modules():
+            if hasattr(module, 'requires_grad') and not any(lora_name in name for lora_name in ['lora_', 'adapter']):
+                module.requires_grad = False
+    
+    # Perform a final verification of trainable parameters
+    trainable_params_after_fix = [name for name, param in model.named_parameters() if param.requires_grad]
     logger.info(f"LoRA trainable parameters: {len(lora_params_trainable)}")
+    logger.info(f"Trainable parameters after fixing: {len(trainable_params_after_fix)}")
+    
+    if len(trainable_params_after_fix) > len(lora_params_trainable):
+        logger.warning("STILL HAVE NON-LORA TRAINABLE PARAMETERS!")
+        non_lora = [p for p in trainable_params_after_fix if not any(lora_name in p for lora_name in ['lora_', 'adapter'])]
+        logger.warning(f"Non-LoRA trainable parameters: {len(non_lora)}")
+        logger.warning(f"Examples: {non_lora[:10]}")
+        
+        # Last resort: use model.requires_grad_ to force everything frozen
+        model.requires_grad_(False)
+        
+        # Then selectively re-enable only LoRA parameters
+        for name, param in model.named_parameters():
+            if any(lora_name in name for lora_name in ['lora_', 'adapter']):
+                param.requires_grad = True
+        
+        # Final verification
+        final_trainable = [name for name, param in model.named_parameters() if param.requires_grad]
+        logger.info(f"Final trainable parameter count: {len(final_trainable)}")
     
     # Debug: Count trainable parameters and verify LoRA is properly applied
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -1097,6 +1138,39 @@ def main():
             def on_train_begin(self, args, state, control, model=None, **kwargs):
                 logger.info("Training beginning, setting up DeepSpeed hooks...")
                 
+                # Immediately verify that model still has LoRA parameters trainable
+                def verify_model_trainable_params():
+                    """Verify that only LoRA parameters are trainable after DeepSpeed init."""
+                    trainable_params = []
+                    for name, param in model.named_parameters():
+                        if param.requires_grad:
+                            trainable_params.append(name)
+                    
+                    lora_params = [p for p in trainable_params if any(lora_name in p for lora_name in ['lora_', 'adapter'])]
+                    non_lora_params = [p for p in trainable_params if not any(lora_name in p for lora_name in ['lora_', 'adapter'])]
+                    
+                    logger.info(f"After DeepSpeed init: Found {len(lora_params)} LoRA trainable parameters")
+                    if non_lora_params:
+                        logger.error(f"❌ ERROR: Found {len(non_lora_params)} non-LoRA trainable parameters after DeepSpeed init!")
+                        logger.error(f"First few: {non_lora_params[:5]}")
+                        
+                        # Re-freeze non-LoRA parameters
+                        logger.info("Attempting to re-freeze non-LoRA parameters...")
+                        for name, param in model.named_parameters():
+                            if not any(lora_name in name for lora_name in ['lora_', 'adapter']):
+                                param.requires_grad = False
+                        
+                        # Verify re-freezing was successful
+                        still_trainable = [name for name, param in model.named_parameters() 
+                                         if param.requires_grad and not any(lora_name in name for lora_name in ['lora_', 'adapter'])]
+                        if still_trainable:
+                            logger.error(f"❌ ERROR: Failed to freeze {len(still_trainable)} non-LoRA parameters")
+                        else:
+                            logger.info("✅ Successfully re-froze all non-LoRA parameters")
+                
+                # Verify model trainable parameters right away
+                verify_model_trainable_params()
+                
                 # Function to add DeepSpeed hooks once the engine is available
                 def setup_deepspeed_hooks():
                     if not hasattr(trainer, 'accelerator') or not hasattr(trainer.accelerator, 'deepspeed_engine'):
@@ -1112,6 +1186,9 @@ def main():
                     logger.info(f"- FP16 enabled: {config.get('fp16', {}).get('enabled', False)}")
                     logger.info(f"- Initial loss scale: {config.get('fp16', {}).get('initial_scale_power', 'Not found')}")
                     logger.info(f"- Loss scale window: {config.get('fp16', {}).get('loss_scale_window', 'Not found')}")
+                    
+                    # Force check trainable parameters again after DeepSpeed initialization
+                    verify_model_trainable_params()
                     
                     # Modify loss scale if needed
                     if config.get('fp16', {}).get('enabled', False):
@@ -1136,16 +1213,23 @@ def main():
                         def debug_step():
                             logger.info("DeepSpeed step called - checking gradients before step")
                             # Log PEFT module gradients before step
+                            grad_stats = {"has_grad": 0, "no_grad": 0, "zero_grad": 0, "non_zero_grad": 0}
                             for name, param in model.named_parameters():
                                 if param.requires_grad and ('lora_' in name or 'adapter' in name):
                                     if param.grad is not None:
+                                        grad_stats["has_grad"] += 1
                                         grad_norm = param.grad.data.norm().item()
                                         if grad_norm > 0:
+                                            grad_stats["non_zero_grad"] += 1
                                             logger.info(f"✅ Non-zero gradient in {name}: {grad_norm:.6f}")
                                         else:
+                                            grad_stats["zero_grad"] += 1
                                             logger.info(f"❌ Zero gradient in {name}")
                                     else:
+                                        grad_stats["no_grad"] += 1
                                         logger.warning(f"No gradient computed for {name}")
+                            
+                            logger.info(f"Gradient stats: {grad_stats}")
                             
                             # Check loss scale
                             if hasattr(engine.optimizer, 'loss_scaler'):
@@ -1181,6 +1265,14 @@ def main():
                                 logger.info(f"DeepSpeed backward called with loss: {loss.item()}")
                             result = original_backward(loss, **kwargs)
                             logger.info("DeepSpeed backward completed")
+                            
+                            # Check for gradients after backward
+                            params_with_grad = 0
+                            for name, param in model.named_parameters():
+                                if param.requires_grad and param.grad is not None:
+                                    params_with_grad += 1
+                            
+                            logger.info(f"After backward: {params_with_grad} parameters have gradients")
                             return result
                         
                         engine.backward = debug_backward
