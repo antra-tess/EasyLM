@@ -928,10 +928,29 @@ def main():
         # Use the test batch we already created
         # Move to the same device as the model
         device = next(model.parameters()).device
-        device_batch = {k: v.to(device) if hasattr(v, 'to') else v for k, v in test_batch.items()}
+        device_batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in test_batch.items()}
+        
+        # Double-check embeddings before forward pass
+        logger.info("Double-checking embedding dimensions before forward pass...")
+        try:
+            if hasattr(model.model, 'embed_tokens'):
+                embed_shape = model.model.embed_tokens.weight.shape
+                logger.info(f"Pre-forward pass: embed_tokens weight shape = {embed_shape}")
+                if len(embed_shape) != 2:
+                    logger.error(f"❌ Embedding weight is not 2D: {embed_shape}")
+            elif hasattr(model, 'get_input_embeddings'):
+                embed_layer = model.get_input_embeddings()
+                if hasattr(embed_layer, 'weight'):
+                    embed_shape = embed_layer.weight.shape
+                    logger.info(f"Pre-forward pass: input embeddings weight shape = {embed_shape}")
+                    if len(embed_shape) != 2:
+                        logger.error(f"❌ Embedding weight is not 2D: {embed_shape}")
+        except Exception as e:
+            logger.error(f"Error while checking embeddings: {e}")
 
         # Try run forward pass with error handling
         try:
+            logger.info("Attempting model forward pass...")
             with torch.no_grad():
                 outputs = model(**device_batch)
 
@@ -945,7 +964,8 @@ def main():
                 if 'labels' in device_batch:
                     logger.info("Debug: 'labels' are present in input batch")
                     # Sample of labels to check
-                    logger.info(f"Debug: Labels sample: {device_batch['labels'][0][:10]}")
+                    logger.info(f"Debug: Labels sample: {device_batch['labels'][0][:10].tolist()}")
+                    logger.info(f"Debug: Non-masked labels count: {(device_batch['labels'][0] != -100).sum().item()}")
                 else:
                     logger.warning("❌ WARNING: 'labels' not present in input batch!")
         except Exception as e:
@@ -956,30 +976,64 @@ def main():
             # Additional diagnostics
             logger.info("Attempting additional diagnostics...")
             try:
+                # Try running with smaller batch size
+                logger.info("Trying with a single example instead of batch...")
+                single_example = {k: v[0:1] if isinstance(v, torch.Tensor) else v for k, v in device_batch.items()}
+                with torch.no_grad():
+                    try:
+                        single_output = model(**single_example)
+                        logger.info(f"Single example forward pass succeeded, keys: {single_output.keys()}")
+                    except Exception as single_e:
+                        logger.error(f"Single example also failed: {str(single_e)}")
+                
                 # Check if we can run the model without labels (might help isolate the issue)
                 if 'labels' in device_batch:
                     no_labels_batch = {k: v for k, v in device_batch.items() if k != 'labels'}
                     logger.info("Trying forward pass without labels...")
                     with torch.no_grad():
-                        output_no_labels = model(**no_labels_batch)
-                    logger.info(f"Forward pass without labels succeeded, keys: {output_no_labels.keys()}")
+                        try:
+                            output_no_labels = model(**no_labels_batch)
+                            logger.info(f"Forward pass without labels succeeded, keys: {output_no_labels.keys()}")
+                        except Exception as no_labels_e:
+                            logger.error(f"Forward pass without labels failed: {str(no_labels_e)}")
                 
                 # Try running just the embedding layer
                 logger.info("Testing just the embedding layer...")
                 if hasattr(model.model, 'embed_tokens'):
-                    input_ids = device_batch['input_ids']
-                    embed_output = model.model.embed_tokens(input_ids)
-                    logger.info(f"Embedding layer output shape: {embed_output.shape}")
+                    try:
+                        input_ids = device_batch['input_ids']
+                        embed_output = model.model.embed_tokens(input_ids)
+                        logger.info(f"Embedding layer output shape: {embed_output.shape}")
+                    except Exception as embed_e:
+                        logger.error(f"Embedding layer test failed: {str(embed_e)}")
+                        # Try to get more details about the layer
+                        embed_layer = model.model.embed_tokens
+                        logger.info(f"Embedding layer type: {type(embed_layer)}")
+                        if hasattr(embed_layer, 'weight'):
+                            logger.info(f"Embedding weight shape: {embed_layer.weight.shape}")
+                            logger.info(f"Embedding weight type: {type(embed_layer.weight)}")
+                
                 elif hasattr(model, 'get_input_embeddings'):
-                    input_ids = device_batch['input_ids']
-                    embed_layer = model.get_input_embeddings()
-                    embed_output = embed_layer(input_ids)
-                    logger.info(f"Embedding layer (from get_input_embeddings) output shape: {embed_output.shape}")
+                    try:
+                        input_ids = device_batch['input_ids']
+                        embed_layer = model.get_input_embeddings()
+                        embed_output = embed_layer(input_ids)
+                        logger.info(f"Embedding layer (from get_input_embeddings) output shape: {embed_output.shape}")
+                    except Exception as get_embed_e:
+                        logger.error(f"get_input_embeddings test failed: {str(get_embed_e)}")
+                        embed_layer = model.get_input_embeddings()
+                        logger.info(f"Embedding layer type: {type(embed_layer)}")
+                        if hasattr(embed_layer, 'weight'):
+                            logger.info(f"Embedding weight shape: {embed_layer.weight.shape}")
+                            logger.info(f"Embedding weight type: {type(embed_layer.weight)}")
             except Exception as inner_e:
                 logger.error(f"Diagnostic tests also failed: {str(inner_e)}")
+                logger.error(f"Detailed traceback: {traceback.format_exc()}")
                 logger.error("Model appears to have serious issues with its architecture.")
             
             logger.warning("Since the model forward pass failed, training might fail. Consider using a different model or creating a GitHub issue for Gemma-3 with PEFT.")
+            logger.warning("You may be able to continue training despite this debug error.")
+            # Don't raise an exception here - let training proceed anyway
 
     # Train
     if training_args.resume_from_checkpoint:
