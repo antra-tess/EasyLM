@@ -101,7 +101,6 @@ def test_gemma_inference():
         "low_cpu_mem_usage": True,  # Enable low CPU memory usage
         "offload_folder": temp_dir,  # Specify offload folder
         "offload_state_dict": True,  # Enable state dict offloading
-        "use_cache": False,  # Disable KV cache for first load
     }
     
     logger.info(f"Loading with kwargs: {model_kwargs}")
@@ -155,6 +154,7 @@ def test_gemma_inference():
                 temperature=0.7,
                 top_p=0.9,
                 num_return_sequences=1,
+                use_cache=True,  # Can use use_cache here in generate() method
             )
             
             # Decode and print output
