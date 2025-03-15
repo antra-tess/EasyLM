@@ -617,6 +617,378 @@ class DebugCallback(TrainerCallback):
         if model is not None:
             self._check_gradients(model)
 
+# Add new ModelDiagnostics class for deep model inspection
+class ModelDiagnostics:
+    """Diagnostic tool to deeply analyze model structure, trainable parameters, and computation graph."""
+    
+    @staticmethod
+    def analyze_model(model, tokenizer=None, detailed=True):
+        """Perform comprehensive model analysis and print results."""
+        logger.info("=" * 80)
+        logger.info("STARTING COMPREHENSIVE MODEL DIAGNOSTICS")
+        logger.info("=" * 80)
+        
+        # Basic model information
+        logger.info("MODEL CLASS: " + str(type(model)))
+        logger.info("MODEL MODE: " + ("TRAINING" if model.training else "EVALUATION"))
+        
+        # Check if model is wrapped by DeepSpeed, FSDP, etc.
+        ModelDiagnostics._check_model_wrappers(model)
+        
+        # Analyze trainable parameters in detail
+        params_by_module = ModelDiagnostics._analyze_trainable_parameters(model)
+        
+        # Check if PEFT/LoRA is properly applied
+        ModelDiagnostics._check_peft_application(model)
+        
+        # Analyze computation graph if detailed analysis requested
+        if detailed:
+            ModelDiagnostics._analyze_computation_graph(model, tokenizer)
+        
+        logger.info("=" * 80)
+        logger.info("COMPLETED MODEL DIAGNOSTICS")
+        logger.info("=" * 80)
+        
+        return params_by_module
+    
+    @staticmethod
+    def _check_model_wrappers(model):
+        """Detect if model is wrapped by training frameworks."""
+        logger.info("\nCHECKING FOR MODEL WRAPPERS:")
+        
+        # Check common wrapper patterns
+        wrapper_detected = False
+        
+        # Check DeepSpeed wrapper
+        if hasattr(model, 'module') and 'deepspeed' in str(type(model)).lower():
+            logger.info("✅ Model is wrapped by DeepSpeed")
+            wrapper_detected = True
+            # Log DeepSpeed config if available
+            if hasattr(model, 'config'):
+                config = model.config
+                logger.info("DeepSpeed Zero Stage: " + str(config.get('zero_optimization', {}).get('stage', 'Not found')))
+        
+        # Check for FSDP wrapper
+        if 'FSDP' in str(type(model)):
+            logger.info("✅ Model is wrapped by FSDP (Fully Sharded Data Parallel)")
+            wrapper_detected = True
+        
+        # Check for DDP wrapper
+        if hasattr(model, 'module') and 'DistributedDataParallel' in str(type(model)):
+            logger.info("✅ Model is wrapped by PyTorch DistributedDataParallel")
+            wrapper_detected = True
+        
+        # Check for PEFT wrapper
+        if 'PeftModel' in str(type(model)):
+            logger.info("✅ Model is wrapped by PEFT (Parameter-Efficient Fine-Tuning)")
+            wrapper_detected = True
+            # Additional PEFT-specific checks
+            if hasattr(model, 'base_model'):
+                logger.info("   - Has base_model attribute ✓")
+                
+                # Check peft_config
+                if hasattr(model, 'peft_config'):
+                    logger.info("   - Has peft_config ✓")
+                    # Print key peft_config details if available
+                    peft_config = model.peft_config
+                    if isinstance(peft_config, dict):
+                        for adapter_name, config in peft_config.items():
+                            logger.info(f"   - Adapter: {adapter_name}")
+                            if hasattr(config, 'target_modules'):
+                                logger.info(f"     - Target modules: {config.target_modules}")
+                            if hasattr(config, 'lora_alpha'):
+                                logger.info(f"     - LoRA alpha: {config.lora_alpha}")
+                            if hasattr(config, 'lora_dropout'):
+                                logger.info(f"     - LoRA dropout: {config.lora_dropout}")
+        
+        if not wrapper_detected:
+            logger.info("❌ No common model wrappers detected. Using plain PyTorch model.")
+    
+    @staticmethod
+    def _analyze_trainable_parameters(model):
+        """Analyze trainable parameters and their distribution across modules."""
+        logger.info("\nANALYZING TRAINABLE PARAMETERS:")
+        
+        # Count parameters by module prefix
+        params_by_module = {}
+        total_params = 0
+        trainable_params = 0
+        
+        # Dictionary to track parameter sizes per module
+        module_sizes = {}
+        
+        for name, param in model.named_parameters():
+            # Count all parameters
+            param_size = param.numel()
+            total_params += param_size
+            
+            # Process module name to get module prefix
+            module_path = name.split('.')
+            for i in range(len(module_path)):
+                prefix = '.'.join(module_path[:i+1])
+                if prefix not in module_sizes:
+                    module_sizes[prefix] = 0
+                module_sizes[prefix] += param_size
+            
+            # Track trainable parameters
+            if param.requires_grad:
+                trainable_params += param_size
+                
+                # Extract module prefix (first parts of parameter name)
+                parts = name.split('.')
+                module_prefix = parts[0]
+                if len(parts) > 2:
+                    module_prefix = f"{parts[0]}.{parts[1]}"
+                
+                # Add to module tracking
+                if module_prefix not in params_by_module:
+                    params_by_module[module_prefix] = {
+                        'count': 0, 
+                        'size': 0,
+                        'names': []
+                    }
+                
+                params_by_module[module_prefix]['count'] += 1
+                params_by_module[module_prefix]['size'] += param_size
+                
+                # Add parameter name to list (limit to first 5 for readability)
+                if len(params_by_module[module_prefix]['names']) < 5:
+                    params_by_module[module_prefix]['names'].append(name)
+        
+        # Print overall statistics
+        trainable_percent = 100 * trainable_params / total_params if total_params > 0 else 0
+        logger.info(f"Total parameters: {total_params:,}")
+        logger.info(f"Trainable parameters: {trainable_params:,} ({trainable_percent:.2f}%)")
+        
+        # Sort modules by parameter count and print top 10
+        sorted_modules = sorted(params_by_module.items(), key=lambda x: x[1]['size'], reverse=True)
+        logger.info("\nTRAINABLE PARAMETERS BY MODULE (TOP 10):")
+        
+        for i, (module_name, data) in enumerate(sorted_modules[:10]):
+            module_percent = 100 * data['size'] / trainable_params if trainable_params > 0 else 0
+            logger.info(f"#{i+1}: {module_name} - {data['count']} params, {data['size']:,} elements ({module_percent:.2f}% of trainable)")
+            logger.info(f"     Example parameters: {', '.join(data['names'][:3])}")
+        
+        # Check for suspicious modules that should typically be frozen
+        logger.info("\nCHECKING FOR SUSPICIOUS TRAINABLE MODULES:")
+        suspicious_detected = False
+        suspicious_prefixes = [
+            'embeddings', 'embed_tokens', 'norm', 'ln_', 'layernorm'
+        ]
+        
+        for module_prefix in params_by_module.keys():
+            for suspicious in suspicious_prefixes:
+                if suspicious.lower() in module_prefix.lower():
+                    logger.info(f"⚠️ Potentially suspicious trainable module: {module_prefix} with {params_by_module[module_prefix]['size']:,} elements")
+                    logger.info(f"     Example parameters: {', '.join(params_by_module[module_prefix]['names'][:3])}")
+                    suspicious_detected = True
+        
+        if not suspicious_detected:
+            logger.info("✅ No suspicious trainable modules detected.")
+        
+        # Look for largest top-level modules (useful to identify where most parameters are)
+        logger.info("\nLARGEST MODEL COMPONENTS:")
+        top_level_modules = {}
+        
+        for path, size in module_sizes.items():
+            top_level = path.split('.')[0]
+            if top_level not in top_level_modules:
+                top_level_modules[top_level] = 0
+            top_level_modules[top_level] += size
+        
+        sorted_top_modules = sorted(top_level_modules.items(), key=lambda x: x[1], reverse=True)
+        for name, size in sorted_top_modules[:5]:
+            percent = 100 * size / total_params
+            logger.info(f"{name}: {size:,} elements ({percent:.2f}% of model)")
+        
+        return params_by_module
+    
+    @staticmethod
+    def _check_peft_application(model):
+        """Check if PEFT/LoRA adapters are properly applied to the model."""
+        logger.info("\nCHECKING PEFT/LORA APPLICATION:")
+        
+        # Check if model has expected PEFT attributes
+        has_peft_structure = False
+        
+        if hasattr(model, 'peft_config'):
+            has_peft_structure = True
+            logger.info("✅ Model has peft_config attribute")
+        
+        # Look for LoRA modules in model structure
+        lora_modules_found = []
+        
+        def find_lora_modules(module, prefix=''):
+            for name, child in module.named_children():
+                full_name = f"{prefix}.{name}" if prefix else name
+                
+                # Check if this is a LoRA module
+                if 'lora_' in name:
+                    lora_modules_found.append(full_name)
+                
+                # Continue recursion
+                find_lora_modules(child, full_name)
+        
+        # Start recursive search
+        find_lora_modules(model)
+        
+        if lora_modules_found:
+            logger.info(f"✅ Found {len(lora_modules_found)} LoRA modules in model")
+            # Print first few LoRA modules
+            for module in lora_modules_found[:5]:
+                logger.info(f"   - {module}")
+        else:
+            logger.info("❌ No LoRA modules found in model structure")
+        
+        # Check for active hooks in forward methods (particularly important to verify LoRA integration)
+        hooks_detected = False
+        
+        # Helper function to find modules with hooks
+        def check_for_hooks(module, prefix=''):
+            nonlocal hooks_detected
+            
+            for name, child in module.named_children():
+                full_name = f"{prefix}.{name}" if prefix else name
+                
+                # Check for forward hooks
+                if hasattr(child, '_forward_hooks') and child._forward_hooks:
+                    hooks_detected = True
+                    logger.info(f"✅ Found forward hooks on module: {full_name}")
+                    logger.info(f"   - Hook count: {len(child._forward_hooks)}")
+                
+                # Check for forward pre-hooks
+                if hasattr(child, '_forward_pre_hooks') and child._forward_pre_hooks:
+                    hooks_detected = True
+                    logger.info(f"✅ Found forward pre-hooks on module: {full_name}")
+                    logger.info(f"   - Pre-hook count: {len(child._forward_pre_hooks)}")
+                
+                # Continue recursion
+                check_for_hooks(child, full_name)
+        
+        # Start recursive search for hooks
+        check_for_hooks(model)
+        
+        if not hooks_detected:
+            logger.info("❌ No forward hooks detected in model. LoRA may not be properly integrated.")
+            
+            if has_peft_structure and lora_modules_found:
+                logger.info("⚠️ Model has LoRA modules but no hooks - this suggests incomplete initialization")
+    
+    @staticmethod
+    def _analyze_computation_graph(model, tokenizer=None):
+        """Analyze computation graph to check if LoRA modules are connected."""
+        logger.info("\nANALYZING COMPUTATION GRAPH CONNECTION:")
+        
+        # If no tokenizer provided, we can only do limited analysis
+        if tokenizer is None:
+            logger.info("ℹ️ Tokenizer not provided, skipping input-based graph analysis")
+            return
+        
+        # Create a simple input to trace through the model
+        try:
+            logger.info("Generating sample input and tracing computation...")
+            
+            # Create a small sample input
+            sample_text = "This is a test input to check model connections."
+            inputs = tokenizer(sample_text, return_tensors="pt")
+            
+            # Move inputs to same device as model
+            device = next(model.parameters()).device
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+            
+            # Set up hooks to track LoRA module activations
+            activation_count = 0
+            
+            def hook_fn(module, input, output):
+                nonlocal activation_count
+                activation_count += 1
+                return output
+            
+            # Register hooks on LoRA modules
+            hooks = []
+            for name, module in model.named_modules():
+                if 'lora_' in name:
+                    hook = module.register_forward_hook(hook_fn)
+                    hooks.append(hook)
+            
+            # Run a forward pass with no grad to test connections
+            logger.info("Running test forward pass...")
+            with torch.no_grad():
+                _ = model(**inputs)
+            
+            # Report activation results
+            if activation_count > 0:
+                logger.info(f"✅ LoRA modules were activated {activation_count} times during forward pass")
+            else:
+                logger.info("❌ NO LORA ACTIVATIONS DETECTED during forward pass")
+                logger.info("   This confirms LoRA modules are not connected to computation graph")
+            
+            # Remove hooks
+            for hook in hooks:
+                hook.remove()
+            
+        except Exception as e:
+            logger.warning(f"Error during computation graph analysis: {e}")
+            logger.warning("This may indicate issues with the model's forward pass")
+
+# Add a function to analyze optimizer and scheduler configuration
+def analyze_optimizer_and_scheduler(trainer):
+    """Analyze optimizer and learning rate scheduler configuration."""
+    logger.info("=" * 80)
+    logger.info("ANALYZING OPTIMIZER AND SCHEDULER")
+    logger.info("=" * 80)
+    
+    # Check optimizer
+    if hasattr(trainer, 'optimizer') and trainer.optimizer:
+        optimizer = trainer.optimizer
+        logger.info(f"Optimizer type: {type(optimizer)}")
+        
+        # Check parameter groups
+        if hasattr(optimizer, 'param_groups'):
+            logger.info(f"Number of parameter groups: {len(optimizer.param_groups)}")
+            
+            # Check first few parameter groups
+            for i, group in enumerate(optimizer.param_groups[:3]):
+                logger.info(f"Group {i}:")
+                logger.info(f"  Learning rate: {group.get('lr', 'N/A')}")
+                logger.info(f"  Weight decay: {group.get('weight_decay', 'N/A')}")
+                logger.info(f"  Parameter count: {len(group.get('params', []))}")
+                
+                # Sample some parameters from this group
+                params = group.get('params', [])
+                if params:
+                    # Try to find parameter names for these params
+                    for param in params[:2]:
+                        # Report parameter details
+                        if hasattr(param, 'shape'):
+                            logger.info(f"  Parameter shape: {param.shape}")
+                        if hasattr(param, 'requires_grad'):
+                            logger.info(f"  requires_grad: {param.requires_grad}")
+    else:
+        logger.info("❌ No optimizer found in trainer")
+    
+    # Check learning rate scheduler
+    if hasattr(trainer, 'lr_scheduler') and trainer.lr_scheduler:
+        scheduler = trainer.lr_scheduler
+        logger.info(f"Learning rate scheduler type: {type(scheduler)}")
+        
+        # Check if it's a known scheduler type
+        scheduler_type = str(type(scheduler))
+        if 'get_linear_schedule' in scheduler_type:
+            logger.info("✅ Using linear learning rate schedule")
+        elif 'get_cosine_schedule' in scheduler_type:
+            logger.info("✅ Using cosine learning rate schedule")
+        elif 'get_constant_schedule' in scheduler_type:
+            logger.info("❌ Using constant learning rate schedule - may not be optimal for training")
+        
+        # Try to extract current learning rate
+        if hasattr(scheduler, 'get_last_lr'):
+            logger.info(f"Current learning rate: {scheduler.get_last_lr()}")
+    else:
+        logger.info("No learning rate scheduler found in trainer")
+    
+    logger.info("=" * 80)
+
 def main():
     parser = HfArgumentParser((ModelArguments, LoRAArguments, DataArguments, TrainingArguments))
     model_args, lora_args, data_args, training_args = parser.parse_args_into_dataclasses()
@@ -948,6 +1320,14 @@ def main():
             use_gradient_checkpointing=training_args.gradient_checkpointing
         )
     
+    # We need to re-run the tokenizer check after model preparation
+    # because the embedding layer may have been modified
+    if "gemma" in model_args.model_name_or_path.lower():
+        embed_shape = None
+        if hasattr(model.model, 'embed_tokens') and hasattr(model.model.embed_tokens, 'weight'):
+            embed_shape = model.model.embed_tokens.weight.shape
+            logger.info(f"Post-preparation embed tokens shape: {embed_shape}")
+    
     # Select target modules based on model type
     if "gemma" in model_args.model_name_or_path.lower():
         target_modules = lora_args.target_modules_for_gemma
@@ -955,6 +1335,34 @@ def main():
         target_modules = lora_args.target_modules_for_llama
     
     logger.info(f"Using LoRA target modules: {target_modules}")
+    
+    # CRITICAL: Properly freeze base model parameters BEFORE applying LoRA
+    logger.info("Completely freezing base model parameters before LoRA application...")
+    
+    # First pass: Enforce module-level freezing  
+    for name, module in model.named_modules():
+        if hasattr(module, 'requires_grad'):
+            module.requires_grad = False
+    
+    # Second pass: Ensure all individual parameters are frozen
+    trainable_before_lora = []
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            trainable_before_lora.append(name)
+        param.requires_grad = False
+    
+    if trainable_before_lora:
+        logger.warning(f"Found {len(trainable_before_lora)} trainable parameters before LoRA application (now frozen)")
+        logger.warning(f"Examples: {trainable_before_lora[:5]}")
+    else:
+        logger.info("✅ All base model parameters correctly frozen before LoRA application")
+    
+    # Verify actual parameter state before LoRA
+    still_trainable = [name for name, param in model.named_parameters() if param.requires_grad]
+    if still_trainable:
+        logger.error(f"❌ Still have {len(still_trainable)} trainable parameters after freezing attempt!")
+        logger.error(f"Examples: {still_trainable[:5]}")
+        raise ValueError("Failed to completely freeze model before LoRA application - this will cause problems")
     
     # Configure LoRA
     peft_config = LoraConfig(
@@ -977,6 +1385,168 @@ def main():
         param.requires_grad = False
         
     model = get_peft_model(model, peft_config)
+    
+    # Add a thorough verification function to repair LoRA issues
+    def verify_and_repair_lora_modules(model):
+        """Deeply inspect and repair LoRA integration issues."""
+        logger.info("=" * 80)
+        logger.info("VERIFYING AND REPAIRING LORA MODULES")
+        logger.info("=" * 80)
+        
+        # 1. Check for any module requiring grad whose name doesn't contain lora/adapter
+        # First collect all parameters and modules so we don't modify during iteration
+        non_lora_trainable_params = []
+        lora_modules = []
+        regular_target_modules = []
+        
+        # Collect all modules for inspection
+        for name, module in model.named_modules():
+            if any(target in name for target in target_modules):
+                # Found a target module (should have a LoRA module attached)
+                regular_target_modules.append(name)
+            
+            # Find any LoRA modules
+            if 'lora_' in name:
+                lora_modules.append(name)
+                
+        # Log found modules
+        logger.info(f"Found {len(lora_modules)} LoRA modules")
+        logger.info(f"Found {len(regular_target_modules)} potential target modules (containing target_modules keywords)")
+        
+        # Check for any parameters requiring grad that aren't LoRA
+        for name, param in model.named_parameters():
+            if param.requires_grad and not any(lora_name in name for lora_name in ['lora_', 'adapter']):
+                non_lora_trainable_params.append(name)
+        
+        if non_lora_trainable_params:
+            logger.warning(f"Found {len(non_lora_trainable_params)} non-LoRA parameters with requires_grad=True")
+            logger.warning(f"First few: {non_lora_trainable_params[:5]}")
+            logger.warning("Forcefully freezing these parameters...")
+            
+            for name, param in model.named_parameters():
+                if name in non_lora_trainable_params:
+                    param.requires_grad = False
+            
+            # Verify freezing worked
+            still_trainable = []
+            for name, param in model.named_parameters():
+                if param.requires_grad and not any(lora_name in name for lora_name in ['lora_', 'adapter']):
+                    still_trainable.append(name)
+            
+            if still_trainable:
+                logger.error(f"Failed to freeze {len(still_trainable)} parameters")
+            else:
+                logger.info("Successfully froze all non-LoRA parameters")
+        
+        # 2. Check for proper connections and hooks
+        # Check if proper hooks are registered for linear layers with LoRA
+        import torch.nn as nn
+        hooks_found = False
+        unhookeLinears = []
+        
+        for name, module in model.named_modules():
+            # Find linear modules that should have hooks but don't
+            if any(target in name for target in target_modules) and isinstance(module, nn.Linear):
+                # Check for forward hooks
+                if (not hasattr(module, '_forward_hooks') or not module._forward_hooks or
+                    not hasattr(module, '_forward_pre_hooks') or not module._forward_pre_hooks):
+                    unhookeLinears.append(name)
+        
+        if unhookeLinears:
+            logger.warning(f"Found {len(unhookeLinears)} linear modules missing hooks!")
+            logger.warning(f"Examples: {unhookeLinears[:5]}")
+            logger.warning("This suggests a problem with LoRA initialization.")
+            logger.warning("Attempting to repair by reinitializing PEFT...")
+            
+            # Strategy: Create LoRA configuration again and reapply
+            # First let's clean up any broken partial LoRA state
+            # We need to restore the original modules to start
+            
+            # Step 1: Collect existing LoRA A/B matrices to preserve any initialization
+            lora_state = {}
+            for name, module in model.named_modules():
+                if 'lora_A' in name or 'lora_B' in name:
+                    # Store the state
+                    if hasattr(module, 'weight'):
+                        # Get the full path with parameters
+                        weight_name = f"{name}.weight"
+                        lora_state[weight_name] = module.weight.detach().clone()
+            
+            logger.info(f"Preserved {len(lora_state)} existing LoRA weights")
+            
+            # Step 2: Reapply LoRA
+            try:
+                logger.info("Attempting to re-apply PEFT LoRA transformation...")
+                from peft import get_peft_model_state_dict
+                
+                # First ensure base model parameters are all frozen
+                for param in model.parameters():
+                    param.requires_grad = False
+                
+                # Get base model (unwrapped from PEFT)
+                if hasattr(model, 'base_model'):
+                    logger.info("Using model.base_model for re-applying LoRA")
+                    base_model = model.base_model
+                    
+                    # Reapply LoRA configuration
+                    from peft import get_peft_model
+                    new_model = get_peft_model(base_model, peft_config)
+                    
+                    logger.info("Successfully reapplied LoRA transformation")
+                    
+                    # Update the current model reference to the new model
+                    model = new_model
+                    
+                    # Optional: restore saved LoRA weights if needed
+                    if lora_state:
+                        logger.info("Restoring saved LoRA weights...")
+                        mismatch = 0
+                        restored = 0
+                        
+                        # Copy saved weights back into new LoRA modules
+                        for name, param in model.named_parameters():
+                            if name in lora_state:
+                                if param.shape == lora_state[name].shape:
+                                    param.data.copy_(lora_state[name])
+                                    restored += 1
+                                else:
+                                    logger.warning(f"Shape mismatch for {name}: {param.shape} vs {lora_state[name].shape}")
+                                    mismatch += 1
+                        
+                        logger.info(f"Restored {restored} LoRA weights, {mismatch} shape mismatches")
+                else:
+                    logger.error("Could not find model.base_model for re-applying LoRA")
+            except Exception as e:
+                logger.error(f"Error during LoRA reapplication: {e}")
+                logger.exception("Detailed error:")
+                
+            # 3. Finally, verify LoRA parameters have requires_grad=True
+            lora_trainable = [name for name, param in model.named_parameters() 
+                             if param.requires_grad and any(lora_name in name for lora_name in ['lora_', 'adapter'])]
+            
+            if not lora_trainable:
+                logger.error("No trainable LoRA parameters found after repair!")
+                logger.error("Attempting one last fix...")
+                
+                # Force enable training only for LoRA parameters
+                for name, param in model.named_parameters():
+                    if any(lora_name in name for lora_name in ['lora_', 'adapter']):
+                        param.requires_grad = True
+                    else:
+                        param.requires_grad = False
+                    
+                # Verify again
+                lora_trainable = [name for name, param in model.named_parameters() 
+                                 if param.requires_grad and any(lora_name in name for lora_name in ['lora_', 'adapter'])]
+                
+                logger.info(f"After forced fix: {len(lora_trainable)} trainable LoRA parameters")
+                
+            logger.info("=" * 80)
+            
+            return model
+        
+    # Repair any LoRA module issues
+    model = verify_and_repair_lora_modules(model)
     
     # Explicitly verify parameter freezing after LoRA
     base_params_trainable = []
@@ -1060,6 +1630,10 @@ def main():
     if not lora_targets_found:
         raise ValueError("❌ ERROR: No LoRA modules found in model! Check if target_modules are correct.")
 
+    # Run detailed diagnostics to understand model structure and parameter status
+    logger.info("Running comprehensive model diagnostics...")
+    ModelDiagnostics.analyze_model(model, tokenizer=tokenizer)
+
     # Log model parameter info
     logger.info(f"Trainable params: {model.print_trainable_parameters()}")
     
@@ -1119,6 +1693,11 @@ def main():
                         return
         
         callbacks.append(LRCallback())
+    
+    # Always add the LoRA activity tracking callback, even without debug mode
+    # This is critical to diagnose why gradients aren't flowing
+    lora_activity_callback = LoRAActivityCallback()
+    callbacks.append(lora_activity_callback)
         
     trainer = Trainer(
         model=model,
@@ -1137,6 +1716,14 @@ def main():
         class DeepSpeedDebuggerCallback(TrainerCallback):
             def on_train_begin(self, args, state, control, model=None, **kwargs):
                 logger.info("Training beginning, setting up DeepSpeed hooks...")
+                
+                # Run diagnostics on model after DeepSpeed wrapping
+                logger.info("Running model diagnostics after DeepSpeed initialization...")
+                ModelDiagnostics.analyze_model(model, tokenizer=trainer.tokenizer)
+                
+                # Check optimizer configuration
+                if hasattr(trainer, 'optimizer'):
+                    analyze_optimizer_and_scheduler(trainer)
                 
                 # Immediately verify that model still has LoRA parameters trainable
                 def verify_model_trainable_params():
@@ -1313,6 +1900,124 @@ def main():
     trainer.save_metrics("train", metrics)
     
     logger.info("Training complete!")
+
+# Add a special callback to verify LoRA layer activity during forward passes
+class LoRAActivityCallback(TrainerCallback):
+    """Monitors LoRA layer activations during forward passes to verify they're being used."""
+    
+    def __init__(self):
+        self.hooks = []
+        self.activation_counts = {}
+        self.total_calls = 0
+        self.hook_registered = False
+        self.first_batch = True
+    
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
+        """Register hooks on LoRA modules to track their usage."""
+        if model is None:
+            return
+        
+        logger.info("Setting up LoRA activity tracking hooks...")
+        
+        self._register_hooks(model)
+    
+    def _register_hooks(self, model):
+        """Register forward hooks on all LoRA modules."""
+        if self.hook_registered:
+            return
+        
+        # Clear any existing hooks
+        for hook in self.hooks:
+            hook.remove()
+        self.hooks = []
+        
+        # Find all LoRA modules
+        lora_modules = {}
+        for name, module in model.named_modules():
+            if 'lora_' in name:
+                # Add to our tracking dict
+                if name not in self.activation_counts:
+                    self.activation_counts[name] = 0
+                lora_modules[name] = module
+        
+        if not lora_modules:
+            logger.warning("No LoRA modules found to monitor!")
+            return
+        
+        logger.info(f"Found {len(lora_modules)} LoRA modules to monitor")
+        
+        # Define a hook function to count activations
+        def hook_fn(module_name):
+            def hook(module, input, output):
+                self.activation_counts[module_name] += 1
+                return output
+            return hook
+        
+        # Register hooks for each LoRA module
+        for name, module in lora_modules.items():
+            h = module.register_forward_hook(hook_fn(name))
+            self.hooks.append(h)
+        
+        self.hook_registered = True
+        logger.info("LoRA activation tracking hooks registered successfully")
+    
+    def on_step_end(self, args, state, control, model=None, **kwargs):
+        """Check activation counts periodically."""
+        self.total_calls += 1
+        
+        # Report on first batch and then every 10 steps
+        if self.first_batch or self.total_calls % 10 == 0:
+            self._report_activations()
+            
+            if self.first_batch:
+                self.first_batch = False
+    
+    def _report_activations(self):
+        """Report activation statistics for LoRA modules."""
+        active_modules = sum(1 for count in self.activation_counts.values() if count > 0)
+        total_modules = len(self.activation_counts)
+        
+        logger.info(f"LoRA module activation report (step {self.total_calls}):")
+        logger.info(f"- Active modules: {active_modules}/{total_modules}")
+        
+        if active_modules == 0:
+            logger.error("❌ NO LORA MODULES ACTIVE - model is not using LoRA layers!")
+            logger.error("This confirms LoRA is not integrated into computation graph")
+            
+            # Provide some examples of inactive modules
+            inactive = [name for name, count in self.activation_counts.items() if count == 0]
+            if inactive:
+                logger.error(f"Examples of inactive modules: {inactive[:5]}")
+        else:
+            logger.info(f"✅ {active_modules} LoRA modules are being activated during forward pass")
+            
+            # Show some of the most active modules
+            active = sorted(
+                [(name, count) for name, count in self.activation_counts.items() if count > 0],
+                key=lambda x: x[1],
+                reverse=True
+            )
+            
+            for name, count in active[:5]:
+                logger.info(f"  - {name}: {count} activations")
+    
+    def on_train_end(self, args, state, control, model=None, **kwargs):
+        """Clean up hooks at end of training."""
+        logger.info("Cleaning up LoRA activation monitoring hooks")
+        for hook in self.hooks:
+            hook.remove()
+        self.hooks = []
+        
+        # Final activation report
+        logger.info("Final LoRA activation report:")
+        active_modules = sum(1 for count in self.activation_counts.values() if count > 0)
+        total_modules = len(self.activation_counts)
+        
+        logger.info(f"- Active modules: {active_modules}/{total_modules}")
+        if active_modules == 0:
+            logger.error("❌ TRAINING COMPLETED WITH NO LORA ACTIVATIONS!")
+        else:
+            logger.info(f"✅ Training successfully used {active_modules} LoRA modules")
 
 if __name__ == "__main__":
     main() 
