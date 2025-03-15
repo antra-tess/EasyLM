@@ -159,11 +159,11 @@ def test_gemma_inference(prompt_file=None, num_completions=5):
             
             outputs = model.generate(
                 **inputs,
-                max_new_tokens=50, 
+                max_new_tokens=550, 
                 do_sample=True,
-                temperature=0.7,
-                top_p=0.9,
-                top_k=50,
+                temperature=1,
+                top_p=0.99,
+                top_k=500,
             )
             
             # Decode and save output
