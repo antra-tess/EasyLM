@@ -4,7 +4,8 @@
 import torch
 import logging
 import os
-from transformers import AutoModelForCausalLM, AutoTokenizer
+import json
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
 # Configure logging
 logging.basicConfig(
@@ -38,6 +39,47 @@ def test_gemma_inference():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     
+    # Load and fix the config first
+    logger.info(f"Loading and preprocessing config from {model_name}")
+    config = AutoConfig.from_pretrained(model_name, token=hf_token)
+    
+    # Check if config has the nested structure and fix it
+    config_dict = config.to_dict()
+    
+    if 'text_config' in config_dict:
+        logger.info("Found nested text_config structure, unfolding parameters...")
+        text_config = config_dict.get('text_config', {})
+        
+        # For debugging, let's print what's inside text_config
+        logger.info(f"Text config contains keys: {list(text_config.keys())}")
+        
+        # Set vocab_size explicitly if not present
+        if 'vocab_size' not in text_config and hasattr(tokenizer, 'vocab_size'):
+            text_config['vocab_size'] = tokenizer.vocab_size
+            logger.info(f"Setting vocab_size from tokenizer: {tokenizer.vocab_size}")
+        elif 'vocab_size' not in text_config:
+            # Gemma-3 uses 262144 tokens
+            text_config['vocab_size'] = 262144
+            logger.info("Setting default vocab_size to 262144")
+        
+        # Create a new config with unfolded parameters
+        for key, value in text_config.items():
+            if key not in config_dict:
+                config_dict[key] = value
+                logger.info(f"Unfolded parameter {key} to root level")
+        
+        # Create a new config object
+        try:
+            from transformers import Gemma3Config
+            new_config = Gemma3Config.from_dict(config_dict)
+            logger.info("Successfully created new config with unfolded parameters")
+            config = new_config
+        except (ImportError, AttributeError) as e:
+            logger.warning(f"Could not create Gemma3Config: {e}. Using modified dict instead.")
+            # Just modify the original config directly
+            for key, value in text_config.items():
+                setattr(config, key, value)
+    
     logger.info(f"Loading model from {model_name}")
     
     # Configure model loading
@@ -49,7 +91,8 @@ def test_gemma_inference():
         "trust_remote_code": True,
         "token": hf_token,
         "device_map": "auto",  # Let transformers handle multi-GPU placement
-        "max_memory": {i: "40GiB" for i in range(torch.cuda.device_count())},  # Allocate memory for each GPU
+        "max_memory": {i: "80GiB" for i in range(torch.cuda.device_count())},  # Allocate memory for each GPU
+        "config": config,  # Use our modified config
     }
     
     logger.info(f"Loading with kwargs: {model_kwargs}")
