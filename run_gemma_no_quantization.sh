@@ -350,6 +350,7 @@ EOF
         --deepspeed ds_config.json \
         --load_in_8bit False \
         --load_in_4bit False \
+        --use_flash_attn True \
         $ADDITIONAL_ARGS
 else
     # We found a working CUDA installation
@@ -683,6 +684,7 @@ EOF
                 --deepspeed ds_config.json \
                 --load_in_8bit False \
                 --load_in_4bit False \
+                --use_flash_attn True \
                 $FALLBACK_ARGS
         }
 
@@ -718,6 +720,7 @@ EOF
             --deepspeed ds_config.json \
             --load_in_8bit False \
             --load_in_4bit False \
+            --use_flash_attn True \
             $ADDITIONAL_ARGS
 
         # If deepspeed fails, try the fallback
@@ -798,14 +801,14 @@ EOF
             --model_name_or_path "google/gemma-3-27b-pt" \
             --dataset_path $DATA_PATH \
             --template_path $TEMPLATE_PATH \
-            --max_seq_length 512 \
-            --lora_rank 32 \
-            --lora_alpha 64 \
+            --max_seq_length 1024 \
+            --lora_rank 48 \
+            --lora_alpha 96 \
             --lora_dropout 0.05 \
-            --per_device_train_batch_size 4 \
-            --gradient_accumulation_steps 4 \
+            --per_device_train_batch_size 12 \
+            --gradient_accumulation_steps 2 \
             --num_train_epochs 3 \
-            --learning_rate 2e-4 \
+            --learning_rate 3e-4 \
             --warmup_steps 100 \
             --lr_scheduler_type "cosine" \
             --logging_steps 10 \
@@ -824,6 +827,7 @@ EOF
             --deepspeed ds_config.json \
             --load_in_8bit False \
             --load_in_4bit False \
+            --use_flash_attn True \
             $ADDITIONAL_ARGS
     fi
 fi
