@@ -45,7 +45,7 @@ echo "==== End of template file content ===="
 # Set torch distributed environment variables
 export NCCL_DEBUG=INFO
 
-# Define simplified DeepSpeed config with only supported parameters
+# Define DeepSpeed config with auto optimizer params to avoid conflicts
 DS_CONFIG='{
   "train_batch_size": "auto",
   "train_micro_batch_size_per_gpu": "auto",
@@ -71,9 +71,9 @@ DS_CONFIG='{
     "type": "AdamW",
     "params": {
       "lr": "auto",
-      "betas": [0.9, 0.95],
-      "eps": 1e-8,
-      "weight_decay": 0.01
+      "betas": "auto",
+      "eps": "auto",
+      "weight_decay": "auto"
     }
   },
   "scheduler": {
@@ -92,7 +92,7 @@ DS_CONFIG='{
   }
 }'
 
-# Run the training script with DeepSpeed for multi-GPU with speed optimizations
+# Also add HuggingFace trainer arguments to set the optimizer params directly
 deepspeed --num_gpus=2 gemma_sft_train.py \
     --model_name_or_path "google/gemma-3-27b-pt" \
     --dataset_path $DATA_PATH \
@@ -117,6 +117,9 @@ deepspeed --num_gpus=2 gemma_sft_train.py \
     --save_total_limit 3 \
     --max_grad_norm 1.0 \
     --ddp_find_unused_parameters False \
+    --adam_beta1 0.9 \
+    --adam_beta2 0.95 \
+    --weight_decay 0.01 \
     --deepspeed "$DS_CONFIG" \
     --load_in_8bit False \
     --load_in_4bit False
