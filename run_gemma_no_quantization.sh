@@ -100,24 +100,54 @@ if [[ -n "$CONDA_PREFIX" ]]; then
             FIRST_LIB=$(echo "$CONDA_CUDA_LIBS" | head -n 1)
             echo "Found CUDA library at: $FIRST_LIB"
             
+            # Extract CUDA version from the library path if possible
+            if [[ "$FIRST_LIB" =~ libcudart\.so\.([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+                CUDA_MAJOR="${BASH_REMATCH[1]}"
+                CUDA_MINOR="${BASH_REMATCH[2]}"
+                echo "Detected CUDA version from library: $CUDA_MAJOR.$CUDA_MINOR"
+            fi
+            
             # Get the directory containing the library
             LIB_DIR=$(dirname "$FIRST_LIB")
             
-            # Go up two levels to get a potential CUDA_HOME
-            POTENTIAL_CUDA_HOME=$(dirname "$(dirname "$LIB_DIR")")
+            # Find possible include directories - look in several places
+            POSSIBLE_INCLUDE_DIRS=(
+                "$CONDA_PREFIX/include"
+                "$CONDA_PREFIX/targets/x86_64-linux/include"
+                "${LIB_DIR}/../include"
+                "${LIB_DIR}/../../include"
+                "$CONDA_PREFIX/lib/python*/site-packages/torch/include"
+            )
             
-            if [[ -d "$POTENTIAL_CUDA_HOME/include" ]]; then
-                echo "Found potential CUDA home at: $POTENTIAL_CUDA_HOME"
-                
-                # Check if cuda_runtime.h exists in this location
-                if [[ -f "$POTENTIAL_CUDA_HOME/include/cuda_runtime.h" ]]; then
-                    echo "✅ Found cuda_runtime.h at $POTENTIAL_CUDA_HOME/include/cuda_runtime.h"
+            for include_dir in "${POSSIBLE_INCLUDE_DIRS[@]}"; do
+                # Handle glob patterns
+                for expanded_dir in $include_dir; do
+                    if [[ -d "$expanded_dir" ]]; then
+                        echo "Checking potential include directory: $expanded_dir"
+                        if [[ -f "$expanded_dir/cuda_runtime.h" ]]; then
+                            echo "✅ Found cuda_runtime.h at $expanded_dir/cuda_runtime.h"
+                            CUDA_FOUND=true
+                            SYSTEM_CUDA_HOME=$(dirname "$expanded_dir")
+                            break 2
+                        elif [[ -f "$expanded_dir/cuda/cuda_runtime.h" ]]; then
+                            echo "✅ Found cuda_runtime.h at $expanded_dir/cuda/cuda_runtime.h"
+                            CUDA_FOUND=true
+                            SYSTEM_CUDA_HOME=$(dirname "$expanded_dir")
+                            break 2
+                        fi
+                    fi
+                done
+            done
+            
+            # If we still haven't found cuda_runtime.h, try recursive find
+            if [[ "$CUDA_FOUND" != true ]]; then
+                echo "Searching for cuda_runtime.h in conda environment..."
+                CUDA_HEADER=$(find "$CONDA_PREFIX" -name "cuda_runtime.h" -type f 2>/dev/null | head -n 1)
+                if [[ -n "$CUDA_HEADER" ]]; then
+                    echo "✅ Found cuda_runtime.h at $CUDA_HEADER"
                     CUDA_FOUND=true
-                    SYSTEM_CUDA_HOME="$POTENTIAL_CUDA_HOME"
-                elif [[ -f "$POTENTIAL_CUDA_HOME/include/cuda/cuda_runtime.h" ]]; then
-                    echo "✅ Found cuda_runtime.h at $POTENTIAL_CUDA_HOME/include/cuda/cuda_runtime.h"
-                    CUDA_FOUND=true
-                    SYSTEM_CUDA_HOME="$POTENTIAL_CUDA_HOME"
+                    CUDA_INCLUDE_DIR=$(dirname "$CUDA_HEADER")
+                    SYSTEM_CUDA_HOME=$(dirname "$CUDA_INCLUDE_DIR")
                 fi
             fi
         fi
@@ -226,6 +256,13 @@ if [[ "$TORCH_CUDA_VERSION" != "NA" && "$CUDA_FOUND" = false ]]; then
     export TORCH_EXTENSIONS_DIR="${PWD}/.torch_extensions_cpu_only"
     mkdir -p "$TORCH_EXTENSIONS_DIR"
     
+    # Set default additional args if not defined
+    ADDITIONAL_ARGS="--optim adamw_torch ${ADDITIONAL_ARGS:-""}"
+    
+    # Check Python and CUDA diagnostics
+    echo "Python diagnostics:"
+    python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda}'); print(f'CUDA devices: {torch.cuda.device_count()}')"
+    
     # Create DeepSpeed config without requiring CUDA extensions
     cat > ds_config.json << EOF
 {
@@ -302,14 +339,48 @@ EOF
         --adam_beta1 0.9 \
         --adam_beta2 0.95 \
         --weight_decay 0.01 \
-        --optim adamw_torch \
         --deepspeed ds_config.json \
         --load_in_8bit False \
-        --load_in_4bit False
+        --load_in_4bit False \
+        $ADDITIONAL_ARGS
 else
     # We found a working CUDA installation
     if [ "$CUDA_FOUND" = true ]; then
         echo "Using CUDA_HOME: $SYSTEM_CUDA_HOME"
+        
+        # Get PyTorch's CUDA version if not already set
+        if [[ -z "$TORCH_CUDA_VERSION" ]]; then
+            TORCH_CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda if torch.cuda.is_available() else 'NA')")
+            echo "PyTorch CUDA version: $TORCH_CUDA_VERSION"
+        fi
+        
+        # Get the CUDA version from our found CUDA installation if possible
+        if [[ -z "$CUDA_MAJOR" || -z "$CUDA_MINOR" ]]; then
+            NVCC_PATH="$SYSTEM_CUDA_HOME/bin/nvcc"
+            if [[ -f "$NVCC_PATH" ]]; then
+                NVCC_VERSION=$("$NVCC_PATH" -V 2>&1 | grep "release" | awk '{print $5}' | awk -F, '{print $1}')
+                echo "NVCC version: $NVCC_VERSION"
+                
+                # Parse major.minor
+                if [[ "$NVCC_VERSION" =~ ([0-9]+)\.([0-9]+) ]]; then
+                    CUDA_MAJOR="${BASH_REMATCH[1]}"
+                    CUDA_MINOR="${BASH_REMATCH[2]}"
+                    echo "Parsed CUDA version: $CUDA_MAJOR.$CUDA_MINOR"
+                fi
+            fi
+        fi
+        
+        # Check if the found CUDA version matches PyTorch's CUDA version
+        CUDA_VERSION_MISMATCH=false
+        if [[ "$TORCH_CUDA_VERSION" != "NA" && -n "$CUDA_MAJOR" && -n "$CUDA_MINOR" ]]; then
+            FOUND_CUDA_VERSION="$CUDA_MAJOR.$CUDA_MINOR"
+            if [[ "$FOUND_CUDA_VERSION" != "$TORCH_CUDA_VERSION" ]]; then
+                echo "⚠️ Warning: Found CUDA version ($FOUND_CUDA_VERSION) doesn't match PyTorch's CUDA version ($TORCH_CUDA_VERSION)"
+                CUDA_VERSION_MISMATCH=true
+            else
+                echo "✅ Found CUDA version matches PyTorch CUDA version: $FOUND_CUDA_VERSION"
+            fi
+        fi
         
         # Set up environment variables properly
         export CUDA_HOME="$SYSTEM_CUDA_HOME"
@@ -318,17 +389,71 @@ else
         export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$CUDA_HOME/lib:$LD_LIBRARY_PATH"
         export CPATH="$CUDA_HOME/include:$CPATH"
         
+        # Add PyTorch's CUDA include paths to help DeepSpeed find the right headers
+        TORCH_CUDA_INCLUDE=$(python -c "import torch; from pathlib import Path; print(Path(torch.__file__).parent/'include')" 2>/dev/null || echo "")
+        if [[ -n "$TORCH_CUDA_INCLUDE" && -d "$TORCH_CUDA_INCLUDE" ]]; then
+            echo "Adding PyTorch's CUDA include path: $TORCH_CUDA_INCLUDE"
+            export CPATH="$TORCH_CUDA_INCLUDE:$CPATH"
+        fi
+        
+        # Find any cuda_runtime.h in PyTorch's installation
+        TORCH_CUDA_RUNTIME=$(find $(python -c "import torch; print(torch.__path__[0])") -name "cuda_runtime.h" 2>/dev/null | head -n 1)
+        if [[ -n "$TORCH_CUDA_RUNTIME" ]]; then
+            TORCH_CUDA_INCLUDE_DIR=$(dirname "$TORCH_CUDA_RUNTIME")
+            echo "Found cuda_runtime.h in PyTorch installation: $TORCH_CUDA_RUNTIME"
+            echo "Adding to CPATH: $TORCH_CUDA_INCLUDE_DIR"
+            export CPATH="$TORCH_CUDA_INCLUDE_DIR:$CPATH"
+        fi
+        
         # Set architecture for A100 GPUs
         echo "Adding GPU architecture for A100 (sm_80)"
         export TORCH_CUDA_ARCH_LIST="8.0"
         
+        # Special handling for CUDA version mismatch
+        if [[ "$CUDA_VERSION_MISMATCH" = true ]]; then
+            echo "Attempting to work around CUDA version mismatch..."
+            
+            # Try to locate system CUDA that might match PyTorch's version
+            if [[ -d "/usr/local/cuda-$TORCH_CUDA_VERSION" ]]; then
+                echo "Found system CUDA matching PyTorch version at /usr/local/cuda-$TORCH_CUDA_VERSION"
+                export CUDA_HOME="/usr/local/cuda-$TORCH_CUDA_VERSION"
+                export CUDA_TOOLKIT_ROOT_DIR="/usr/local/cuda-$TORCH_CUDA_VERSION"
+                export PATH="/usr/local/cuda-$TORCH_CUDA_VERSION/bin:$PATH"
+                export LD_LIBRARY_PATH="/usr/local/cuda-$TORCH_CUDA_VERSION/lib64:/usr/local/cuda-$TORCH_CUDA_VERSION/lib:$LD_LIBRARY_PATH"
+                export CPATH="/usr/local/cuda-$TORCH_CUDA_VERSION/include:$CPATH"
+            else
+                # Force DeepSpeed to skip CUDA version check
+                export DS_SKIP_CUDA_CHECK=1
+                export NVCC_PREPEND_FLAGS="-ccbin=$SYSTEM_CUDA_HOME/bin"
+                # Disable CUDA extensions entirely if version mismatch is too severe
+                if [[ "$FOUND_CUDA_VERSION" == "11."* && "$TORCH_CUDA_VERSION" == "12."* ]]; then
+                    echo "⚠️ Major version mismatch (CUDA 11.x vs 12.x). Using CPU optimizers."
+                    export DS_BUILD_OPS=0 
+                    export DS_BUILD_FUSED_ADAM=0
+                    export DS_BUILD_FUSED_LAMB=0
+                    # Force PyTorch's own implementation
+                    ADDITIONAL_ARGS="--optim adamw_torch"
+                fi
+            fi
+        fi
+        
         # Remove any previous failed compilations
         echo "Clearing previous compilation artifacts..."
         find ~/.cache/torch_extensions -name "fused_adam" -type d -exec rm -rf {} + 2>/dev/null || true
+        find ~/.cache/pip -name "deepspeed" -type d -exec rm -rf {} + 2>/dev/null || true
         
         # Set a clean extensions directory
-        export TORCH_EXTENSIONS_DIR="${PWD}/.torch_extensions"
+        export TORCH_EXTENSIONS_DIR="${PWD}/.torch_extensions_$(date +%s)"
         mkdir -p "$TORCH_EXTENSIONS_DIR"
+        
+        # Print debug info
+        echo "CUDA environment variables:"
+        echo "CUDA_HOME=$CUDA_HOME"
+        echo "CUDA_TOOLKIT_ROOT_DIR=$CUDA_TOOLKIT_ROOT_DIR"
+        echo "CPATH=$CPATH"
+        echo "TORCH_EXTENSIONS_DIR=$TORCH_EXTENSIONS_DIR"
+        echo "DS_SKIP_CUDA_CHECK=$DS_SKIP_CUDA_CHECK"
+        echo "TORCH_CUDA_VERSION=$TORCH_CUDA_VERSION"
         
         # Create standard DeepSpeed config with FusedAdam
         cat > ds_config.json << EOF
@@ -393,6 +518,9 @@ else
 }
 EOF
 
+        # Set default additional args if not defined
+        ADDITIONAL_ARGS=${ADDITIONAL_ARGS:-""}
+
         # Run using deepspeed
         deepspeed --num_gpus=2 gemma_sft_train.py \
             --model_name_or_path "google/gemma-3-27b-pt" \
@@ -423,7 +551,8 @@ EOF
             --weight_decay 0.01 \
             --deepspeed ds_config.json \
             --load_in_8bit False \
-            --load_in_4bit False
+            --load_in_4bit False \
+            $ADDITIONAL_ARGS
     else
         echo "⚠️ Could not find any CUDA installation with cuda_runtime.h"
         echo "Switching to torch.distributed with CPU optimizer"
@@ -432,6 +561,13 @@ EOF
         export DS_BUILD_OPS=0 
         export DS_BUILD_FUSED_ADAM=0
         export DS_BUILD_FUSED_LAMB=0
+        
+        # Set default additional args if not defined
+        ADDITIONAL_ARGS="--optim adamw_torch ${ADDITIONAL_ARGS:-""}"
+        
+        # Check Python and CUDA diagnostics
+        echo "Python diagnostics:"
+        python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda}'); print(f'CUDA devices: {torch.cuda.device_count()}')"
         
         # Create minimal DeepSpeed config
         cat > ds_config.json << EOF
@@ -501,10 +637,10 @@ EOF
             --adam_beta1 0.9 \
             --adam_beta2 0.95 \
             --weight_decay 0.01 \
-            --optim adamw_torch \
             --deepspeed ds_config.json \
             --load_in_8bit False \
-            --load_in_4bit False
+            --load_in_4bit False \
+            $ADDITIONAL_ARGS
     fi
 fi
 
