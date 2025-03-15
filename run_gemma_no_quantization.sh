@@ -351,7 +351,7 @@ EOF
         --load_in_8bit False \
         --load_in_4bit False \
         --use_flash_attn True \
-        --debug True \
+        --enable_debug True \
         --report_to wandb \
         $ADDITIONAL_ARGS
 else
@@ -723,7 +723,7 @@ EOF
             --load_in_8bit False \
             --load_in_4bit False \
             --use_flash_attn True \
-            --debug True \
+            --enable_debug True \
             --report_to wandb \
             $ADDITIONAL_ARGS
 
@@ -832,7 +832,7 @@ EOF
             --load_in_8bit False \
             --load_in_4bit False \
             --use_flash_attn True \
-            --debug True \
+            --enable_debug True \
             --report_to wandb \
             $ADDITIONAL_ARGS
     fi

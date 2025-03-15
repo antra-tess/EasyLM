@@ -78,7 +78,7 @@ class ModelArguments:
         default=False,
         metadata={"help": "Whether to use flash attention for faster training"}
     )
-    debug: bool = field(
+    enable_debug: bool = field(
         default=False,
         metadata={"help": "Enable additional debugging output"}
     )
@@ -374,7 +374,7 @@ class JsonlDataset(Dataset):
                     labels[i] = -100
             
             # Debug info about label distribution
-            if hasattr(self, 'debug') and self.debug and idx < 3:
+            if hasattr(self, 'enable_debug') and self.enable_debug and idx < 3:
                 non_masked = sum(1 for l in labels if l != -100)
                 masked = sum(1 for l in labels if l == -100)
                 logger.info(f"Debug __getitem__ idx={idx} using template:")
@@ -421,7 +421,7 @@ class JsonlDataset(Dataset):
             labels[:prompt_len] = [-100] * prompt_len  # No loss for prompt tokens
             
             # Debug info about label distribution
-            if hasattr(self, 'debug') and self.debug and idx < 3:
+            if hasattr(self, 'enable_debug') and self.enable_debug and idx < 3:
                 non_masked = len(labels) - labels.count(-100)
                 logger.info(f"Debug __getitem__ idx={idx} using default format:")
                 logger.info(f"  Prompt: {prompt[:50]}...")
@@ -520,7 +520,7 @@ def main():
     logger.info(f"Training arguments: {training_args}")
     
     # Add debug option
-    debug_mode = model_args.debug
+    debug_mode = model_args.enable_debug
     if debug_mode:
         logger.info("Debug mode enabled - will output detailed debugging information")
     
@@ -772,8 +772,8 @@ def main():
     )
     
     # Set debug flag if needed
-    if model_args.debug:
-        train_dataset.debug = True
+    if model_args.enable_debug:
+        train_dataset.enable_debug = True
         logger.info("Enabled debug mode for dataset")
 
     # Create custom data collator with padding and truncation
@@ -797,7 +797,7 @@ def main():
     )
     
     # Add the debug callback if debug mode is enabled
-    if model_args.debug:
+    if model_args.enable_debug:
         debug_callback = DebugCallback()
         trainer.add_callback(debug_callback)
         
