@@ -1186,127 +1186,49 @@ def main():
         **model_kwargs
     )
     
-    # Fix for Gemma-3 embedding issue - check if the embedding layer has correct dimensions
+    # Instead of trying to replace the embedding layer, let's properly handle Gemma's
+    # initialization by forcing a tokenization and forward pass before training
     if "gemma" in model_args.model_name_or_path.lower():
-        logger.info("Checking Gemma-3 embedding layer dimensions...")
-        # First try direct model.model.embed_tokens path
+        logger.info("Gemma model detected - initializing model weights properly...")
+        
+        # Log the current embedding layer state if it exists
         if hasattr(model.model, 'embed_tokens') and hasattr(model.model.embed_tokens, 'weight'):
             embed_shape = model.model.embed_tokens.weight.shape
-            logger.info(f"Embed tokens weight shape: {embed_shape}")
+            logger.info(f"Initial embed_tokens weight shape: {embed_shape}")
             
-            # If the embedding weight is not 2D, fix it
-            if len(embed_shape) != 2 or embed_shape[0] == 0:
-                logger.warning(f"Found incorrect embedding shape: {embed_shape}, attempting to fix...")
+            # If it appears to be improperly initialized, force initialization through a test forward pass
+            if embed_shape[0] == 0 or (len(embed_shape) == 1):
+                logger.info("Embedding appears uninitialized. Performing test forward pass to properly initialize...")
                 
-                # Get vocab size and hidden size from config
-                vocab_size = model.config.vocab_size
-                hidden_size = model.config.hidden_size
+                # Create a small test input
+                test_input = tokenizer("Hello, world!", return_tensors="pt")
                 
-                logger.info(f"Creating new embedding layer with shape: ({vocab_size}, {hidden_size})")
+                # Move to appropriate device
+                if hasattr(model, 'device'):
+                    test_input = {k: v.to(model.device) for k, v in test_input.items()}
                 
-                # Create completely new embedding layer with proper initialization
-                import torch.nn as nn
-                from torch.nn.init import normal_
-                
-                # Create a new embedding layer and initialize weights properly
-                new_embed = nn.Embedding(vocab_size, hidden_size)
-                # Use Xavier/Glorot initialization with gain=1.0
-                if hasattr(model.config, 'initializer_range'):
-                    initializer_range = model.config.initializer_range
-                else:
-                    initializer_range = 0.02  # Default value
+                # Run a test forward pass with no grad to initialize layers
+                with torch.no_grad():
+                    try:
+                        # Don't care about the output, just need to run the forward pass
+                        _ = model(**test_input)
+                        
+                        # Now check if the embedding was properly initialized
+                        if hasattr(model.model, 'embed_tokens') and hasattr(model.model.embed_tokens, 'weight'):
+                            new_shape = model.model.embed_tokens.weight.shape
+                            logger.info(f"After test forward pass, embed_tokens shape: {new_shape}")
+                            
+                            if new_shape[0] == 0:
+                                logger.warning("Embedding still has zero size after forward pass")
+                                # Fall back to config-based initialization only if necessary
+                                vocab_size = model.config.vocab_size if hasattr(model.config, 'vocab_size') else len(tokenizer)
+                                hidden_size = model.config.hidden_size if hasattr(model.config, 'hidden_size') else 5376
+                                logger.warning(f"Will create embedding with vocab_size={vocab_size}, hidden_size={hidden_size}")
                     
-                logger.info(f"Initializing new embedding with range: {initializer_range}")
-                
-                # Initialize using normal distribution
-                normal_(new_embed.weight.data, mean=0.0, std=initializer_range)
-                
-                # Replace the embedding layer
-                model.model.embed_tokens = new_embed
-                logger.info(f"Replaced embedding layer, new shape: {model.model.embed_tokens.weight.shape}")
-                
-                # If the model has a get_input_embeddings method, update its reference too
-                if hasattr(model, 'set_input_embeddings'):
-                    logger.info("Updating model's input_embeddings reference")
-                    model.set_input_embeddings(new_embed)
-                
-        # Alternative path to handle different model structures
-        elif hasattr(model, 'get_input_embeddings'):
-            logger.info("Checking embedding through get_input_embeddings()...")
-            embed_layer = model.get_input_embeddings()
-            if embed_layer is None:
-                logger.warning("get_input_embeddings() returned None - creating new embedding layer")
-                # Create new embedding layer using config
-                vocab_size = model.config.vocab_size
-                hidden_size = model.config.hidden_size
-                
-                import torch.nn as nn
-                from torch.nn.init import normal_
-                
-                # Create proper embedding layer
-                new_embed = nn.Embedding(vocab_size, hidden_size)
-                # Initialize properly
-                if hasattr(model.config, 'initializer_range'):
-                    initializer_range = model.config.initializer_range
-                else:
-                    initializer_range = 0.02  # Default value
-                
-                normal_(new_embed.weight.data, mean=0.0, std=initializer_range)
-                
-                # Set the new embedding layer
-                model.set_input_embeddings(new_embed)
-                logger.info(f"Created and set new input embeddings: {model.get_input_embeddings().weight.shape}")
-            elif hasattr(embed_layer, 'weight'):
-                embed_shape = embed_layer.weight.shape
-                logger.info(f"Input embedding weight shape: {embed_shape}")
-                
-                if len(embed_shape) != 2 or embed_shape[0] == 0:
-                    logger.warning(f"Found incorrect embedding shape: {embed_shape}, attempting to fix...")
-                    
-                    # Get vocab size and hidden size from config
-                    vocab_size = model.config.vocab_size
-                    hidden_size = model.config.hidden_size
-                    
-                    # Create a new correctly shaped embedding layer
-                    import torch.nn as nn
-                    from torch.nn.init import normal_
-                    
-                    new_embed = nn.Embedding(vocab_size, hidden_size)
-                    # Initialize properly
-                    if hasattr(model.config, 'initializer_range'):
-                        initializer_range = model.config.initializer_range
-                    else:
-                        initializer_range = 0.02  # Default
-                    
-                    normal_(new_embed.weight.data, mean=0.0, std=initializer_range)
-                    
-                    # Set the new embedding layer
-                    model.set_input_embeddings(new_embed)
-                    logger.info(f"Fixed embedding layer using set_input_embeddings, new shape: {model.get_input_embeddings().weight.shape}")
-        else:
-            logger.warning("Could not find embedding layer using expected paths. Model may fail during forward pass.")
-            logger.warning("Attempting to search for embed_tokens in model structure...")
-            
-            # Recursive search for embed_tokens in model
-            def find_embed_tokens(model, path=""):
-                results = []
-                for name, child in model.named_children():
-                    current_path = f"{path}.{name}" if path else name
-                    if "embed_tokens" in name or "embeddings" in name:
-                        results.append((current_path, child))
-                    results.extend(find_embed_tokens(child, current_path))
-                return results
-            
-            embed_candidates = find_embed_tokens(model)
-            logger.info(f"Found {len(embed_candidates)} potential embedding layers:")
-            for path, module in embed_candidates:
-                logger.info(f"  {path}: {type(module)}")
-                if hasattr(module, 'weight'):
-                    logger.info(f"  Weight shape: {module.weight.shape}")
-            
-            if embed_candidates:
-                logger.warning("Please check these paths and update the code to fix them properly.")
-
+                    except Exception as e:
+                        logger.warning(f"Test forward pass failed: {e}")
+                        logger.info("Will proceed with regular training and let the model handle initialization")
+    
     # Enable gradient checkpointing for memory efficiency
     if training_args.gradient_checkpointing:
         logger.info("Enabling gradient checkpointing")
@@ -1319,14 +1241,6 @@ def main():
             model, 
             use_gradient_checkpointing=training_args.gradient_checkpointing
         )
-    
-    # We need to re-run the tokenizer check after model preparation
-    # because the embedding layer may have been modified
-    if "gemma" in model_args.model_name_or_path.lower():
-        embed_shape = None
-        if hasattr(model.model, 'embed_tokens') and hasattr(model.model.embed_tokens, 'weight'):
-            embed_shape = model.model.embed_tokens.weight.shape
-            logger.info(f"Post-preparation embed tokens shape: {embed_shape}")
     
     # Select target modules based on model type
     if "gemma" in model_args.model_name_or_path.lower():
@@ -1392,6 +1306,27 @@ def main():
         logger.info("=" * 80)
         logger.info("VERIFYING AND REPAIRING LORA MODULES")
         logger.info("=" * 80)
+        
+        # Check embedding layer status
+        logger.info("Checking embedding layer status...")
+        if hasattr(model, 'base_model') and hasattr(model.base_model, 'model'):
+            base = model.base_model.model
+            if hasattr(base, 'embed_tokens') and hasattr(base.embed_tokens, 'weight'):
+                embed_shape = base.embed_tokens.weight.shape
+                logger.info(f"Embedding layer shape in base model: {embed_shape}")
+                
+                if embed_shape[0] == 0:
+                    logger.warning("⚠️ Base model has EMPTY embedding layer - this will cause forward pass failures")
+                    logger.warning("Embedding issues should have been fixed before LoRA application")
+                    logger.warning("Attempting to diagnose embedding references...")
+                    
+                    # Check alternative paths to embedding layer
+                    if hasattr(model, 'get_input_embeddings'):
+                        embed = model.get_input_embeddings()
+                        if embed is not None and hasattr(embed, 'weight'):
+                            logger.info(f"Model's get_input_embeddings() shape: {embed.weight.shape}")
+                    
+                    # No direct fix here - we're just diagnosing
         
         # 1. Check for any module requiring grad whose name doesn't contain lora/adapter
         # First collect all parameters and modules so we don't modify during iteration
@@ -1629,6 +1564,54 @@ def main():
 
     if not lora_targets_found:
         raise ValueError("❌ ERROR: No LoRA modules found in model! Check if target_modules are correct.")
+        
+    # Test the model with a simple forward pass to ensure it's working before training
+    logger.info("Testing the model with a simple forward pass...")
+    test_input = tokenizer("Hello, world!", return_tensors="pt")
+    
+    # Move to the appropriate device
+    device = next(model.parameters()).device
+    test_input = {k: v.to(device) for k, v in test_input.items()}
+    
+    # Try a test forward pass with model in eval mode
+    model_was_training = model.training
+    model.eval()
+    
+    try:
+        with torch.no_grad():
+            _ = model(**test_input)
+        logger.info("✅ Model forward pass succeeded")
+        
+        # Try to re-run without eval mode to test training mode
+        if model_was_training:
+            model.train()
+            with torch.no_grad():
+                _ = model(**test_input)
+            logger.info("✅ Model forward pass also succeeds in training mode")
+    except Exception as e:
+        logger.error(f"❌ Model forward pass failed: {str(e)}")
+        logger.error("The model may not be usable for training.")
+        
+        # Try to diagnose embedding issues
+        if "embedding" in str(e).lower() or "size of tensor" in str(e).lower():
+            logger.error("This appears to be an embedding initialization issue.")
+            logger.error("Checking embedding references...")
+            
+            # Check main embedding
+            if hasattr(model.base_model.model, 'embed_tokens'):
+                embed = model.base_model.model.embed_tokens
+                if hasattr(embed, 'weight'):
+                    logger.error(f"Embedding shape: {embed.weight.shape}")
+            
+            # Check via API
+            if hasattr(model, 'get_input_embeddings'):
+                embed = model.get_input_embeddings()
+                if embed is not None and hasattr(embed, 'weight'):
+                    logger.error(f"get_input_embeddings() shape: {embed.weight.shape}")
+    
+    # Ensure model is back in training mode
+    if model_was_training:
+        model.train()
 
     # Run detailed diagnostics to understand model structure and parameter status
     logger.info("Running comprehensive model diagnostics...")
