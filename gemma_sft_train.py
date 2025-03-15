@@ -129,9 +129,21 @@ class JsonlDataset(Dataset):
         self.tokenizer = tokenizer
         self.max_seq_length = max_seq_length
         
+        # Check if dataset file exists
+        if not os.path.exists(dataset_path):
+            error_msg = f"ERROR: Dataset file not found: {dataset_path}"
+            logger.error(error_msg)
+            raise FileNotFoundError(error_msg)
+        
         # Load the template if provided
         self.template = None
         if template_yaml:
+            # Check if template file exists
+            if not os.path.exists(template_yaml):
+                error_msg = f"ERROR: Template file not found: {template_yaml}"
+                logger.error(error_msg)
+                raise FileNotFoundError(error_msg)
+                
             with open(template_yaml, 'r') as f:
                 self.template = yaml.safe_load(f)
         
@@ -144,6 +156,12 @@ class JsonlDataset(Dataset):
                         self.examples.append(json.loads(line))
                     except json.JSONDecodeError:
                         logger.warning(f"Could not parse line as JSON: {line[:100]}...")
+        
+        # Check if dataset is empty
+        if len(self.examples) == 0:
+            error_msg = f"ERROR: Dataset is empty or contains no valid examples: {dataset_path}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
     
     def __len__(self):
         return len(self.examples)
@@ -229,6 +247,12 @@ def main():
         level=logging.INFO if training_args.local_rank in [-1, 0] else logging.WARN,
     )
     logger.info(f"Training arguments: {training_args}")
+    
+    # Check for required dataset path
+    if data_args.dataset_path is None:
+        error_msg = "ERROR: No dataset path provided. Please specify --dataset_path"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
     
     # Set seed for reproducibility
     set_seed(training_args.seed)
