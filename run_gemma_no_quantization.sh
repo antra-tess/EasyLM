@@ -232,6 +232,10 @@ if [[ "$TORCH_CUDA_VERSION" != "NA" && "$CUDA_FOUND" = false ]]; then
     "bf16": {
         "enabled": true
     },
+    "train_batch_size": 32,
+    "train_micro_batch_size_per_gpu": 16,
+    "gradient_accumulation_steps": 1,
+    "gradient_clipping": 1.0,
     "zero_optimization": {
         "stage": 2,
         "offload_optimizer": {
@@ -332,6 +336,10 @@ else
     "bf16": {
         "enabled": true
     },
+    "train_batch_size": 32,
+    "train_micro_batch_size_per_gpu": 16,
+    "gradient_accumulation_steps": 1,
+    "gradient_clipping": 1.0,
     "zero_optimization": {
         "stage": 2,
         "offload_optimizer": {
@@ -431,6 +439,10 @@ EOF
     "bf16": {
         "enabled": true
     },
+    "train_batch_size": 32,
+    "train_micro_batch_size_per_gpu": 16,
+    "gradient_accumulation_steps": 1,
+    "gradient_clipping": 1.0,
     "zero_optimization": {
         "stage": 2,
         "offload_optimizer": {
