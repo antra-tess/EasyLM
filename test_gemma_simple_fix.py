@@ -84,7 +84,7 @@ def test_gemma_inference():
         # First download model files
         logger.info("Downloading model snapshot...")
         model_path = snapshot_download(
-            repo_id="google/gemma-3-2b-pt",
+            repo_id="google/gemma-3-27b-pt",
             token=hf_token,
             local_dir="./gemma_model_cache"
         )
