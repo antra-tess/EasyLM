@@ -360,15 +360,40 @@ def main():
                 trust_remote_code=model_args.trust_remote_code
             )
             
-            # For Gemma-3 models, check and fix missing vocab_size attribute
+            # For Gemma-3 models, the architecture attributes are in text_config but the model
+            # implementation looks for them at the top level
+            config_modified = False
+            
+            # Fix for nested text_config in Gemma-3
+            if hasattr(config, 'text_config'):
+                logger.info("Found nested text_config in Gemma config - copying attributes to top level")
+                text_config = config.text_config
+                
+                # Copy all attributes from text_config to the main config
+                for attr_name in dir(text_config):
+                    # Skip private attributes and methods
+                    if not attr_name.startswith('_') and not callable(getattr(text_config, attr_name)):
+                        if not hasattr(config, attr_name):
+                            value = getattr(text_config, attr_name)
+                            logger.info(f"Copying {attr_name}={value} from text_config to main config")
+                            setattr(config, attr_name, value)
+                            config_modified = True
+            
+            # Ensure vocab_size is set
             if not hasattr(config, 'vocab_size'):
                 logger.warning("Gemma config is missing vocab_size attribute - adding it from tokenizer")
                 vocab_size = len(tokenizer.get_vocab())
                 logger.info(f"Setting vocab_size to {vocab_size} from tokenizer vocabulary")
                 config.vocab_size = vocab_size
+                config_modified = True
+            
+            if config_modified:
                 model_kwargs["config"] = config
+                logger.info("Using modified config with added/copied attributes")
+                
         except Exception as e:
-            logger.warning(f"Error while checking config: {e}")
+            logger.warning(f"Error while checking/fixing config: {e}")
+            logger.exception("Detailed error:")
     
     # Load the model with our potentially modified config
     model = AutoModelForCausalLM.from_pretrained(

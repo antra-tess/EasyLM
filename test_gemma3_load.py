@@ -26,15 +26,50 @@ def main():
     logger.info(f"Config type: {type(config).__name__}")
     logger.info(f"Config attributes: {dir(config)}")
     
-    # Check for vocabulary size in config
+    # Check for nested text_config structure (Gemma-3 specific)
+    if hasattr(config, 'text_config'):
+        logger.info("Found nested text_config in Gemma config")
+        logger.info(f"text_config attributes: {dir(config.text_config)}")
+        
+        # Copy attributes from text_config to top level
+        for attr_name in dir(config.text_config):
+            # Skip private attributes and methods
+            if not attr_name.startswith('_') and not callable(getattr(config.text_config, attr_name)):
+                if not hasattr(config, attr_name):
+                    value = getattr(config.text_config, attr_name)
+                    logger.info(f"Copying {attr_name}={value} from text_config to main config")
+                    setattr(config, attr_name, value)
+    
+    # Get the vocab size from tokenizer if not present
     if not hasattr(config, 'vocab_size'):
-        logger.warning("Config is missing vocab_size attribute!")
         # Get the vocab size from the tokenizer instead
         tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
         vocab_size = len(tokenizer.get_vocab())
         logger.info(f"Setting vocab_size to {vocab_size} from tokenizer")
         # Add the vocab_size attribute to the config
         config.vocab_size = vocab_size
+    
+    # Needed attributes for Gemma3 model - only used if not found in config
+    required_attributes = {
+        'vocab_size': 262145,  # Default value from tokenizer
+        'hidden_size': 5376,   # From HF config text_config.hidden_size
+        'intermediate_size': 21504,  # From HF config text_config.intermediate_size
+        'num_hidden_layers': 62,  # From HF config text_config.num_hidden_layers
+        'num_attention_heads': 32,   # From HF config text_config.num_attention_heads
+        'num_key_value_heads': 16,  # From HF config text_config.num_key_value_heads
+        'rms_norm_eps': 1e-6,
+        'rope_theta': 10000.0,
+        'attention_bias': False,
+        'tie_word_embeddings': False
+    }
+    
+    # Add any missing required attributes
+    for attr, value in required_attributes.items():
+        if not hasattr(config, attr):
+            logger.warning(f"Config is missing {attr} attribute! Setting to {value}")
+            setattr(config, attr, value)
+        else:
+            logger.info(f"Config already has {attr} = {getattr(config, attr)}")
     
     # Load tokenizer
     logger.info("Loading tokenizer...")
