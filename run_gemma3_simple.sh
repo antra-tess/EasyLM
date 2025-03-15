@@ -45,7 +45,7 @@ echo "- Data: $DATA_PATH"
 # Run a very simple version of training for testing purposes
 # Single GPU, limited parameters, focused on debugging
 python gemma_sft_train.py \
-    --model_name_or_path "google/gemma-3-2b-pt" \
+    --model_name_or_path "google/gemma-3-27b-pt" \
     --dataset_path $DATA_PATH \
     --template_path $TEMPLATE_PATH \
     --max_seq_length 512 \
