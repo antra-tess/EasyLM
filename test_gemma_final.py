@@ -159,11 +159,11 @@ def test_gemma_inference(prompt_file=None, num_completions=5):
             
             outputs = model.generate(
                 **inputs,
-                max_new_tokens=550, 
+                max_new_tokens=500,  # Reasonable length for a short story
                 do_sample=True,
-                temperature=1,
-                top_p=0.99,
-                top_k=500,
+                temperature=0.9,     # Slightly higher temperature for creativity
+                top_p=0.99,          # More focused sampling
+                top_k=250,            # Reasonable diversity
             )
             
             # Decode and save output
@@ -181,7 +181,6 @@ def test_gemma_inference(prompt_file=None, num_completions=5):
         output_file = output_dir / f"gemma_completions_{timestamp}.txt"
         
         with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(f"PROMPT:\n{test_input}\n\n")
             for i, output in enumerate(all_outputs):
                 f.write(f"COMPLETION #{i+1}:\n{output}\n\n")
                 f.write("-" * 40 + "\n\n")
