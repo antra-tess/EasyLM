@@ -1093,36 +1093,27 @@ def main():
     else:
         logger.info(f"Loading model in {compute_dtype} precision (unquantized)")
     
-    # Additional arguments for model loading with memory optimizations
+    # Create base model_kwargs that will be used for all model loading
     model_kwargs = {
         "quantization_config": quant_config,
         "torch_dtype": compute_dtype,
         "trust_remote_code": model_args.trust_remote_code,
     }
     
-    # Add use_cache parameter conditionally - Gemma models don't accept this parameter
-    # Print the model name for debugging
-    logger.info(f"Model name: {model_args.model_name_or_path}")
-    if "gemma" not in model_args.model_name_or_path.lower():
-        logger.info("Adding use_cache parameter for non-Gemma model")
-        model_kwargs["use_cache"] = False if training_args.gradient_checkpointing else True
-    else:
-        logger.info("Skipping use_cache parameter for Gemma model")
-        # For Gemma-3 models, use eager attention implementation as recommended
+    # Add attn_implementation for Gemma models
+    if "gemma" in model_args.model_name_or_path.lower():
         logger.info("Setting attn_implementation='eager' for Gemma model")
         model_kwargs["attn_implementation"] = "eager"
-        
-    # Add device_map for optimal memory usage on multi-GPU setup
-    # For DeepSpeed, we don't need to specify the device_map as the model will be 
-    # distributed across GPUs by DeepSpeed
+    
+    # Set device_map only if not using DeepSpeed
     if not training_args.deepspeed:
         logger.info("Setting device map for non-DeepSpeed training")
         if torch.cuda.device_count() > 1 and not deepspeed_fallback:
-            # For multiple GPUs, use device_map="auto"
             model_kwargs["device_map"] = "auto"
         else:
-            # For single GPU, place everything on cuda:0
-            model_kwargs["device_map"] = {"": 0}
+            # For single GPU, manually handle device placement later
+            # (We'll avoid device_map to prevent initialization issues)
+            pass
     else:
         logger.info("Using DeepSpeed for distributed training - device_map will be handled by DeepSpeed")
     
@@ -1133,101 +1124,100 @@ def main():
         for i in range(torch.cuda.device_count()):
             logger.info(f"CUDA device {i}: {torch.cuda.get_device_name(i)}")
     
-    # Load model
-    logger.info(f"Loading model from {model_args.model_name_or_path} with kwargs: {model_kwargs}")
-    
-    # Check for and fix missing vocab_size in Gemma-3 config
+    # Special handling for Gemma-3 models, using lessons from successful inference script
     if "gemma" in model_args.model_name_or_path.lower():
-        try:
-            # First load config to check for issues
-            config = AutoConfig.from_pretrained(
-                model_args.model_name_or_path,
-                trust_remote_code=model_args.trust_remote_code
-            )
-            
-            # For Gemma-3 models, the architecture attributes are in text_config but the model
-            # implementation looks for them at the top level
-            config_modified = False
-            
-            # Fix for nested text_config in Gemma-3
-            if hasattr(config, 'text_config'):
-                logger.info("Found nested text_config in Gemma config - copying attributes to top level")
-                text_config = config.text_config
-                
-                # Copy all attributes from text_config to the main config
-                for attr_name in dir(text_config):
-                    # Skip private attributes and methods
-                    if not attr_name.startswith('_') and not callable(getattr(text_config, attr_name)):
-                        if not hasattr(config, attr_name):
-                            value = getattr(text_config, attr_name)
-                            logger.info(f"Copying {attr_name}={value} from text_config to main config")
-                            setattr(config, attr_name, value)
-                            config_modified = True
-            
-            # Ensure vocab_size is set
-            if not hasattr(config, 'vocab_size'):
-                logger.warning("Gemma config is missing vocab_size attribute - adding it from tokenizer")
-                vocab_size = len(tokenizer.get_vocab())
-                logger.info(f"Setting vocab_size to {vocab_size} from tokenizer vocabulary")
-                config.vocab_size = vocab_size
-                config_modified = True
-            
-            if config_modified:
-                model_kwargs["config"] = config
-                logger.info("Using modified config with added/copied attributes")
-                
-        except Exception as e:
-            logger.warning(f"Error while checking/fixing config: {e}")
-            logger.exception("Detailed error:")
-    
-    # Load the model with our potentially modified config
-    model = AutoModelForCausalLM.from_pretrained(
-        model_args.model_name_or_path,
-        **model_kwargs
-    )
-    
-    # Instead of trying to replace the embedding layer, let's properly handle Gemma's
-    # initialization by forcing a tokenization and forward pass before training
-    if "gemma" in model_args.model_name_or_path.lower():
-        logger.info("Gemma model detected - initializing model weights properly...")
+        logger.info("Detected Gemma model - applying specialized configuration handling")
         
-        # Log the current embedding layer state if it exists
-        if hasattr(model.model, 'embed_tokens') and hasattr(model.model.embed_tokens, 'weight'):
+        from transformers import Gemma3Config as OriginalGemma3Config
+        
+        # Create custom config class similar to the one in the successful inference script
+        class CustomGemma3Config(OriginalGemma3Config):
+            """Custom config that automatically copies all text_config attributes to root level."""
+            
+            @classmethod
+            def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+                config = super().from_pretrained(pretrained_model_name_or_path, **kwargs)
+                
+                # Extract and copy all text_config attributes
+                config_dict = config.to_dict()
+                if 'text_config' in config_dict and isinstance(config_dict['text_config'], dict):
+                    for key, value in config_dict['text_config'].items():
+                        logger.info(f"Copying attribute from text_config: {key}={value}")
+                        setattr(config, key, value)
+                
+                # Manually set sliding_window_pattern if needed
+                if hasattr(config, "sliding_window") and not hasattr(config, "sliding_window_pattern"):
+                    # Default pattern that seems common in Gemma models
+                    setattr(config, "sliding_window_pattern", 6)
+                    logger.info(f"Manually added sliding_window_pattern=6 based on common patterns")
+                
+                # Ensure vocab_size is set from tokenizer if needed
+                if not hasattr(config, 'vocab_size') and hasattr(tokenizer, 'vocab_size'):
+                    logger.info(f"Setting vocab_size={tokenizer.vocab_size} from tokenizer")
+                    config.vocab_size = tokenizer.vocab_size
+                
+                return config
+        
+        # Load custom config
+        logger.info("Loading and patching Gemma config with custom class")
+        config = CustomGemma3Config.from_pretrained(
+            model_args.model_name_or_path,
+            trust_remote_code=model_args.trust_remote_code
+        )
+        
+        # Log all available config attributes for debugging
+        config_attrs = [attr for attr in dir(config) if not attr.startswith('_') and not callable(getattr(config, attr))]
+        logger.info(f"Config now has attributes: {config_attrs}")
+        
+        # Add config to model_kwargs
+        model_kwargs["config"] = config
+        
+        # For Gemma, avoid using device_map during initialization to prevent issues
+        if "device_map" in model_kwargs:
+            logger.info("Removing device_map for Gemma model initialization to avoid meta device issues")
+            device_map = model_kwargs.pop("device_map")
+            logger.info(f"Will manually move model to appropriate device after loading (was: {device_map})")
+        
+        # Get the correct model class for Gemma3
+        try:
+            from transformers.models.gemma3.modeling_gemma3 import Gemma3ForCausalLM
+            logger.info("Using Gemma3ForCausalLM class directly")
+            
+            # Load model with fully patched config
+            logger.info("Loading Gemma model with fully patched config...")
+            model = Gemma3ForCausalLM.from_pretrained(
+                model_args.model_name_or_path,
+                **model_kwargs
+            )
+        except (ImportError, ModuleNotFoundError):
+            logger.info("Gemma3ForCausalLM class not found, using AutoModelForCausalLM")
+            # Fall back to AutoModelForCausalLM
+            model = AutoModelForCausalLM.from_pretrained(
+                model_args.model_name_or_path,
+                **model_kwargs
+            )
+    else:
+        # Normal loading for non-Gemma models
+        logger.info(f"Loading model from {model_args.model_name_or_path}")
+        model = AutoModelForCausalLM.from_pretrained(
+            model_args.model_name_or_path,
+            **model_kwargs
+        )
+    
+    # Log embedding state after loading
+    if hasattr(model, 'model') and hasattr(model.model, 'embed_tokens'):
+        if hasattr(model.model.embed_tokens, 'weight'):
             embed_shape = model.model.embed_tokens.weight.shape
             logger.info(f"Initial embed_tokens weight shape: {embed_shape}")
             
-            # If it appears to be improperly initialized, force initialization through a test forward pass
-            if embed_shape[0] == 0 or (len(embed_shape) == 1):
-                logger.info("Embedding appears uninitialized. Performing test forward pass to properly initialize...")
+            # If running on CUDA but model is not on CUDA, move it
+            if torch.cuda.is_available() and not model_kwargs.get("device_map") and training_args.deepspeed is None:
+                logger.info("Moving model to CUDA manually")
+                model = model.to("cuda")
                 
-                # Create a small test input
-                test_input = tokenizer("Hello, world!", return_tensors="pt")
-                
-                # Move to appropriate device
-                if hasattr(model, 'device'):
-                    test_input = {k: v.to(model.device) for k, v in test_input.items()}
-                
-                # Run a test forward pass with no grad to initialize layers
-                with torch.no_grad():
-                    try:
-                        # Don't care about the output, just need to run the forward pass
-                        _ = model(**test_input)
-                        
-                        # Now check if the embedding was properly initialized
-                        if hasattr(model.model, 'embed_tokens') and hasattr(model.model.embed_tokens, 'weight'):
-                            new_shape = model.model.embed_tokens.weight.shape
-                            logger.info(f"After test forward pass, embed_tokens shape: {new_shape}")
-                            
-                            if new_shape[0] == 0:
-                                logger.warning("Embedding still has zero size after forward pass")
-                                # Fall back to config-based initialization only if necessary
-                                vocab_size = model.config.vocab_size if hasattr(model.config, 'vocab_size') else len(tokenizer)
-                                hidden_size = model.config.hidden_size if hasattr(model.config, 'hidden_size') else 5376
-                                logger.warning(f"Will create embedding with vocab_size={vocab_size}, hidden_size={hidden_size}")
-                    
-                    except Exception as e:
-                        logger.warning(f"Test forward pass failed: {e}")
-                        logger.info("Will proceed with regular training and let the model handle initialization")
+                # Verify embedding is on the right device
+                embed_device = model.model.embed_tokens.weight.device
+                logger.info(f"Embed tokens device after moving: {embed_device}")
     
     # Enable gradient checkpointing for memory efficiency
     if training_args.gradient_checkpointing:

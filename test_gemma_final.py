@@ -6,6 +6,8 @@ import logging
 import os
 import json
 import time
+import argparse
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(
@@ -15,9 +17,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def test_gemma_inference():
+def test_gemma_inference(prompt_file=None, num_completions=5):
     """
     Comprehensive approach to load Gemma-3 model addressing all nested attributes.
+    Can generate multiple completions for a prompt loaded from a file.
+    
+    Args:
+        prompt_file: Path to a text file containing the prompt
+        num_completions: Number of different completions to generate
     """
     # Get HF token from environment
     hf_token = os.environ.get("HF_TOKEN")
@@ -121,9 +128,15 @@ def test_gemma_inference():
             else:
                 logger.info("Embed tokens has no weight attribute")
         
-        # Test inference
-        test_input = "Hello, my name is"
-        logger.info(f"Running inference with input: '{test_input}'")
+        # Load prompt from file if provided, otherwise use default
+        if prompt_file and os.path.exists(prompt_file):
+            with open(prompt_file, 'r', encoding='utf-8') as f:
+                test_input = f.read().strip()
+            logger.info(f"Loaded prompt from file: {prompt_file}")
+            logger.info(f"Prompt preview: '{test_input[:100]}...' (truncated)")
+        else:
+            test_input = "Hello, my name is"
+            logger.info(f"Using default prompt: '{test_input}'")
         
         # Tokenize input
         inputs = tokenizer(test_input, return_tensors="pt")
@@ -135,21 +148,45 @@ def test_gemma_inference():
             model = model.to(device)
             inputs = {k: v.to(device) for k, v in inputs.items()}
         
-        # Generate
-        logger.info("Starting generation...")
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=20, 
-            do_sample=True,
-            temperature=0.7,
-            top_p=0.9
-        )
+        # Generate multiple completions
+        logger.info(f"Generating {num_completions} different completions...")
+        all_outputs = []
         
-        # Decode and print output
-        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        logger.info(f"Model output: '{generated_text}'")
-        logger.info("✅ Inference successful!")
+        for i in range(num_completions):
+            logger.info(f"Starting generation #{i+1}...")
+            # Use different random seeds for variety
+            torch.manual_seed(42 + i)
+            
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=50, 
+                do_sample=True,
+                temperature=0.7,
+                top_p=0.9,
+                top_k=50,
+            )
+            
+            # Decode and save output
+            generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+            all_outputs.append(generated_text)
+            logger.info(f"Completion #{i+1}: '{generated_text}'")
         
+        logger.info("✅ All generations completed successfully!")
+        
+        # Save all completions to a file
+        output_dir = Path("./generated_completions")
+        output_dir.mkdir(exist_ok=True)
+        
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        output_file = output_dir / f"gemma_completions_{timestamp}.txt"
+        
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write(f"PROMPT:\n{test_input}\n\n")
+            for i, output in enumerate(all_outputs):
+                f.write(f"COMPLETION #{i+1}:\n{output}\n\n")
+                f.write("-" * 40 + "\n\n")
+        
+        logger.info(f"All completions saved to: {output_file}")
         return True
         
     except Exception as e:
@@ -159,8 +196,15 @@ def test_gemma_inference():
         return False
 
 if __name__ == "__main__":
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description='Run Gemma-3 inference with multiple completions')
+    parser.add_argument('--prompt_file', type=str, help='Path to a text file containing the prompt')
+    parser.add_argument('--num_completions', type=int, default=5, help='Number of completions to generate')
+    
+    args = parser.parse_args()
+    
     start_time = time.time()
-    success = test_gemma_inference()
+    success = test_gemma_inference(prompt_file=args.prompt_file, num_completions=args.num_completions)
     end_time = time.time()
     
     if success:
