@@ -46,10 +46,38 @@ echo "==== End of template file content ===="
 echo "==== CUDA Diagnostics ===="
 echo "Checking for CUDA installation..."
 
-# First check the Conda environment's CUDA installation since that's the most likely to be configured correctly
+# First try to find CUDA installation using the system paths
+echo "Searching for CUDA headers in system locations..."
+CUDA_SYSTEM_PATHS=(
+    "/usr/local/cuda"
+    "/usr/local/cuda-12.4"
+    "/usr/cuda"
+    "/usr/cuda-12.4"
+    "/opt/cuda"
+    "/opt/cuda-12.4"
+)
+
+CUDA_FOUND=false
+for path in "${CUDA_SYSTEM_PATHS[@]}"; do
+    if [ -d "$path" ]; then
+        echo "Found potential CUDA installation at: $path"
+        if [ -f "$path/include/cuda_runtime.h" ]; then
+            echo "✅ Found cuda_runtime.h at $path/include/cuda_runtime.h"
+            CUDA_FOUND=true
+            SYSTEM_CUDA_HOME="$path"
+            break
+        else
+            echo "❌ cuda_runtime.h not found in $path/include"
+        fi
+    fi
+done
+
+# Now check the Conda environment's CUDA installation
 NVCC_PATH=$(which nvcc 2>/dev/null || echo "")
 if [ -n "$NVCC_PATH" ]; then
     echo "Found nvcc at: $NVCC_PATH"
+    NVCC_VERSION=$($NVCC_PATH -V 2>&1 | grep "release" | awk '{print $5}' | awk -F, '{print $1}')
+    echo "NVCC version: $NVCC_VERSION"
     
     # Get the Conda environment base path (typically 2 levels up from bin/nvcc)
     CONDA_ENV_PATH=$(dirname $(dirname "$NVCC_PATH"))
@@ -60,92 +88,71 @@ if [ -n "$NVCC_PATH" ]; then
         echo "✅ Found cuda_runtime.h in Conda environment at $CONDA_ENV_PATH/include/cuda_runtime.h"
         export CUDA_HOME="$CONDA_ENV_PATH"
         export CUDA_TOOLKIT_ROOT_DIR="$CONDA_ENV_PATH"
-        export PATH="$CUDA_HOME/bin:$PATH"
-        export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
-        export CPATH="$CUDA_HOME/include:$CPATH"
         CUDA_FOUND=true
     else
         echo "⚠️ Found nvcc in Conda environment but cuda_runtime.h is missing"
-        echo "Checking if include directory exists..."
-        if [ -d "$CONDA_ENV_PATH/include" ]; then
-            echo "Include directory exists. Listing available headers:"
-            ls -la "$CONDA_ENV_PATH/include" | grep -i cuda
-        else
-            echo "Include directory does not exist in Conda environment"
-        fi
         
         # Try to find headers in standard Conda locations
         if [ -f "$CONDA_ENV_PATH/lib/cuda/include/cuda_runtime.h" ]; then
             echo "✅ Found cuda_runtime.h at alternate Conda location: $CONDA_ENV_PATH/lib/cuda/include"
             export CUDA_HOME="$CONDA_ENV_PATH/lib/cuda"
             export CUDA_TOOLKIT_ROOT_DIR="$CONDA_ENV_PATH/lib/cuda"
-            export PATH="$CUDA_HOME/bin:$PATH"
-            export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
-            export CPATH="$CUDA_HOME/include:$CPATH"
             CUDA_FOUND=true
+        elif [ "$CUDA_FOUND" = true ] && [ -n "$SYSTEM_CUDA_HOME" ]; then
+            # Use system CUDA headers but Conda's nvcc
+            echo "⚠️ Using system CUDA headers with Conda's nvcc"
+            export CUDA_HOME="$SYSTEM_CUDA_HOME"
+            export CUDA_TOOLKIT_ROOT_DIR="$SYSTEM_CUDA_HOME"
+            # Keep Conda's nvcc in the path
+            export PATH="$CONDA_ENV_PATH/bin:$PATH"
         else
-            CUDA_FOUND=false
+            # Try to find headers with find command
+            echo "Searching for cuda_runtime.h across the system..."
+            CUDA_RUNTIME_PATH=$(find / -name "cuda_runtime.h" -type f 2>/dev/null | head -n 1)
+            if [ -n "$CUDA_RUNTIME_PATH" ]; then
+                echo "✅ Found cuda_runtime.h at: $CUDA_RUNTIME_PATH"
+                CUDA_INCLUDE_DIR=$(dirname "$CUDA_RUNTIME_PATH")
+                CUDA_ROOT=$(dirname "$CUDA_INCLUDE_DIR")
+                export CUDA_HOME="$CUDA_ROOT"
+                export CUDA_TOOLKIT_ROOT_DIR="$CUDA_ROOT"
+                CUDA_FOUND=true
+            else
+                CUDA_FOUND=false
+            fi
         fi
     fi
 else
     echo "❌ nvcc not found in PATH"
-    CUDA_FOUND=false
-fi
-
-# If we didn't find CUDA in the Conda environment, check standard system locations
-if [ "$CUDA_FOUND" != true ]; then
-    # Try to find CUDA installation paths
-    CUDA_PATHS=(
-        "/usr/local/cuda"
-        "/usr/cuda"
-        "/opt/cuda"
-        "/usr/lib/cuda"
-    )
-
-    for path in "${CUDA_PATHS[@]}"; do
-        if [ -d "$path" ]; then
-            echo "Found CUDA at: $path"
-            if [ -f "$path/include/cuda_runtime.h" ]; then
-                echo "✅ Found cuda_runtime.h at $path/include/cuda_runtime.h"
-                export CUDA_HOME="$path"
-                export CUDA_TOOLKIT_ROOT_DIR="$path"
-                export PATH="$CUDA_HOME/bin:$PATH"
-                export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
-                export CPATH="$CUDA_HOME/include:$CPATH"
-                CUDA_FOUND=true
-                break
-            else
-                echo "❌ cuda_runtime.h not found in $path/include"
-            fi
-        fi
-    done
 fi
 
 if [ "$CUDA_FOUND" = true ]; then
     echo "Using CUDA_HOME: $CUDA_HOME"
     
-    # Check if we have the CUDA version
-    if [ -f "$CUDA_HOME/version.txt" ]; then
-        CUDA_VERSION=$(cat "$CUDA_HOME/version.txt")
-        echo "CUDA Version: $CUDA_VERSION"
-    elif [ -n "$NVCC_PATH" ]; then
-        CUDA_VERSION=$($NVCC_PATH --version | grep "release" | awk '{print $6}' | sed 's/,//')
-        echo "CUDA Version from nvcc: $CUDA_VERSION"
-    fi
+    # Set up environment variables properly
+    export PATH="$CUDA_HOME/bin:$PATH"
+    export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$CUDA_HOME/lib:$LD_LIBRARY_PATH"
+    export CPATH="$CUDA_HOME/include:$CPATH"
     
     # Set architecture for A100 GPUs
     echo "Adding GPU architecture for A100 (sm_80)"
     export TORCH_CUDA_ARCH_LIST="8.0"
     
+    # Set compiler path if we're using system CUDA with Conda nvcc
+    if [ -n "$NVCC_PATH" ]; then
+        echo "Setting NVCC path to Conda's nvcc: $NVCC_PATH"
+        export NVCC="$NVCC_PATH"
+    fi
+    
     # Remove any previous failed compilations
-    TORCH_EXTENSIONS_DIR=${TORCH_EXTENSIONS_DIR:-"~/.cache/torch_extensions"}
-    echo "Clearing previous compilation artifacts from $TORCH_EXTENSIONS_DIR"
-    rm -rf ~/.cache/torch_extensions/*/fused_adam
+    echo "Clearing previous compilation artifacts..."
+    find ~/.cache/torch_extensions -name "fused_adam" -type d -exec rm -rf {} + 2>/dev/null || true
     
     # Print detailed diagnostic info for compilation
     echo "CUDA environment variables:"
     echo "- CUDA_HOME=$CUDA_HOME"
     echo "- CUDA_TOOLKIT_ROOT_DIR=$CUDA_TOOLKIT_ROOT_DIR"
+    echo "- PATH=$PATH"
+    echo "- LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
     echo "- CPATH=$CPATH"
     
     # Check if we have the essential files for compilation
@@ -167,6 +174,10 @@ if [ "$CUDA_FOUND" = true ]; then
     
     if [ "$ALL_FILES_FOUND" = true ]; then
         echo "All essential CUDA header files found. Compilation should succeed."
+        # Export TORCH_EXTENSIONS_DIR to a clean location to ensure fresh builds
+        export TORCH_EXTENSIONS_DIR="$PWD/.torch_extensions"
+        echo "Setting torch extensions dir to: $TORCH_EXTENSIONS_DIR"
+        mkdir -p "$TORCH_EXTENSIONS_DIR"
     else
         echo "⚠️ Some essential CUDA header files are missing. Fallback to CPU optimizer is recommended."
         CUDA_FOUND=false
