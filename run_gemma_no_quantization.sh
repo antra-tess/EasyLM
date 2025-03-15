@@ -420,16 +420,30 @@ else
             NVCC_PATH=$(which nvcc 2>/dev/null || echo "")
             if [[ -n "$NVCC_PATH" ]]; then
                 echo "NVCC not found in CUDA_HOME/bin, but found in PATH: $NVCC_PATH"
-                # Get the directory containing nvcc
-                NVCC_DIR=$(dirname "$NVCC_PATH")
-                # Add nvcc directory to PATH
-                export PATH="$NVCC_DIR:$PATH"
-                # Create a symbolic link to nvcc in CUDA_HOME/bin if the directory exists
-                if [[ -d "$CUDA_HOME/bin" ]]; then
-                    echo "Creating symbolic link to nvcc in $CUDA_HOME/bin"
-                    mkdir -p "$CUDA_HOME/bin"
-                    ln -sf "$NVCC_PATH" "$CUDA_HOME/bin/nvcc" 2>/dev/null || true
+                # Get the parent directory of nvcc's directory
+                NVCC_BIN_DIR=$(dirname "$NVCC_PATH")
+                NVCC_PARENT=$(dirname "$NVCC_BIN_DIR")
+                echo "Adjusting CUDA_HOME to point to parent of nvcc: $NVCC_PARENT"
+                
+                # Directly change CUDA_HOME to the parent directory of nvcc
+                export CUDA_HOME="$NVCC_PARENT"
+                export CUDA_TOOLKIT_ROOT_DIR="$NVCC_PARENT"
+                
+                # Update PATH and LD_LIBRARY_PATH for the new CUDA_HOME
+                export PATH="$CUDA_HOME/bin:$PATH"
+                export LD_LIBRARY_PATH="$CUDA_HOME/lib64:$CUDA_HOME/lib:$LD_LIBRARY_PATH"
+                
+                # If the include directory has cuda_runtime.h, add it to CPATH
+                if [[ -f "$CUDA_HOME/include/cuda_runtime.h" ]]; then
+                    echo "Found cuda_runtime.h in new CUDA_HOME/include"
+                    export CPATH="$CUDA_HOME/include:$CPATH"
+                elif [[ -f "$SYSTEM_CUDA_HOME/include/cuda_runtime.h" ]]; then
+                    # If we can't find cuda_runtime.h in the new CUDA_HOME, keep using the old one for includes
+                    echo "Using original SYSTEM_CUDA_HOME for include files"
+                    export CPATH="$SYSTEM_CUDA_HOME/include:$CPATH"
                 fi
+                
+                echo "Updated CUDA_HOME to: $CUDA_HOME"
             fi
         fi
         
