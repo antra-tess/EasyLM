@@ -1,0 +1,31 @@
+# Core dependencies
+python-socketio==5.12.1
+python-engineio==4.11.2
+fastapi==0.109.2  # Compatible version with starlette and pydantic
+uvicorn==0.27.1
+aiohttp==3.9.3
+pydantic==1.10.8  # Specific version that works with FastAPI
+
+# HTTP and WebSocket
+starlette==0.36.3  # Compatible with FastAPI 0.109.2
+simple-websocket==1.1.0
+wsproto==1.2.0
+h11==0.14.0
+
+# Utility packages
+bidict==0.23.1
+click==8.1.8
+attrs==23.2.0  # Lower version that's more compatible
+yarl==1.9.4  # Lower version that's more compatible
+multidict==6.0.5  # Lower version that's more compatible
+frozenlist==1.4.1  # Lower version that's more compatible
+aiosignal==1.3.1
+typing-extensions==4.8.0
+anyio==3.7.1  # Compatible with FastAPI 0.109.2
+idna==3.4
+sniffio==1.3.0
+aiohappyeyeballs==2.3.0
+
+# Add coordinator dependencies
+gradio==3.50.2
+requests==2.31.0

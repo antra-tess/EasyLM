@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EasyLM Tree Conversation</title>
+    
+    <!-- CSS Framework - Using Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Vue.js and Socket.IO -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.2.31/dist/vue.global.min.js"></script>
+    <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
+    
+    <!-- D3.js for tree visualization -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <style>
+        /* Custom styles */
+        .conversation-tree .node {
+            cursor: pointer;
+        }
+        .conversation-tree .node circle {
+            fill: #fff;
+            stroke: #4299e1;
+            stroke-width: 2px;
+        }
+        .conversation-tree .node text {
+            font: 12px sans-serif;
+        }
+        .conversation-tree .link {
+            fill: none;
+            stroke: #ccc;
+            stroke-width: 2px;
+        }
+        .conversation-tree .selected circle {
+            fill: #4299e1;
+        }
+        .user-message {
+            background-color: #f3f4f6;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+        .assistant-message {
+            background-color: #dbeafe;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+        .system-message {
+            background-color: #f0fdf4;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+        .typing-indicator {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background: #e0e0e0;
+            border-radius: 2rem;
+        }
+        .typing-indicator span {
+            height: 0.5rem;
+            width: 0.5rem;
+            float: left;
+            margin: 0 1px;
+            background-color: #9e9ea1;
+            display: block;
+            border-radius: 50%;
+            opacity: 0.4;
+            animation: typing 1s infinite;
+        }
+        .typing-indicator span:nth-of-type(1) { animation-delay: 0s; }
+        .typing-indicator span:nth-of-type(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-of-type(3) { animation-delay: 0.4s; }
+        @keyframes typing {
+            0% { opacity: 0.4; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.2); }
+            100% { opacity: 0.4; transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+    <div id="app" class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-blue-600 text-white shadow-md">
+            <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+                <h1 class="text-2xl font-bold">EasyLM Tree Conversation</h1>
+                
+                <div class="flex space-x-4 items-center">
+                    <!-- User info -->
+                    <div v-if="user">
+                        <span class="font-semibold">{{ user.name }}</span>
+                    </div>
+                    
+                    <!-- Auth controls -->
+                    <button v-if="!user" 
+                            @click="showLoginModal = true"
+                            class="bg-white text-blue-600 px-4 py-2 rounded-md hover:bg-blue-50">
+                        Login
+                    </button>
+                    
+                    <button v-else
+                            @click="logout"
+                            class="bg-blue-700 px-4 py-2 rounded-md hover:bg-blue-800">
+                        Logout
+                    </button>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Main content -->
+        <main class="container mx-auto px-4 py-8">
+            <!-- Welcome screen / No conversation selected -->
+            <div v-if="!currentConversation" class="flex flex-col items-center justify-center min-h-[70vh]">
+                <h2 class="text-2xl font-bold mb-8">Welcome to EasyLM Tree Conversation</h2>
+                
+                <div class="w-full max-w-2xl">
+                    <!-- Conversation list -->
+                    <div v-if="conversations.length > 0" class="mb-6">
+                        <h3 class="text-xl font-semibold mb-3">Your Conversations</h3>
+                        <div class="bg-white rounded-lg shadow-md overflow-hidden">
+                            <ul class="divide-y divide-gray-200">
+                                <li v-for="conv in conversations" 
+                                    :key="conv.id" 
+                                    class="px-4 py-3 hover:bg-gray-50 cursor-pointer flex justify-between"
+                                    @click="selectConversation(conv.id)">
+                                    <span>{{ conv.title }}</span>
+                                    <span class="text-gray-500 text-sm">{{ formatDate(conv.created_at) }}</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <!-- Create new conversation -->
+                    <div class="bg-white rounded-lg shadow-md p-6">
+                        <h3 class="text-lg font-semibold mb-4">Create New Conversation</h3>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 mb-2">Title</label>
+                            <input v-model="newConversationTitle" 
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                   placeholder="Enter conversation title"
+                                   @keyup.enter="createConversation" />
+                        </div>
+                        <button @click="createConversation"
+                                class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                                :disabled="!user || !newConversationTitle">
+                            Create
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Conversation view -->
+            <div v-else class="flex flex-col md:flex-row h-[80vh]">
+                <!-- Left side: Tree visualization and branches -->
+                <div class="w-full md:w-1/3 bg-white rounded-lg shadow-md p-4 mb-4 md:mb-0 md:mr-4 overflow-auto">
+                    <div class="mb-4 flex justify-between items-center">
+                        <h2 class="text-xl font-semibold">{{ currentConversation.title }}</h2>
+                        <button @click="leaveConversation"
+                                class="text-sm text-gray-500 hover:text-gray-700">
+                            Back
+                        </button>
+                    </div>
+                    
+                    <!-- Tree visualization -->
+                    <div class="conversation-tree h-[300px] border border-gray-200 rounded-md mb-4">
+                        <!-- D3.js tree will render here -->
+                    </div>
+                    
+                    <!-- Branches list -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2">Branches</h3>
+                        <ul class="space-y-2">
+                            <li v-for="(branch, index) in branches" 
+                                :key="index"
+                                class="p-2 rounded-md hover:bg-gray-100 cursor-pointer"
+                                :class="{'bg-blue-100': selectedBranchIndex === index}"
+                                @click="selectBranch(index)">
+                                <div class="text-sm font-medium">Branch {{ index + 1 }}</div>
+                                <div class="text-xs text-gray-500 truncate">
+                                    {{ getBranchSummary(branch) }}
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <!-- Right side: Messages and input -->
+                <div class="w-full md:w-2/3 flex flex-col bg-white rounded-lg shadow-md">
+                    <!-- Messages area -->
+                    <div class="flex-grow p-4 overflow-auto" ref="messagesContainer">
+                        <div v-if="selectedBranch.length === 0" class="text-center text-gray-500 italic p-4">
+                            No messages yet. Start the conversation!
+                        </div>
+                        
+                        <template v-else>
+                            <div v-for="node in selectedBranch" :key="node.id"
+                                 :class="{
+                                    'user-message': node.message.role === 'user',
+                                    'assistant-message': node.message.role === 'assistant',
+                                    'system-message': node.message.role === 'system'
+                                 }">
+                                <div class="flex justify-between items-start">
+                                    <div class="font-semibold text-sm">
+                                        {{ node.message.role === 'user' ? user.name : 
+                                           node.message.role === 'assistant' ? 'Assistant' : 'System' }}
+                                    </div>
+                                    <div class="text-xs text-gray-500">
+                                        {{ formatTime(node.created_at) }}
+                                    </div>
+                                </div>
+                                <div class="mt-1 whitespace-pre-wrap">{{ node.message.content }}</div>
+                            </div>
+                            
+                            <!-- Typing indicator -->
+                            <div v-if="isGenerating" class="typing-indicator mt-2">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        </template>
+                    </div>
+                    
+                    <!-- Create branch button -->
+                    <div v-if="selectedBranch.length > 0" class="px-4 py-2 border-t border-gray-200">
+                        <button @click="createNewBranch"
+                                class="text-blue-600 text-sm hover:text-blue-800">
+                            Create New Branch from Here
+                        </button>
+                    </div>
+                    
+                    <!-- Input area -->
+                    <div class="p-4 border-t border-gray-200">
+                        <div class="flex space-x-2">
+                            <textarea v-model="messageInput"
+                                   class="flex-grow px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                   placeholder="Type your message..."
+                                   :disabled="isGenerating || !user"
+                                   @keydown.enter.ctrl="sendMessage"
+                                   rows="3"></textarea>
+                            
+                            <button @click="sendMessage"
+                                    class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                                    :disabled="isGenerating || !messageInput || !user">
+                                Send
+                            </button>
+                        </div>
+                        
+                        <!-- Generation settings -->
+                        <div class="mt-2 flex justify-between text-sm">
+                            <div class="flex items-center space-x-4">
+                                <div>
+                                    <label for="temperature" class="mr-2">Temp</label>
+                                    <input type="range" id="temperature"
+                                           v-model="generationSettings.temperature"
+                                           min="0" max="2" step="0.1"
+                                           class="w-24" />
+                                    <span class="ml-1">{{ generationSettings.temperature }}</span>
+                                </div>
+                                
+                                <div>
+                                    <label for="topP" class="mr-2">Top-p</label>
+                                    <input type="range" id="topP"
+                                           v-model="generationSettings.top_p"
+                                           min="0" max="1" step="0.05"
+                                           class="w-24" />
+                                    <span class="ml-1">{{ generationSettings.top_p }}</span>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <button @click="showAdvancedSettings = !showAdvancedSettings"
+                                        class="text-gray-500 hover:text-gray-700">
+                                    {{ showAdvancedSettings ? 'Hide' : 'Advanced' }}
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Advanced settings -->
+                        <div v-if="showAdvancedSettings" class="mt-2 p-2 bg-gray-50 rounded-md">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label for="topK" class="block mb-1">Top-k</label>
+                                    <input type="number" id="topK"
+                                           v-model="generationSettings.top_k"
+                                           min="1" max="100"
+                                           class="w-full px-2 py-1 border border-gray-300 rounded-md" />
+                                </div>
+                                
+                                <div>
+                                    <label for="maxTokens" class="block mb-1">Max tokens</label>
+                                    <input type="number" id="maxTokens"
+                                           v-model="generationSettings.max_tokens"
+                                           min="64" max="4096" step="64"
+                                           class="w-full px-2 py-1 border border-gray-300 rounded-md" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <!-- Status bar with worker info -->
+        <footer class="bg-gray-100 border-t border-gray-200 py-2 px-4 fixed bottom-0 w-full">
+            <div class="container mx-auto flex justify-between items-center text-sm">
+                <div>
+                    <span v-if="workers.length === 0" class="text-red-500">No workers connected</span>
+                    <span v-else class="text-green-600">{{ workers.length }} worker(s) connected</span>
+                </div>
+                
+                <div>
+                    <span v-if="activeUsers.length === 0">No active users</span>
+                    <span v-else>{{ activeUsers.length }} user(s) active</span>
+                </div>
+            </div>
+        </footer>
+        
+        <!-- Login modal -->
+        <div v-if="showLoginModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                <h2 class="text-xl font-bold mb-4">Login</h2>
+                
+                <div class="mb-4">
+                    <label class="block text-gray-700 mb-2">Username</label>
+                    <input v-model="loginForm.username" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           placeholder="Enter your username"
+                           @keyup.enter="login" />
+                </div>
+                
+                <div class="flex justify-end space-x-3">
+                    <button @click="showLoginModal = false"
+                            class="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
+                        Cancel
+                    </button>
+                    <button @click="login"
+                            class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                            :disabled="!loginForm.username">
+                        Login
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Main Vue app
+        const { createApp, ref, computed, onMounted, onBeforeUnmount, nextTick, watch } = Vue;
+        
+        createApp({
+            setup() {
+                // Get the backend URL from the current window location
+                const getBackendUrl = () => {
+                    const protocol = window.location.protocol;
+                    const hostname = window.location.hostname;
+                    const port = window.location.port || (protocol === 'https:' ? '443' : '80');
+                    return `${protocol}//${hostname}:${port}`;
+                };
+                
+                // API and Socket configuration
+                const API_URL = `${getBackendUrl()}/api`;
+                const SOCKET_URL = getBackendUrl();
+                
+                // Socket connection
+                let socket = null;
+                
+                // Auth state
+                const user = ref(null);
+                const showLoginModal = ref(false);
+                const loginForm = ref({
+                    username: ''
+                });
+                
+                // Conversations
+                const conversations = ref([]);
+                const currentConversation = ref(null);
+                const newConversationTitle = ref('');
+                
+                // Branch and message state
+                const branches = ref([]);
+                const selectedBranchIndex = ref(0);
+                const selectedBranch = computed(() => {
+                    if (branches.value.length === 0 || selectedBranchIndex.value >= branches.value.length) {
+                        return [];
+                    }
+                    return branches.value[selectedBranchIndex.value];
+                });
+                
+                // Message input
+                const messageInput = ref('');
+                const isGenerating = ref(false);
+                const messagesContainer = ref(null);
+                
+                // Generation settings
+                const generationSettings = ref({
+                    temperature: 0.8,
+                    top_p: 0.95,
+                    top_k: 50,
+                    max_tokens: 1024
+                });
+                const showAdvancedSettings = ref(false);
+                
+                // Workers and users
+                const workers = ref([]);
+                const activeUsers = ref([]);
+                
+                // Load conversations on mount
+                onMounted(async () => {
+                    // Check if user is stored in localStorage
+                    const storedUser = localStorage.getItem('easyLmUser');
+                    if (storedUser) {
+                        user.value = JSON.parse(storedUser);
+                        await loadConversations();
+                        connectSocket();
+                    }
+                    
+                    // Load worker status
+                    try {
+                        const response = await fetch(`${API_URL}/workers`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            workers.value = data;
+                        }
+                    } catch (error) {
+                        console.error('Error loading workers:', error);
+                    }
+                });
+                
+                // Connect to Socket.IO
+                const connectSocket = () => {
+                    if (socket) return;
+                    
+                    socket = io(SOCKET_URL);
+                    
+                    socket.on('connect', () => {
+                        console.log('Connected to server');
+                        
+                        // Register user
+                        socket.emit('register_user', {
+                            user_id: user.value.id,
+                            name: user.value.name
+                        });
+                    });
+                    
+                    socket.on('disconnect', () => {
+                        console.log('Disconnected from server');
+                    });
+                    
+                    // Event listeners
+                    socket.on('node:create', (data) => {
+                        console.log('Node created:', data);
+                        if (currentConversation.value && data.conversation_id === currentConversation.value.id) {
+                            // Reload branches
+                            loadBranches(currentConversation.value.id);
+                        }
+                    });
+                    
+                    socket.on('node:delete', (data) => {
+                        console.log('Node deleted:', data);
+                        if (currentConversation.value && data.conversation_id === currentConversation.value.id) {
+                            // Reload branches
+                            loadBranches(currentConversation.value.id);
+                        }
+                    });
+                    
+                    socket.on('generation:start', (data) => {
+                        console.log('Generation started:', data);
+                        if (currentConversation.value && data.conversation_id === currentConversation.value.id) {
+                            isGenerating.value = true;
+                        }
+                    });
+                    
+                    socket.on('generation:complete', (data) => {
+                        console.log('Generation complete:', data);
+                        if (currentConversation.value && data.conversation_id === currentConversation.value.id) {
+                            isGenerating.value = false;
+                            // Reload branches
+                            loadBranches(currentConversation.value.id);
+                        }
+                    });
+                    
+                    socket.on('generation:error', (data) => {
+                        console.error('Generation error:', data);
+                        if (currentConversation.value && data.conversation_id === currentConversation.value.id) {
+                            isGenerating.value = false;
+                            alert(`Generation error: ${data.error}`);
+                        }
+                    });
+                    
+                    socket.on('user:join', (data) => {
+                        console.log('User joined:', data);
+                        loadActiveUsers();
+                    });
+                    
+                    socket.on('user:leave', (data) => {
+                        console.log('User left:', data);
+                        loadActiveUsers();
+                    });
+                };
+                
+                // Disconnect socket on unmount
+                onBeforeUnmount(() => {
+                    if (socket) {
+                        socket.disconnect();
+                    }
+                });
+                
+                // Auto-scroll messages
+                watch(selectedBranch, () => {
+                    nextTick(() => {
+                        if (messagesContainer.value) {
+                            messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+                        }
+                    });
+                });
+                
+                // Login
+                const login = () => {
+                    if (!loginForm.value.username) return;
+                    
+                    // Generate a user ID
+                    const userId = 'user_' + Math.random().toString(36).substr(2, 9);
+                    
+                    user.value = {
+                        id: userId,
+                        name: loginForm.value.username
+                    };
+                    
+                    // Store in localStorage
+                    localStorage.setItem('easyLmUser', JSON.stringify(user.value));
+                    
+                    showLoginModal.value = false;
+                    loginForm.value.username = '';
+                    
+                    // Load conversations and connect socket
+                    loadConversations();
+                    connectSocket();
+                };
+                
+                // Logout
+                const logout = () => {
+                    user.value = null;
+                    localStorage.removeItem('easyLmUser');
+                    
+                    if (socket) {
+                        socket.disconnect();
+                        socket = null;
+                    }
+                    
+                    // Reset state
+                    currentConversation.value = null;
+                    conversations.value = [];
+                    branches.value = [];
+                };
+                
+                // Load conversations
+                const loadConversations = async () => {
+                    try {
+                        const response = await fetch(`${API_URL}/conversations`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            conversations.value = data.conversations;
+                        }
+                    } catch (error) {
+                        console.error('Error loading conversations:', error);
+                    }
+                };
+                
+                // Create a new conversation
+                const createConversation = async () => {
+                    if (!user.value || !newConversationTitle.value) return;
+                    
+                    try {
+                        const response = await fetch(`${API_URL}/conversations`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                title: newConversationTitle.value,
+                                user_id: user.value.id,
+                                initial_message: 'Conversation started'
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            await loadConversations();
+                            selectConversation(data.conversation.id);
+                            newConversationTitle.value = '';
+                        }
+                    } catch (error) {
+                        console.error('Error creating conversation:', error);
+                    }
+                };
+                
+                // Select a conversation
+                const selectConversation = async (conversationId) => {
+                    try {
+                        const response = await fetch(`${API_URL}/conversations/${conversationId}`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            currentConversation.value = data.conversation;
+                            
+                            // Join the conversation via socket
+                            if (socket) {
+                                socket.emit('join_conversation', {
+                                    user_id: user.value.id,
+                                    conversation_id: conversationId
+                                });
+                            }
+                            
+                            // Load branches
+                            await loadBranches(conversationId);
+                            
+                            // Load active users in this conversation
+                            loadActiveUsers(conversationId);
+                        }
+                    } catch (error) {
+                        console.error('Error loading conversation:', error);
+                    }
+                };
+                
+                // Leave current conversation
+                const leaveConversation = () => {
+                    if (currentConversation.value && socket) {
+                        socket.emit('leave_conversation', {
+                            user_id: user.value.id,
+                            conversation_id: currentConversation.value.id
+                        });
+                    }
+                    
+                    currentConversation.value = null;
+                    branches.value = [];
+                    selectedBranchIndex.value = 0;
+                };
+                
+                // Load branches for a conversation
+                const loadBranches = async (conversationId) => {
+                    try {
+                        const response = await fetch(`${API_URL}/conversations/${conversationId}/branches`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            branches.value = data.branches;
+                            
+                            // If no branch is selected or the current one doesn't exist anymore, select the first one
+                            if (selectedBranchIndex.value >= branches.value.length) {
+                                selectedBranchIndex.value = branches.value.length > 0 ? 0 : 0;
+                            }
+                            
+                            // Render tree visualization
+                            nextTick(() => {
+                                renderTree();
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Error loading branches:', error);
+                    }
+                };
+                
+                // Load active users
+                const loadActiveUsers = async (conversationId = null) => {
+                    try {
+                        let url = `${API_URL}/users/active`;
+                        if (conversationId) {
+                            url += `?conversation_id=${conversationId}`;
+                        }
+                        
+                        const response = await fetch(url);
+                        if (response.ok) {
+                            const data = await response.json();
+                            activeUsers.value = data.active_users;
+                        }
+                    } catch (error) {
+                        console.error('Error loading active users:', error);
+                    }
+                };
+                
+                // Select a branch
+                const selectBranch = (index) => {
+                    selectedBranchIndex.value = index;
+                };
+                
+                // Get a summary of a branch for display
+                const getBranchSummary = (branch) => {
+                    if (!branch || branch.length === 0) return 'Empty branch';
+                    
+                    // Find the last few messages
+                    const lastMessages = branch.slice(-3);
+                    return lastMessages.map(node => 
+                        node.message.content.substring(0, 30) + (node.message.content.length > 30 ? '...' : '')
+                    ).join(' → ');
+                };
+                
+                // Send a message
+                const sendMessage = async () => {
+                    if (!user.value || !messageInput.value || isGenerating.value || !currentConversation.value) return;
+                    
+                    const message = messageInput.value.trim();
+                    messageInput.value = '';
+                    
+                    if (!message) return;
+                    
+                    // Get the last node in the current branch to use as parent
+                    let parentNodeId = null;
+                    if (selectedBranch.value.length > 0) {
+                        parentNodeId = selectedBranch.value[selectedBranch.value.length - 1].id;
+                    } else if (currentConversation.value.root_id) {
+                        parentNodeId = currentConversation.value.root_id;
+                    }
+                    
+                    try {
+                        // Request generation via socket
+                        if (socket) {
+                            socket.emit('request_generation', {
+                                user_id: user.value.id,
+                                conversation_id: currentConversation.value.id,
+                                parent_id: parentNodeId,
+                                prompt: message,
+                                settings: generationSettings.value
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Error sending message:', error);
+                    }
+                };
+                
+                // Create a new branch from the current position
+                const createNewBranch = async () => {
+                    if (!user.value || !currentConversation.value || selectedBranch.value.length === 0) return;
+                    
+                    // Get the last node in the current branch to use as parent for the new branch
+                    const parentNodeId = selectedBranch.value[selectedBranch.value.length - 1].id;
+                    
+                    try {
+                        // Create a branch node via API
+                        const response = await fetch(`${API_URL}/conversations/${currentConversation.value.id}/branches`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                parent_id: parentNodeId,
+                                user_id: user.value.id,
+                                branch_name: `Branch from ${formatTime(new Date().toISOString())}`
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            // Reload branches
+                            await loadBranches(currentConversation.value.id);
+                            
+                            // Select the newly created branch (last one)
+                            selectedBranchIndex.value = branches.value.length - 1;
+                        }
+                    } catch (error) {
+                        console.error('Error creating branch:', error);
+                    }
+                };
+                
+                // Render the conversation tree using D3.js
+                const renderTree = () => {
+                    if (!currentConversation.value || branches.value.length === 0) return;
+                    
+                    // Clear previous visualization
+                    const treeContainer = document.querySelector('.conversation-tree');
+                    treeContainer.innerHTML = '';
+                    
+                    // Set up dimensions
+                    const width = treeContainer.clientWidth;
+                    const height = treeContainer.clientHeight;
+                    
+                    // Create tree data structure
+                    const treeData = buildTreeData();
+                    
+                    // Create SVG
+                    const svg = d3.select('.conversation-tree')
+                        .append('svg')
+                        .attr('width', width)
+                        .attr('height', height)
+                        .append('g')
+                        .attr('transform', `translate(${width/2}, 20)`);
+                    
+                    // Create tree layout
+                    const treeLayout = d3.tree().size([width - 60, height - 40]);
+                    
+                    // Prepare nodes and links
+                    const rootNode = d3.hierarchy(treeData);
+                    const nodes = treeLayout(rootNode);
+                    
+                    // Create links
+                    svg.selectAll('.link')
+                        .data(nodes.links())
+                        .enter()
+                        .append('path')
+                        .attr('class', 'link')
+                        .attr('d', d3.linkVertical()
+                            .x(d => d.x)
+                            .y(d => d.y));
+                    
+                    // Create nodes
+                    const node = svg.selectAll('.node')
+                        .data(nodes.descendants())
+                        .enter()
+                        .append('g')
+                        .attr('class', d => {
+                            // Check if this node is in the selected branch
+                            const isSelected = selectedBranch.value.some(node => node.id === d.data.id);
+                            return `node ${isSelected ? 'selected' : ''}`;
+                        })
+                        .attr('transform', d => `translate(${d.x}, ${d.y})`)
+                        .on('click', (event, d) => {
+                            // Find the branch that contains this node
+                            const branchIndex = branches.value.findIndex(branch => 
+                                branch.some(node => node.id === d.data.id)
+                            );
+                            
+                            if (branchIndex !== -1) {
+                                selectedBranchIndex.value = branchIndex;
+                            }
+                        });
+                    
+                    // Add circles to nodes
+                    node.append('circle')
+                        .attr('r', 5);
+                    
+                    // Add text labels
+                    node.append('text')
+                        .attr('dy', '0.35em')
+                        .attr('x', d => d.children ? -8 : 8)
+                        .style('text-anchor', d => d.children ? 'end' : 'start')
+                        .text(d => {
+                            const role = d.data.role;
+                            return role === 'user' ? 'U' : role === 'assistant' ? 'A' : 'S';
+                        });
+                };
+                
+                // Build tree data for D3
+                const buildTreeData = () => {
+                    if (!currentConversation.value) return null;
+                    
+                    // Create a map of nodes by ID
+                    const nodesMap = {};
+                    
+                    // Add all nodes to the map
+                    Object.values(currentConversation.value.nodes).forEach(node => {
+                        nodesMap[node.id] = {
+                            id: node.id,
+                            role: node.message.role,
+                            children: []
+                        };
+                    });
+                    
+                    // Connect parents and children
+                    Object.values(currentConversation.value.nodes).forEach(node => {
+                        if (node.parent_id && nodesMap[node.parent_id]) {
+                            nodesMap[node.parent_id].children.push(nodesMap[node.id]);
+                        }
+                    });
+                    
+                    // Return the root node
+                    return nodesMap[currentConversation.value.root_id];
+                };
+                
+                // Format date for display
+                const formatDate = (dateString) => {
+                    const date = new Date(dateString);
+                    return date.toLocaleDateString();
+                };
+                
+                // Format time for display
+                const formatTime = (dateString) => {
+                    const date = new Date(dateString);
+                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                };
+                
+                return {
+                    // Auth
+                    user,
+                    showLoginModal,
+                    loginForm,
+                    login,
+                    logout,
+                    
+                    // Conversations
+                    conversations,
+                    currentConversation,
+                    newConversationTitle,
+                    createConversation,
+                    selectConversation,
+                    leaveConversation,
+                    
+                    // Branches and messages
+                    branches,
+                    selectedBranchIndex,
+                    selectedBranch,
+                    selectBranch,
+                    getBranchSummary,
+                    
+                    // Message input
+                    messageInput,
+                    isGenerating,
+                    sendMessage,
+                    messagesContainer,
+                    createNewBranch,
+                    
+                    // Generation settings
+                    generationSettings,
+                    showAdvancedSettings,
+                    
+                    // Workers and users
+                    workers,
+                    activeUsers,
+                    
+                    // Helpers
+                    formatDate,
+                    formatTime
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
